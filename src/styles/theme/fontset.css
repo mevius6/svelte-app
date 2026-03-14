@@ -1,0 +1,115 @@
+:where(body) {
+  /* #region presets */
+  /* Fontset */
+  --forma-500-banner: "wght" 500, "opsz" 72;
+  --forma-500-display: "wght" 500, "opsz" 56;
+  --forma-500-deck: "wght" 500, "opsz" 40;
+  --forma-500-text: "wght" 500, "opsz" 24;
+  --forma-700-micro: "wght" 700, "opsz" 8;
+  --forma-500-micro: "wght" 526.669, "opsz" 8;
+  --forma-reg-micro: "wght" 403.45, "opsz" 8;
+  --forma-300-micro: "wght" 307.143, "opsz" 8;
+  --forma-200-micro: "wght" 200, "opsz" 8;
+
+  /* Named instances */
+  --forma-micro-extra-light: "wght" 200, "opsz" 8;
+  --forma-micro-light: "wght" 307.143, "opsz" 8;
+  --forma-micro-regular: "wght" 403.45, "opsz" 8;
+  --forma-micro-medium: "wght" 526.669, "opsz" 8;
+  --forma-micro-bold: "wght" 700, "opsz" 8;
+  --forma-text-extra-light: "wght" 200, "opsz" 24;
+  --forma-text-light: "wght" 300, "opsz" 24;
+  --forma-text-regular: "wght" 400, "opsz" 24;
+  --forma-text-medium: "wght" 500, "opsz" 24;
+  --forma-text-bold: "wght" 700, "opsz" 24;
+  --forma-deck-extra-light: "wght" 200, "opsz" 40;
+  --forma-deck-light: "wght" 300, "opsz" 40;
+  --forma-deck-regular: "wght" 400, "opsz" 40;
+  --forma-deck-medium: "wght" 500, "opsz" 40;
+  --forma-deck-bold: "wght" 700, "opsz" 40;
+  --forma-display-extra-light: "wght" 200, "opsz" 56;
+  --forma-display-light: "wght" 300, "opsz" 56;
+  --forma-display-regular: "wght" 400, "opsz" 56;
+  --forma-display-medium: "wght" 500, "opsz" 56;
+  --forma-display-bold: "wght" 700, "opsz" 56;
+  --forma-banner-extra-light: "wght" 200, "opsz" 72;
+  --forma-banner-light: "wght" 300, "opsz" 72;
+  --forma-banner-regular: "wght" 400, "opsz" 72;
+  --forma-banner-medium: "wght" 500, "opsz" 72;
+  --forma-banner-bold: "wght" 700, "opsz" 72;
+  /* #endregion */
+
+  --chars-inline-sm: 25ch;
+  --chars-inline-md: 45ch;
+  --chars-inline-lg: 65ch;
+}
+
+/* REFS DJR Fonts
+ ✓ https://djr.com/forma
+ ✓ https://djr.com/roslindale
+ ✓ https://djr.com/nickel-gothic
+ * https://input.djr.com */
+
+:where([class|='font']) {
+  &:is([class*='sans'], [class*='forma' i]) {
+    font-family: var(--font-sans);
+    --opsz: 24;
+    --wght: 400;
+
+    &:is(h1) {
+      --opsz: 72;
+      --wght: 450;
+    }
+  }
+  &:is([class*='serif'], [class*='roslindale' i]) {
+    font-family: var(--font-serif);
+    --opsz: 11;
+    --wght: 400;
+
+    &:is(h1) {
+      --opsz: 48;
+      --wght: 700;
+      --ital: 0;
+    }
+  }
+}
+
+:is(h1, h2, h3, h4, h5, h6) {
+  /*
+    Forma 
+    Banner, 72pt+ / 96px+
+    Display, 36–72pt / 48–96px
+    Deck, 14-36pt / 19–48px
+    Text, 11–14pt / 15–19px
+    Micro, 8–11pt / 11–15px
+  *//*
+    Micro Regular | Medium | Light
+    wght | 403.45 | 526.67 | 307.14
+    opsz | 8
+    ---- + ----
+    opsz | 24   | 40   | 56      | 72
+         | Text | Deck | Display | Banner
+  */
+  font-variation-settings:
+    "opsz" var(--opsz, 40),
+    "wght" var(--wght, 400),
+    "ital" var(--ital, 0);
+}
+
+h1 { --opsz: 72; --wght: 450 }
+h2 { --opsz: 56; --wght: 450 }
+h3 { --opsz: 40; --wght: 450 }
+
+h5,
+h6 { --opsz: 16; --wght: 526.67 }
+
+small {
+  --opsz: 8;
+  --wght: 403.45;
+}
+
+summary,
+legend {
+  --opsz: 24;
+  --wght: 500;
+}

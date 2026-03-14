@@ -1,0 +1,100 @@
+/* https://every-layout.dev/rudiments/modular-scale/ */
+
+/* TODO new headline scaling strategy with CSS pow() exponential function
+  - https://www.modularscale.com/
+  - https://drafts.csswg.org/css-values/#exponent-funcs
+  - https://codepen.io/jh3y/pen/KKLNLxW
+  - https://codepen.io/2kool2/pen/dyPgebN
+  - https://codepen.io/argyleink/pen/jOovoav
+  - https://developer.mozilla.org/en-US/docs/Web/CSS/exp#scale_headings_by_fixed_ratio */
+
+@layer heads {
+  @supports (scale: pow(1.5, 1)) {
+    h1, h2, h3, h4, h5 {
+      --h-scale: clamp(1rem, 1vw * pow(1.75, var(--n)), 9rem);
+      /* font-size: var(--h-scale); */
+    }
+    h1 { --n: 5 }
+    h2 { --n: 4 }
+    h3 { --n: 3 }
+    h4 { --n: 2 }
+    h5 { --n: 1 }
+  }
+
+  /* NOTE base type scale: 16, 18, 20, 22, 24, 26, 32, 40, 48, 56, 64, 72, 96 */
+  :where(
+    h1, .h1,
+    h2, .h2,
+    h3, .h3,
+    h4, .h4,
+    h5, .h5,
+    h6, .h6
+  ) {
+    --px2rem: calc((var(--px-size) / 16) * 1rem);
+
+    font-family: inherit;
+    font-size: var(--px2rem);
+    /* line-height: calc(1ex / .42); */
+
+    /* font-optical-sizing: auto; */
+    font-variation-settings:
+      "opsz" var(--opsz, var(--px-size)), /* auto optical size */
+      "wght" var(--wght, 450);
+  }
+
+  /* mobile */
+  :where(h1, .h1) { --px-size: 64 }
+  :where(h2, .h2) { --px-size: 48 }
+  :where(h3, .h3) { --px-size: 32 }
+  :where(h4, .h4) { --px-size: 24 }
+  :where(h5, .h5) { --px-size: 20 }
+  :where(h6, .h6) { --px-size: 16 }
+  :where(body) { --px-size: 14 }
+
+  @media (width >= 48em) {
+    /* laptop */
+    :where(h1, .h1) { --px-size: 72; --opsz: 72 } /* 96 */
+    :where(h2, .h2) { --px-size: 56; --opsz: 56 }
+    :where(h3, .h3) { --px-size: 40; --opsz: 40 }
+    :where(h4, .h4) { --px-size: 26; --opsz: 24 }
+    :where(h5, .h5) { --px-size: 22; --opsz: 24 }
+    :where(h6, .h6) { --px-size: 18; --opsz: 18 }
+    :where(body) { --px-size: 16; --opsz: 16 }
+  }
+}
+
+@layer body {
+  :where(:root) {
+    /* https://modern-fluid-typography.vercel.app/ */
+    --clamp-14-18: clamp(0.875rem, 2vw + 1rem, 1.125rem);
+    --clamp-16-24: clamp(1rem, calc(1rem + ((1vw - 0.48rem) * 0.8772)), 1.5rem);
+
+    /* https://drafts.csswg.org/css2/#font-size-props */
+    font-size: var(--root-scale, initial);
+  }
+
+  /* RFS → https://css-tricks.com/accessible-font-sizing-explained/ */
+  /* :is(*) { --font-size: calc((var(--pixel) / 16) * 1rem) } */
+
+  :where(html) {
+    --root-scale: var(--clamp-14-18);
+
+    /* https://bit.ly/adrianroselli-post
+       https://bit.ly/mikemai-post */
+    font-size: 100%;
+  }
+
+  :where(body) {
+    /* value conversion helpers */
+    --px2rem: calc(var(--px-size) / 16 * 1rem);
+    /* e.g.
+       20px ~ 1.25rem
+       18px ~ 1.125rem
+       16px ~ 1rem
+       14px ~ .875rem
+    */
+    --rem2px: calc(var(--px, 14) * 1rem / 16);
+
+    font-size: var(--px2rem);
+  }
+}

@@ -1,0 +1,118 @@
+/* :any-link {…} */
+
+/*
+  MARK: - Base link styles
+*/
+:where(a[href]) {
+  color: var(--link);
+  &:visited { color: var(--link-visited); }
+}
+:focus-visible {
+  outline-color: var(--link);
+}
+
+:where(a, [class*=link]) {
+  /* display: inline-block; */
+  font-family: inherit;
+
+  /* transition: color .15s ease; */
+  transition: all .2s cubic-bezier(.07,.95,0,1);
+
+  &:is(:hover, :focus) {
+    /* TODO global styling for link states */
+    /* --link: ; --link-visited: ; --wght: 500; */
+    /* transition-timing-function: cubic-bezier(0.77, 0, 0.175, 1); */
+  }
+
+  &[rel=bookmark] {
+    translate: -100%;
+    inline-size: fit-content;
+
+    &:where(:is(:hover,:focus)) {
+      --wght: 700;
+    }
+  }
+
+  /* &:where([href^=http])::after {…} */
+  /* &:where([aria-current="page"]) {…} */
+}
+
+/*
+  MARK: - Navlink styling
+*/
+:where([itemtype*=SiteNavigationElement]) {
+  /* --nav-link-accent: ; */
+  --link-active-accent: hsl(var(--c-pink));
+
+  a:where([itemprop=url]) {
+    /* font-size: clamp(3rem, 5vw + 1rem, 6rem); */
+    font-size: clamp(1rem, 5vw + 1rem, 2rem);
+    line-height: var(--lh-equals);
+    text-transform: uppercase;
+    text-wrap: nowrap;
+
+    --link: initial;
+    --link-visited: initial;
+
+    position: relative;
+    inline-size: 100%;
+    /* opacity: var(--a, .75); */
+
+    font-variation-settings:
+      "opsz" var(--opsz, 72),
+      "wght" var(--wght, 600),
+      "ital" var(--ital, 0);
+
+    transition-property: font-variation-settings, opacity, color, border-color;
+    transition-duration: 200ms;
+    transition-timing-function:
+      var(--font-axes-easing, cubic-bezier(0.45, 0, 0.55, 1));
+
+    > span {
+      position: relative;
+      display: inline-block;
+      font: inherit;
+    }
+  }
+
+  span::before { /* TODO create mixin for hover effect */
+    --_w: 100%;
+    --_h: 2px;
+
+    --ltr: left right;
+    --rtl: right left;
+    /* —or— */
+    --null-full: 0 100%;
+    --full-null: 100% 0;
+    /* —or— */
+    --x-offset: 0;
+    --y-offset: 100%;
+
+    position: absolute;
+    inset-block-end: calc(1lh / 8);
+    width: var(--_w);
+    height: var(--_h);
+    transform: scaleX(var(--sx, 0));
+    transform-origin: var(--offset, var(--null-full));
+    background-color: var(--link-active-accent);
+    transition: transform .2s cubic-bezier(0.45, 0, 0.55, 1);
+    content: "";
+  }
+
+  li:has(> a:is(.active)) {
+    /* --a: .5; */
+    --wght: 200;
+  }
+
+  /* a:is(.active) {
+    --link: var(--link-active-accent);
+    --link-visited: var(--link-active-accent);
+    --sx: 1;
+
+    &:not(:hover) { --sx: 0;
+      span::before {
+        --offset: var(--full-null);
+      }
+    }
+  } */
+}

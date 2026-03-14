@@ -1,0 +1,31 @@
+@charset "utf-8";
+/* https://www.w3.org/TR/css-syntax-3/#determine-the-fallback-encoding */
+
+/* establish the layer order */
+/* @layer reset, theme, patterns, layout, custom, utilities; */
+@layer reset, theme;
+
+/* import into pre-ordered layers */
+/* https://github.com/tailwindlabs/tailwindcss/pull/14755 */
+
+/* this layer contains color swatches and schemas configuration */
+@import "./theme/colors.css" layer(theme);
+
+/* this layer contains typography rules; scale and typeset */
+@import "./theme/fonts.css" layer(theme);
+
+/* this layer contains custom properties and helper tokens */
+@import "./theme/props.css" layer(theme);
+
+/* https://tailwindcss.com/docs/v4-beta#disabling-preflight
+   https://github.com/tailwindlabs/tailwindcss/blob/next/packages/tailwindcss/preflight.css */
+@import "./reset.css" layer(reset);
+
+/**
+ * GUI Components / Patterns
+ * https://www.w3.org/WAI/ARIA/apg/patterns/
+ * https://codepen.io/collection/bNWdoB
+ * https://carbondesignsystem.com/
+ */
+
+/* https://github.com/mevius6/sanity-nextjs-preview/blob/main/src/styles/main.css */

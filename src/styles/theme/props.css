@@ -1,0 +1,489 @@
+@layer props {
+  @layer
+    type,
+    sizes,
+    ratios,
+    spacers,
+    gutters,
+    borders,
+    spacers,
+    shadows,
+    animations,
+    /* filters, */
+    shapes;
+}
+
+/**
+ * UA Style Sheets
+ * https://www.w3.org/TR/CSS/#css-glossary
+ * https://drafts.csswg.org/css-ui/#default-style-sheet
+ * https://www.w3.org/TR/css-cascade/#cascading-origins
+ * https://meiert.com/en/blog/user-agent-style-sheets/
+ * https://drafts.csswg.org/css-scoping/#default-element-styles
+ */
+
+/* Custom properties on :root pseudo-class
+   why → https://drafts.csswg.org/selectors/#the-root-pseudo
+   not → https://github.com/w3c/csswg-drafts/issues/6641 */
+
+@layer props.type {
+  :where(html) {
+    /* to Level AA
+       --tracking: calc(var(--font-size, 16px) * var(--i));
+       --i: .015; ~ 0.24px
+       --i: .030; ~ 0.48px
+       --i: .060; ~ 0.96px
+       --i: .120; ~ 1.92px <-- success criterion
+       by https://www.w3.org/TR/WCAG22/#text-spacing */
+
+    /* Tracking */
+    --letter-spacing-0: .010em;    /* ~ .16px */
+    --letter-spacing-1: .025em;    /* ~ .40px */
+    --letter-spacing-2: .030em;    /* ~ .48px */
+    --letter-spacing-3: .0394em;   /* ~ .63px */
+    --letter-spacing-4: .050em;
+    --letter-spacing-5: .075em;
+    --letter-spacing-6: .078125em; /* ~ 1.25px */
+    --letter-spacing-7: .09375em;  /* ~ 1.5px */
+    --letter-spacing-8: .150em;
+
+    /* TODO Define negative spacing with `sign()` function */
+    --neg-tracking-1: calc(var(--letter-spacing-0) * -1);
+    --neg-tracking-2: calc(var(--letter-spacing-2) * -1);
+
+    /* For instance, the “tight not touching” style
+       → https://fonts.google.com/knowledge/history_of_type
+       → https://hex.xyz/HEX_Franklin/Tyght/ */
+
+    /* Interlineage */
+    --lh-tight: 1cap;
+    --lh-equals: 1; /* condensed-ultra */
+    --lh-precise: 1.1;
+    --lh-thinest: 1.15;
+    --lh-eighty: 1.25; /* condensed */
+    --lh-default: 1.5; /* default */
+    --leading: var(--lh-default);
+
+    /* System defaults
+       https://drafts.csswg.org/css-fonts-4/#generic-font-families */
+    --ui-serif: ui-serif, serif;
+    --ui-sans: system-ui, sans-serif;
+    --ui-mono: ui-monospace, monospace;
+
+    /* See: https://modernfontstacks.com/#about */
+    --font-system-ui: system-ui,-apple-system,sans-serif;
+    --font-antique:
+      Superclarendon,
+      Bookman Old Style,
+      URW Bookman,
+      URW Bookman L,
+      Georgia Pro,
+      Georgia,
+      serif;
+    --font-fantasy: Copperplate, fantasy;
+
+    /* NOTE Tailwind uses this tokens too…
+            Setup them via the Next.js font module */
+    --font-sans: initial;
+    --font-serif: initial;
+
+    /* Fallback */
+    --font-stack: system-ui, -apple-system, BlinkMacSystemFont,
+      "Segoe UI",
+      Roboto,
+      "Helvetica Neue",
+      Arial,
+      "Noto Sans",
+      "Liberation Sans",
+      sans-serif,
+      "Apple Color Emoji",
+      "Segoe UI Emoji",
+      "Segoe UI Symbol",
+      "Noto Color Emoji";
+
+    --font-weight-1: 100;
+    --font-weight-2: 200;
+    --font-weight-3: 300;
+    --font-weight-4: 400;
+    --font-weight-5: 500;
+    --font-weight-6: 600;
+    --font-weight-7: 700;
+    --font-weight-8: 800;
+    --font-weight-9: 900;
+
+    /* TODO Fitting the line
+       ❧ https://djr.com/fit
+       ❧ https://djr.com/nickel-gothic
+       —or—
+       go → https://github.com/rikschennink/fitty */
+  }
+}
+
+@layer props.sizes {
+  /* ----------------------------------
+   * MARK: - Breakpoint widths
+   * ---------------------------------- */
+
+  :where(html) {
+    /* See:
+       → https://primer.style/design/foundations/layout#breakpoints
+       → https://open-props.style/#media-queries */
+
+    /* Alternate: [xs: 320, sm: 640, md: 768, lg: 960, xl: 1280, xxl: 1920] */
+    --_width-xs: 20em;
+    --_width-sm: 34em;
+    --_width-md: 48em;
+    --_width-lg: 62em;
+    --_width-xl: 80em;
+
+    /* (992 - 16 * 2) = 960 */
+    --container-width: calc(var(--width-lg) - var(--gutter) * 2);
+    --container-sm: 34rem;    /* ~ 544px */
+    --container-md: 48rem;    /* ~ 768px */
+    --container-lg: 63.25rem; /* ~ 1012px */
+    --container-xl: 80rem;    /* ~ 1280px */
+
+    /* https://www.w3.org/TR/WCAG22/#visual-presentation */
+    --max-article-width: 80ch;
+    --avg-article-width: 65ch;
+
+    --size-1: .25rem;
+    --size-2: .5rem;
+    --size-3: 1rem;
+    --size-4: 1.25rem;
+    --size-5: 1.5rem;
+    --size-6: 1.75rem;
+    --size-7: 2rem;
+    --size-8: 3rem;
+    --size-9: 4rem;
+    --size-10: 5rem;
+    --size-11: 7.5rem;
+    --size-12: 10rem;
+    --size-13: 15rem;
+    --size-14: 20rem;
+    --size-15: 30rem;
+
+    /* https://ishadeed.com/article/target-size/ */
+  }
+}
+
+@layer props.ratios {
+  /* ----------------------------------
+   * MARK: - Aspect ratios
+   * ---------------------------------- */
+
+  :where(html) {
+    /**
+     * Square    := 1:1
+     * Portrait  := 1:2 | 2:3 | 3:4 | 4:5 | 9:16
+     * Landscape := 2:1 | 3:2 | 4:3 | 16:9
+     */
+    --ratio-square: 1;
+    --ratio-landscape: 4/3;
+    --ratio-portrait: 3/4;
+    --ratio-widescreen: 16/9;
+    --ratio-ultrawide: 18/5;
+    --ratio-golden: 1.6180/1;
+    --ratio-1: 1;
+    --ratio-2: 4/3;  /* 1.333 (SD) */
+    --ratio-3: 16/9; /* 1.788 (HD) */
+  }
+}
+
+@layer props.spacers {
+  /* ----------------------------------
+   * MARK: - Spacing scale
+   * ---------------------------------- */
+
+  /* NOTE Fibonacci scale: 4, 8, 12, 20, 32, 52, 84, 136, 220 */
+  /* https://drafts.csswg.org/css-values/#exponent-funcs */
+
+  :where(html) {
+    --denser: calc(var(--spacer) * 0.5); /* 0.25rem; ~ 4px */
+    --spacer: 0.5rem; /* <-- Step size ~ 8px */
+    --spacer-2x: calc(var(--spacer) * 2);   /* 1rem;   | ~ 16px */
+    --spacer-3x: calc(var(--spacer) * 3);   /* 1.5rem; | ~ 24px */
+    --spacer-4x: calc(var(--spacer) * 4);   /* 2rem;   | ~ 32px */
+    --spacer-5x: calc(var(--spacer) * 5);   /* 2.5rem; | ~ 40px */
+    --spacer-6x: calc(var(--spacer) * 6);   /* 3rem;   | ~ 48px */
+    --spacer-7x: calc(var(--spacer) * 7);   /* 3.5rem; | ~ 56px */
+    --spacer-8x: calc(var(--spacer) * 8);   /* 4rem;   | ~ 64px */
+    --spacer-10x: calc(var(--spacer) * 10); /* 5rem;   | ~ 80px */
+    --spacer-12x: calc(var(--spacer) * 12); /* 6rem;   | ~ 96px = 1in = 2.54cm */
+    --spacer-14x: calc(var(--spacer) * 14); /* 7rem;   | ~ 112px */
+    --spacer-16x: calc(var(--spacer) * 16); /* 8rem;   | ~ 128px */
+    --spacer-18x: calc(var(--spacer) * 18); /* 9rem;   | ~ 144px */
+    --spacer-20x: calc(var(--spacer) * 20); /* 10rem;  | ~ 160px */
+
+    /* calc → https://jxnblk.github.io/formula/ */
+    --em-spacer-1: 0.0625em;  /* 1/16 */
+    --em-spacer-2: 0.125em;   /* 1/8 */
+    --em-spacer-3: 0.25em;    /* 1/4 */
+    --em-spacer-4: 0.375em;   /* 3/8 */
+    --em-spacer-5: 0.5em;     /* 1/2 */
+    --em-spacer-6: 0.75em;    /* 3/4 */
+  }
+}
+
+@layer props.gutters {
+  /* ----------------------------------
+   * MARK: - Gutters
+   * ---------------------------------- */
+
+  :where(html) {
+    /* spec → https://drafts.csswg.org/css-align-3/#gutter */
+    --gutter: max(16px, 20px);
+    --gutter-md: var(--spacer-2x);
+    --gutter-lg: var(--spacer-3x);
+    --gutter-condensed: var(--spacer-2x);
+    --gutter-spacious-md: var(--spacer-2x);
+    --gutter-spacious-lg: var(--spacer-4x);
+    --gutter-spacious-xl: var(--spacer-5x);
+  }
+}
+
+@layer props.borders {
+  /* ----------------------------------
+   * MARK: - Box Decorations
+   * ---------------------------------- */
+
+  /* https://drafts.csswg.org/css-backgrounds/#borders
+     https://drafts.csswg.org/css-backgrounds/#corners */
+
+  :where(html) {
+    /* Line Thickness */
+    --border-width: var(--line-hair);
+
+    /* Set the props aliases, for instance: */
+    --line-hair: 0.5px; /* ~ */ --hairline: var(--line-hair);
+    --line-thin: 1px;
+    --line-medium: 3px; /* ~ */ --line-md: var(--line-medium);
+    --line-thick: 5px;
+
+    /* Line Patterns */
+    --border-style: var(--line-style, solid);
+    --border-color: currentcolor;
+    /* --border: var(--border-width) var(--border-style) var(--border-color); */
+
+    /* Corner Shaping → https://moderncss.dev/pure-css-shapes-3-ways/ */
+    --caret-size: 10px;
+    --caret-up: 0 7px var(--caret-size) 7px;
+    --caret-right: 7px 0 7px var(--caret-size);
+
+    /* Rounded Corners */
+    --rounded: 50%;
+
+    /* Fixed */
+    --fixed-radius-1: 4px;
+    --fixed-radius-2: 6px;
+    --fixed-radius-3: 8px;
+    --fixed-radius-4: 12px;
+    --fixed-radius-5: 16px;
+
+    /* Responsive */
+    --radius-1: .250rem;
+    --radius-2: .375rem;
+    --radius-3: .500rem;
+    --radius-4: .750rem;
+    --radius-5: 1rem;
+
+    /* Max Curve Radii */
+    --radius-x: calc(var(--big-int, 999) * 1px);
+    --radius-xx: 1000rem;
+    --radius-xxx: 1e5px;
+
+    /* https://en.wikipedia.org/wiki/Pi_Day
+       https://en.wikipedia.org/wiki/Turn_(angle)#Tau_proposals
+       https://web.dev/articles/css-trig-functions */
+
+    /* https://drafts.csswg.org/css-values/#numbers
+       https://www.ibm.com/docs/en/zvm/7.3?topic=arithmetic-exponential-notation */
+  }
+}
+
+@layer props.shadows {
+  :where(html) {
+    --shadow-1:
+      0 1px 2px -1px hsl(
+        var(--shadow-color) / calc(var(--shadow-strength) + 9%)
+      );
+    --shadow-2:
+      0 3px 5px -2px hsl(
+        var(--shadow-color) / calc(var(--shadow-strength) + 3%)
+      ),
+      0 7px 14px -5px hsl(
+        var(--shadow-color) / calc(var(--shadow-strength) + 5%)
+      );
+  }
+}
+
+@layer props.easing {
+  /* ----------------------------------
+   * MARK: - Easing
+   * ---------------------------------- */
+  /* Generators
+      - https://easings.net/
+      - https://linear-easing-generator.netlify.app/
+  */
+  :where(html) {
+    --ease-in-quad: cubic-bezier(0.55, 0.085, 0.68, 0.53);
+    --ease-out-quad: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    --ease-in-out-quad: cubic-bezier(0.455, 0.03, 0.515, 0.955);
+
+    /* Eases w/ power of 2 (POT) */
+    --ease-in-cubic: cubic-bezier(0.55, 0.055, 0.675, 0.19);
+    --ease-out-cubic: cubic-bezier(0.215, 0.61, 0.355, 1);
+    --ease-in-out-cubic: cubic-bezier(0.645, 0.045, 0.355, 1);
+
+    /* Eases w/ power of 3 */
+    --ease-in-quart: cubic-bezier(0.895, 0.03, 0.685, 0.22);
+    --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
+    --ease-in-out-quart: cubic-bezier(0.77, 0, 0.175, 1);
+
+    /* Eases w/ power of 4 */
+    --ease-in-quint: cubic-bezier(0.755, 0.05, 0.855, 0.06);
+    --ease-out-quint: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out-quint: cubic-bezier(0.86, 0, 0.07, 1);
+
+    /* https://cubic-bezier.com/#.2,1,.3,1 */
+    --easing: cubic-bezier(0.2, 1, 0.3, 1);
+    --ease-spring: cubic-bezier(0.4, 0, 0.7, 1.8);
+
+    /* TODO --ease-N or --easing-N */
+    --ease-1: cubic-bezier(.25,0,.5,1);
+    --ease-2: cubic-bezier(.25,0,.4,1);
+    --ease-3: cubic-bezier(.25,0,.3,1);
+    --ease-4: cubic-bezier(.25,0,.2,1);
+    --ease-5: cubic-bezier(.25,0,.1,1);
+
+    --spring-easing: linear(
+      0, 0.009, 0.035 2.1%, 0.141, 0.281 6.7%, 0.723 12.9%, 0.938 16.7%, 1.017,
+      1.077, 1.121, 1.149 24.3%, 1.159, 1.163, 1.161, 1.154 29.9%, 1.129 32.8%,
+      1.051 39.6%, 1.017 43.1%, 0.991, 0.977 51%, 0.974 53.8%, 0.975 57.1%,
+      0.997 69.8%, 1.003 76.9%, 1.004 83.8%, 1
+    );
+  }
+}
+
+/* TODO Define transition vals, animation props and @keyframes */
+@layer props.animations {
+  /* See
+     - https://github.com/primer/css/blob/main/src/utilities/animations.scss
+     - https://github.com/argyleink/transition.css
+     - https://github.com/argyleink/open-prop
+     - https://www.transition.style/ */
+
+  :where(html) {
+    /* ----------------------------------
+     * MARK: - Speed
+     * ---------------------------------- */
+
+    --duration-0: 75ms;
+    --duration-1: 100ms;
+    --duration-2: 150ms;
+    --duration-3: 200ms;
+    --duration-4: 300ms;
+    --duration-5: 400ms;
+    --duration-6: 500ms;
+    --duration-7: 700ms;
+    --duration-8: 1000ms;
+    --duration-9: 1200ms;
+    --duration: 0.4s; /* typically in the range of 150–500 ms */
+
+    /* 🤟🏻💀🪽 https://github.com/argyleink/open-props/blob/main/src/extra/durations.css */
+    --leap: 61s;
+
+    /* TODO --anim-N or --animation-N */
+    --anim-fade-in: fade-in .5s var(--ease-3);
+    --anim-fade-out: fade-out .5s var(--ease-3);
+    --anim-fade-1: var(--anim-fade-in);
+    --anim-fade-0: var(--anim-fade-out);
+
+    --_ease-out: cubic-bezier(0, 0, .3, 1);
+    --_ease-squish: var(--ease-elastic-in-out, cubic-bezier(.5, -.3, .1, 1.5));
+
+    /* loops */
+    --animation-spin: spin 2s linear infinite;
+    --animation-ping: ping 5s var(--_ease-out) infinite;
+    --animation-blink: blink 1s var(--_ease-out) infinite;
+    --animation-float: float 3s var(--_ease-out) infinite;
+    --animation-bounce: bounce 2s var(--_ease-squish) infinite;
+    --animation-pulse: pulse 2s var(--_ease-out) infinite;
+
+    --animation-pop: pop 0.5s var(--d);
+  }
+
+  @keyframes pop { /* TODO reusable animation */
+    /* usage example
+    [id=trigger] svg path:nth-of-type(1) { --d: 0.24s; --r: 20deg; --s: 1.5; }
+    [id=trigger] svg path:nth-of-type(2) { --d: 0.12s; --r: 10deg; --s: 1.4; }
+    [id=trigger] svg path:nth-of-type(3) { --d: 0s; --r: 0deg; --s: 1.25; } */
+
+    50% { scale: var(--s, 1); rotate: var(--r, 0deg); }
+  }
+
+  @keyframes fade-in {
+    to { opacity:1 }
+  }
+  @keyframes fade-out {
+    to { opacity:0 }
+  }
+
+  @keyframes spin {
+    to { transform: rotate(1turn) }
+  }
+
+  @keyframes ping {
+    90%, 100% {
+      opacity: 0;
+      transform: scale(2);
+    }
+  }
+
+  @keyframes blink {
+    0%, 100% {
+      opacity: 1;
+    }
+
+    50% { opacity: .5 }
+  }
+
+  @keyframes float {
+    50% { transform: translateY(-25%) }
+  }
+
+  @keyframes pulse {
+    50% { transform: scale(.9,.9) }
+  }
+
+  @keyframes reveal {
+    to { scale: 1; opacity: 1; }
+  }
+}
+
+@layer props.shapes {
+  /* Gens:
+     → https://bennettfeely.com/clippy/
+     → https://codepen.io/stoumann/full/abZxoOM
+     → https://yoksel.github.io/relative-clip-path/
+     → https://augmented-ui.com/mixinmixer/
+     → https://css-doodle.com/shapes/
+     → https://www.svgbackgrounds.com/elements/svg-shape-dividers/
+     → https://www.svgbackgrounds.com/tools/shape-dividers/ */
+
+  /* Refs:
+     → https://web.dev/css-clipping/
+     → https://css-tricks.com/almanac/properties/c/clip-path/
+     → https://codepen.io/chriscoyier/pen/jOjzZQK */
+
+  :where(html) {
+    --shape-circle: circle(50% at 50% 50%);
+    --shape-square: polygon(0% 0%, 0% 100%, 100% 100%, 100% 0%);
+
+    /* TODO Update data URI's markup
+      --_icon: url("data:image/svg+xml;utf8,%3Csvg viewBox='0 0 24 24' width='1.2em' height='1.2em' xmlns='http://www.w3.org/2000/svg' %3E%3Cg fill='none' stroke='currentColor' stroke-linecap='round' stroke-linejoin='round' stroke-width='2'%3E%3Cpath d='M5 12H19'%3E {…} */
+
+    --shape-grunge:
+      url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 100" fill="%23000"><path d="M0 0v47.6l5-2c1 0 11 3 12 0 2 3 6-3 6 0 0-4 12 3 12 0 0 3 15-1 17 0 2-2 5-1 6 0 0-2 6 2 6 0s2 4 4 0c5 2 12-3 16 0 2-2 4-3 4 0 0 2 6-1 6 0 1 4 15-2 17 0h7c0 1 3-3 6 0h17c2 2 3 1 6 0h6c1-2 21-1 24 0 2 1 4 2 6 0 0-1 22 4 24 0 0 0 5-3 5 0 2-2 10 2 12 0 2 2 6 1 6 0 2 3 4-2 6 0 1 0 25-2 25 1l10-1c3 1 6 6 7 0 1 5 4-2 6 0 2-2 4 3 5 0h12c6 1 36 2 36 0 0 2 3 0 6 0h6c5-2 7 4 11 0 2 0 15 2 17 0h13c3-4 5 1 7 0h29c0-3 6 0 6 0h5c0 2 16-1 18 0 1 4 9-1 12 0s6-2 6 0c8-2 3 4 13 0h10c3 4 19 1 19 0 2 0 21 1 23-1 1 4 3-1 6 1 1 2 11-1 12-1 3 3 9 0 12 1 3-4 6 1 6 0h6c0-3 5 1 6-1 0 3 2 1 4 1 3 4 10-1 13 0 3-2 6-1 6 0 2 2 2 0 6 0 1-2 6 2 6 0 2 0 4 5 6 0h18c2 3 4 1 6 0l6-1c3 2 12 3 17 1 14 3 18 1 24 0 2-1 3 3 5 0 6 2 10-1 16 0 1 3 6 0 9 0 0-2 3 2 5 0 6-6 8 7 13 0 0-2 5 2 5 0 3 3 10 0 10 0 1 2 5-2 8 0 3-1 8 3 12 0h6c2 1 10 4 12 0h6c1-1 5 2 6 0 1 2 4-1 6 0 0-2 5 3 6-1 2 1 6 5 5 1 1 1 3-2 6 0 2-1 5 3 6 0 0 1 6 2 6 0 2 3 4-4 6 0 0-2 3 2 6 0 3 0 6 3 6 0 5 3 8-1 13 0 3-4 6 1 6 0h5c0-1 9 2 12 0 1-1 9 3 11 0h6c2 2 4 4 7 0 3 2 5-4 5-1 10 4 15-2 18 2 0-1 6 2 6-2 0 0 6-2 6 1 1 6 12 2 12 0 1 3 4-3 7 2 2-2 5 2 5 0 1 5 4-5 6 0 2-1 4 2 6 0 1 3 1 0 5 0V0H0Z"></path></svg>')
+  }
+}

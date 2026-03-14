@@ -1,0 +1,167 @@
+/* contain rules for handling typographic effects such as line breaking, hyphenation, justification, glyph selection, etc. */
+
+.text-balance { text-wrap: balance }
+.text-pretty  { text-wrap: pretty }
+
+.text-center { text-align: center }
+.text-left   { text-align: left }
+
+.caps,
+.uppercase,
+.text-uppercase { text-transform: uppercase }
+
+.lowercase,
+.text-lowercase { text-transform: lowercase }
+
+.sp-nowrap {
+  white-space: nowrap;
+}
+
+.code,
+.sp-pre {
+  /* preserve nowrap */
+  white-space: pre;
+}
+
+.sp-pre-wrap {
+  /* preserve wrap */
+  white-space: pre-wrap;
+}
+
+.sp-wrap {
+  white-space: wrap;
+}
+
+.text-nowrap {
+  text-wrap-mode: nowrap;
+}
+
+.text-wrap {
+  text-wrap-mode: wrap;
+}
+
+/* https://www.w3.org/TR/css-inline-3/#line-height */
+.text-caps-trim {
+  --case: 1;
+
+  text-transform: uppercase;
+  letter-spacing: var(--letter-spacing-2);
+  text-edge: cap alphabetic;
+  leading-trim: both;
+}
+
+.text-ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.truncate {
+  display: -webkit-box;
+  overflow: hidden;
+  text-wrap: balance;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+/* https://drafts.csswg.org/css-writing-modes-4/ */
+.sideways {
+  writing-mode: vertical-lr;
+  text-orientation: sideways;
+}
+
+/* https://drafts.csswg.org/css-inline/#sizing-drop-initials */
+.has-dropcap {
+  /* https://adrianroselli.com/2019/10/accessible-drop-caps.html#Ideal
+     https://css-tricks.com/snippets/css/drop-caps/ */
+
+  &::first-letter {
+    initial-letter: 3 drop;
+    initial-letter-align: leading;
+    margin-inline-end: 1ex;
+  }
+
+  @supports not (initial-letter: 2 drop) { /* 🦊 🧭 */
+    &::first-letter {
+      float: left;
+      margin-block-start: .125ch;
+      margin-inline-end: .25ch;
+
+      font-family: var(--cap-face, inherit);
+      font-size: calc(var(--cap-size, 5) * 1rem);
+      line-height: var(--cap-lh, 1cap);
+      color: var(--cap-color);
+    }
+  }
+  @supports not (line-height: 1cap) {
+    &::first-letter { --cap-lh: .6 }
+  }
+}
+
+.indent > * + * { text-indent: 1.5em } /* ~ 1lh; if line-height: 1.5 */
+
+.c2sc { font-variant-caps: all-small-caps }
+.smcp { font-variant-caps: small-caps }
+
+[class*=petite] {
+  text-transform: lowercase;
+
+  &[class*=sc] {
+    font-feature-settings: "smcp";
+    font-variant-caps: petite-caps;
+  }
+
+  &[class*=c2sc] {
+    font-feature-settings: "c2sc";
+    font-variant-caps: all-petite-caps;
+  }
+}
+
+/**
+ * Tools:
+ * - https://fontgauntlet.com/
+ * - https://wakamaifondue.com/beta/
+ *
+ * References:
+ * - https://learn.microsoft.com/en-us/typography/opentype/spec/
+ * - https://learn.microsoft.com/en-us/typography/opentype/spec/featurelist
+ */
+
+.font:is([class~=features]) {
+  /* common list */
+  font-feature-settings:
+    "aalt" var(--aalt, 0), /* Access All Alternates */
+    "c2sc" var(--c2sc, 0), /* Small Capitals From Capitals */
+    "calt" var(--calt, 1), /* Contextual Alternates */
+    "case" var(--case, 0), /* Case-sensitive Forms */
+    "ccmp" var(--ccmp, 1), /* Glyph Composition / Decomposition */
+    "clig" var(--clig, 1), /* Contextual Ligatures */
+    "dlig" var(--dlig, 1), /* Discretionary Ligatures */
+    "liga" var(--liga, 1), /* Standard Ligatures */
+    "lnum" var(--lnum, 0), /* Lining Figures */
+    "locl" var(--locl, 0), /* Localized Forms */
+    "onum" var(--onum, 0), /* Oldstyle Figures */
+    "ordn" var(--ordn, 0), /* Ordinals */
+    "rvrn" var(--rvrn, 1), /* Required Variation Alternates */
+    "salt" var(--salt, 0), /* Stylistic Alternates */
+    "smcp" var(--smcp, 0), /* Small Capitals */
+    "ss01" var(--ss01, 0), /* Stylistic Set 1 */
+    /* etc. */
+    "ss20" var(--ss20, 0), /* Stylistic Set 20 */
+    "kern" var(--kern, 1), /* Kerning */
+    "mark" var(--mark, 1), /* Mark Positioning */
+    "mkmk" var(--mkmk, 1); /* Mark to Mark Positioning */
+}
+
+/* TODO utility cls to control variable axes */
+/* .fvar, */
+.font:is([class*=variables]) {
+  font-variation-settings: var(--font-variables,
+    "opsz" var(--opsz, initial),
+    "wght" var(--wght, initial),
+    "wdth" var(--wdth, initial),
+    "ital" var(--ital, initial),
+    "slnt" var(--slnt, initial)
+    /* etc. */
+  );
+}

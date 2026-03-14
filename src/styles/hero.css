@@ -1,0 +1,184 @@
+@property --hue {
+  syntax: '<angle>';
+  initial-value: 0turn;
+  inherits: false;
+}
+
+@keyframes hue-cycle { to {
+  --hue: 1turn;
+}}
+
+/**
+ * MARK: - Zoom Spot
+ */
+/* TODO Name this thing: spot, portal, gateway, etc… */
+
+.wrapper:has(> .spot-container) {
+  min-inline-size: 100vw;
+  block-size: 100dvh;
+}
+
+.spot-container {
+  width: 100%;
+  height: 100dvh;
+  /* position: absolute; */
+  inset: 0;
+  z-index: 2;
+  /* perspective: 500px; */
+  /* overflow: hidden !important; */
+
+  .spot {
+    --spot-radius: 25vmin;
+    --spot-surface: hsl(var(--sw-dark-night));
+    /* hsl(var(--sw-night-watch)); */
+    /* hsl(var(--sw-cascades)); */
+
+    aspect-ratio: 1;
+    block-size: 100%;
+    background-color: var(--spot-surface, var(--background));
+
+    /* #region masking */
+    @supports(-webkit-mask-image: url(#mask)) or (mask-image: url(#mask)) {
+      & {
+        /* https://drafts.fxtf.org/css-masking/#the-mask */
+
+        /* mask: radial-gradient(circle at center,
+          #0000 clamp(8rem,50%,12rem), clamp(8rem,50%,12rem),
+          #000 100%
+        ) center/100% 100% no-repeat exclude; */
+
+        /* https://github.com/mbarker84/codrops-masked-hero */
+        --maskSize1: 20%;
+        --maskSize2: 28%;
+        --maskSize3: calc(28% + 0.1rem);
+
+        /* --mask: radial-gradient(
+          circle at var(--x, 50%) var(--y, 50%),
+          #0000 var(--maskSize1, 0%),
+          rgba(0, 0, 0, 0.1) calc(var(--maskSize1, 0%) + 0.1%),
+          #000 0,
+          #000 var(--maskSize2, 0%),
+          rgba(0, 0, 0, 0.1) calc(var(--maskSize2, 0%) + 0.1%),
+          #0000 var(--maskSize2, 0%),
+          rgba(0, 0, 0, 0.1) calc(var(--maskSize3, 0%) - 0.1%),
+          #0000 var(--maskSize3, 0%),
+          rgba(0, 0, 0, 0.1) calc(var(--maskSize3, 0%) + 0.1%),
+          #000 0
+        ); */
+
+        --mask: radial-gradient(
+          circle at var(--x, 50%) var(--y, 50%),
+          #0000 var(--maskSize1, 0%),
+          rgba(0, 0, 0, 0.1) calc(var(--maskSize1, 0%) + 0.1%),
+          #000 0
+        );
+
+        mask-image: var(--mask);
+        mask-composite: exclude;
+        pointer-events: none;
+      }
+    }
+    /* #endregion */
+  }
+}
+
+/* #region textures prep */
+
+/* @media (prefers-color-scheme: light) {} */
+:where(:has(.theme > [value=light]:checked)) .bg-paper::after {
+  background: var(--tex-paper);
+  background-size: cover;
+  background-position: 50% 50%;
+  background-repeat: no-repeat;
+
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  content: '';
+}
+
+/* TODO WIP…
+        mv class -> utils
+        mv vars -> props
+*/
+[class*='after-overlay'] {
+  --noise-subtle: url(/subtle-noise-turbulence.png);
+
+  --gradient-vibrant: linear-gradient(
+    to top in lch,
+    color(display-p3 25% 25% 100%),
+    color(display-p3 100% 85% 30%)
+  );
+  --gradient-space: in oklab;
+  --gradient-retro: linear-gradient(
+    to bottom right var(--gradient-space),
+    #1f005c,
+    #5b0060,
+    #870160,
+    #ac255e,
+    #ca485c,
+    #e16b5c,
+    #f39060,
+    #ffb56b
+  );
+  --scroll-hue: oklch(40% 50% var(--hue));
+
+  /* &::before, */
+  &::after {
+    position: absolute;
+    inset: 0;
+    z-index: var(--_zi, var(--after-stack, 1));
+    opacity: var(--_a, var(--after-alpha, .5));
+    content: '';
+    pointer-events: none;
+
+    background: var(--after);
+    /*
+    background-image: var(--_bg-image, var(--after));
+    background-color: var(--_bg-color, #0000); */
+
+    mix-blend-mode: var(--after-blend, normal);
+    filter: var(--after-filter, none);
+  }
+
+  &[class*='--tile'] {
+    &::after {
+      /* --_bg-size: attr(data-after-tile); */
+
+      background-size: calc(var(--after-tile) * 1px);
+      background-repeat: repeat;
+    }
+  }
+
+  &[style*='scroll-hue'] {
+    animation: hue-cycle 1s linear both;
+    animation-timeline: scroll();
+  }
+}
+
+.spot::before {
+  position: absolute;
+  inset: 0;
+  background-image: url(/shadow.jpg);
+  background-repeat: repeat;
+  background-size: cover;
+  background-position: 50% 50%;
+  /* mix-blend-mode: overlay; */
+  mix-blend-mode: soft-light;
+  opacity: .75;
+  content: '';
+
+  animation: drift 20s var(--ease-spring) infinite alternate;
+  animation-play-state: paused;
+}
+
+@keyframes drift {
+  from {
+    background-position: 25% 50%;
+  }
+  to {
+    background-position: 75% 50%;
+  }
+}
+
+/* #endregion */

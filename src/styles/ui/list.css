@@ -1,0 +1,53 @@
+ol,
+ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-gap: 1rem;
+
+  &:where([class*=multicol]) {
+    grid-template-columns: repeat(auto-fill, minmax(22ch, 1fr));
+  }
+}
+
+ul {
+  /* … */
+
+  > li {
+    display: grid;
+    grid-template-columns: 0 1fr;
+    grid-gap: 1.75em;
+    align-items: start;
+    font-size: 1.5rem;
+    line-height: 1.25;
+  }
+
+  &:where(:not([class*=multicol])) > li {
+    max-width: 25ch;
+  }
+
+  >li::before {
+    content: attr(data-icon);
+    font-size: 1.25em;
+  }
+}
+
+ol {
+  --li-bg: rebeccapurple;
+  counter-reset: orderedlist;
+
+  li::before {
+    counter-increment: orderedlist;
+    content: counter(orderedlist);
+    font-family: "input", monospace;
+    font-size: 1.25em;
+    line-height: 0.75;
+    width: 1.5rem;
+    padding-top: 0.25rem;
+    text-align: center;
+    color: #fff;
+    background-color: var(--li-bg);
+    border-radius: 0.25em;
+  }
+}

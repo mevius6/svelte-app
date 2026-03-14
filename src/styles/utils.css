@@ -1,0 +1,537 @@
+/* TODO add helpers for trigonometric functions
+  - https://drafts.csswg.org/css-values-4/#trig-funcs
+  - https://developer.chrome.com/blog/css-wrapped-2023#trig
+  - https://web.dev/articles/css-trig-functions
+*/
+
+/* layer order of utility classes */
+@layer text, logical, motion, fx;
+
+/* @import "./utilities/noise.css" layer(fx); */
+
+/*
+  MARK: - Clipping and masking
+*/
+@layer fx {
+  /* https://drafts.csswg.org/css2/#visufx */
+
+  /* https://drafts.csswg.org/css-values-4/#calc-func */
+  [class*=fade] {
+    /* Horizontal scroller edge fade mask */
+    --lin-grad-fading: linear-gradient(
+      90deg,
+      var(--trn),
+      var(--background) var(--spacer-2x) calc(100% - var(--spacer-2x)),
+      var(--trn));
+
+    mask: var(--mask, var(--lin-grad-fading));
+
+    /* mask-image: linear-gradient(
+      to right,
+      hsl(0 0% 0% / 0),
+      hsl(0 0% 0% / 1) 20%,
+      hsl(0 0% 0% / 1) 80%,
+      hsl(0 0% 0% / 0)
+    ); */
+  }
+
+  /* CSS Scroll Masking
+    → https://codepen.io/jh3y/pen/zYQxKjx */
+
+  .masked {
+    /* mask tldr;
+      as the visible percentage increases,
+      the masked percentage decreased
+      visible starts at 1%
+      masked starts at 7%
+      for a recreding 7 hard lines mask effect
+      (a loop and some calc could generate this)
+      ref → https://codepen.io/argyleink/pen/XWPjzgR
+    */
+    mask: linear-gradient(
+      to top,
+      #000 1%,     /* 1% visible */
+      0%,            /* hard line */
+      #0000 8%,    /* 7% masked */
+      0%,
+      #000 10%,    /* 2% visible */
+      0%,
+      #0000 16%,   /* 6% masked */
+      0%,
+      #000 19%,    /* 3% visible */
+      0%,
+      #0000 24%,   /* 5% masked */
+      0%,
+      #000 28%,    /* 4% visible */
+      0%,
+      #0000 32%,   /* 4% masked */
+      0%,
+      #000 37%,    /* 5% visible */
+      0%,
+      #0000 40%   /* visible til end */
+    );
+  }
+}
+
+/*
+  MARK: - Logical
+*/
+@layer logical {
+  /* https://css-irl.info/logical-border-radius/ */
+  [class|=rounded] {
+    /* NOTE extend tailwindcss utility class */
+
+    &[class*=clamp] {
+      border-radius: clamp(10px, 3.5cqi, 30px)
+    }
+
+    &[class*=clip] {
+      clip-path: inset(0 round .5em)
+    }
+  }
+}
+
+/*
+  MARK: - Text
+  - https://drafts.csswg.org/css-text-4/#toc
+  - https://drafts.csswg.org/css-text-decor-3/#toc
+*/
+@layer text {
+  /* https://frontendmasters.com/blog/text-reveal-with-conic-gradient/ */
+  .truncated {
+    max-height: 3lh; /* Set a cut-off point for the content */
+    overflow-y: clip; /* Cut off the content */
+    position: relative; /* needed for :after */
+    transition: height 0.25s ease-in;
+
+    &::after {
+      content: "";
+      background: linear-gradient(
+          to right,
+          transparent,
+          var(--background) 80%
+        );
+      display: block;
+      height: 1lh;
+      position: absolute;
+      inset-block-end: 0;
+      text-align: right;
+      width: 100%;
+    }
+  }
+
+  :where(b:is(.tag, .keyword, .kw)) {
+    font-size: .75rem;
+    white-space: nowrap;
+    background-color: hsl(0 0% 0% / 0.5);
+    backdrop-filter: blur(3px);
+  }
+
+  /* https://ishadeed.com/article/css-cap-unit/#aligning-text-and-icon */
+  /* :where([class~=tag]) {
+    padding-inline: calc(1lh / 2);
+    padding-block: 0.5ch;
+
+    font-weight: 500;
+    line-height: 1.5;
+    white-space: nowrap;
+    user-select: none;
+
+    border-radius: calc(1cqi / 4);
+    border: 1px solid var(--border);
+    cursor: pointer;
+
+    &:is(:hover, :focus) {
+      background-color: color-mix(
+        in oklab, var(--border), transparent 50%
+      );
+    }
+  } */
+
+  /* https://compat.spec.whatwg.org/#text-fill-and-stroking */
+  .stroked-text {
+    /* longhand */
+    /* color: #fff;
+    -webkit-text-stroke-color: #000;
+    -webkit-text-stroke-width: 1px; */
+
+    /* shorthand */
+    -webkit-text-fill-color: #fff;
+    -webkit-text-stroke: thin #000;
+  }
+}
+
+/*
+  MARK: - Motion
+*/
+@layer motion {
+  .staggered-anim {
+    --delay: calc(var(--i, 1) * 150ms);
+    opacity: 0;
+    animation: fade-in 1000ms var(--delay) forwards;
+    /* —or—
+    transition-property: opacity;
+    transition-delay: calc(var(--delay, 150ms) * var(--i, 1)); */
+
+    &:nth-child(2) { --i: 2 }
+    &:nth-child(3) { --i: 3 }
+    &:nth-child(4) { --i: 4 }
+    &:nth-child(5) { --i: 5 } /* ~ .75s */
+    /* etc… */
+
+    /* odd */
+    &:nth-of-type(2n+1),
+    /* even */
+    &:nth-child(2n) { @starting-style { opacity: 0 } }
+  }
+}
+
+.muted { filter: grayscale() }
+
+.clamped-font-size {
+  font-size: clamp(16px, 5.33px + 3.33vw, 48px)
+}
+
+/* overscroll indicators w/ bg-attachment */
+.overscroll {
+  --cover: canvas;
+  /* --mixed: color-mix(in lch, canvasText, canvas 75%); */
+  --mixed: color-mix(in lch, var(--foreground) 50%, var(--background) 75%);
+  --shadow: light-dark(var(--mixed), var(--background));
+  --size: 40px;
+
+  background:
+    linear-gradient(
+      var(--cover) 50%,
+      #0000
+    )
+    50% 0 / 100% var(--size)
+    no-repeat local,
+
+    radial-gradient(
+      100% 100% at 50% -10%,
+      var(--shadow) 0%,
+      #0000 55%
+    )
+    50% 0 / 100% var(--size)
+    no-repeat scroll,
+
+    linear-gradient(
+      #0000,
+      var(--cover) 50%
+    )
+    50% 100% / 100% var(--size)
+    no-repeat local,
+
+    radial-gradient(
+      100% 100% at 50% 110%,
+      var(--shadow) 0%,
+      #0000 55%
+    )
+    50% 100% / 100% var(--size)
+    no-repeat scroll,
+
+    canvas;
+
+  overflow: auto;
+  min-height: 200px;
+  max-height: 80vh;
+}
+
+/* https://drafts.csswg.org/css-cascade-4/#defaulting
+   https://drafts.csswg.org/css-cascade/#all-shorthand
+   initial | inherit | unset | revert | revert-layer */
+.all-initial { all: initial; }
+.all-unset   { all: unset; }
+.all-revert  { all: revert; }
+
+/* Stack level
+   https://drafts.csswg.org/css2/#stacking-context */
+.zi    { z-index: var(--zi, 1) }
+.zi-10 { z-index: var(--zi, 10) }
+.zi-20 { z-index: var(--zi, 20) }
+.zi-30 { z-index: var(--zi, 30) }
+.zi-40 { z-index: var(--zi, 40) }
+
+/* https://web.dev/content-visibility/ */
+.content-vis {
+  content-visibility: auto;
+
+  /* when E is subject to size containment
+     https://wicg.github.io/display-locking/sample-code/contain-intrinsic-size-examples.html */
+  contain-intrinsic-size: auto var(--size-containment, 1000px);
+}
+
+:where(.is-hidden, .sr-only, :is([data-hidden])) {
+  position: absolute;
+  width: 1px;
+  height: 1px; /* auto */
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+  clip-path: inset(100%);
+}
+/* —or— */
+:is(.visually-hidden) {
+  inline-size: 0;
+  block-size: 0;
+  overflow: hidden;
+}
+
+.fixpos { position: fixed }
+.abspos { position: absolute }
+.relpos { position: relative }
+
+.overlay {
+  position: absolute;
+  inset: 0;
+}
+
+/* NW (top-left) */
+.inset-start {
+  inset-block-start: 0;
+  inset-inline-start: 0;
+}
+
+/* SE (bottom-right) */
+.inset-end {
+  inset-inline-end: 0;
+  inset-block-end: 0;
+}
+
+.sticky {
+  position: sticky;
+  top: var(--offset, 0);
+  inset-block-start: var(--offset, 0);
+  z-index: 1;
+  align-self: start;
+}
+
+.abs-centered {
+  position: absolute;
+  top: 50%;
+  inset-block-start: 50%;
+  left: 50%;
+  inset-inline-start: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.fit-content {
+  width: fit-content;
+  inline-size: fit-content;
+}
+
+/* Inline and block size overrides */
+.inline-fit   { max-inline-size: 100% !important; }
+.inline-full  { inline-size: 100% !important; }
+.block-fit    { max-block-size: 100% !important; }
+.block-full   { block-size: 100% !important; }
+.inline-auto  { inline-size: auto !important; }
+.block-auto   { block-size: auto !important; }
+
+.m-auto  { margin: auto; }
+.mx-auto { margin-inline: auto; }
+.my-auto { margin-block: auto; }
+
+[class*=content-wrap] { /* content-wrap(per) */
+  /* i.e. min(max-content, max(min-content, stretch)) */
+  max-width: fit-content;
+  max-height: fit-content;
+
+  /* centered */
+  margin-inline: auto;
+}
+
+/* A wrapper for content of unknown size */
+[class*=overlay-wrap] { /* overlay-wrap(per) */
+  position: fixed;
+  inset: 0;
+  width: fit-content;
+  height: fit-content;
+  margin: auto;
+}
+
+/* TODO padding utility classes → (p | px-* | py-* | pt-[10] | etc. )
+    or `.spaced-{x|y}` mixin?..
+    https://drafts.csswg.org/css2/#box-dimensions
+*/
+
+/* https://caniuse.com/#feat=flexbox-gap
+    https://github.com/w3c/csswg-drafts/issues/3559 */
+.flow > * + * {
+  margin-block-start: var(--flow-space, var(--spacer-2x));
+}
+
+[class|=border-between] { /* logical props for the border between childs */
+  --border-style: solid;
+
+  &[class*=inline] > * + * {
+    border-inline-start-style: var(--border-style);
+    border-inline-start-width: var(--line-width, var(--line-md, medium));
+  }
+
+  &[class*=block] > * + * {
+    border-block-start-style: var(--border-style);
+    border-block-start-width: var(--line-width, var(--line-thin, thin));
+  }
+}
+
+[class*=gradient-border],
+[class|=gradient-border] { /* logical props for the gradient border */
+  /* border-image:
+    linear-gradient(
+      transparent,
+      var(--_c, currentcolor),
+      transparent
+    )
+    1 / 4px
+  ; */
+
+  border-style: solid;
+  border-image-source: var(--border-image, var(--gradient, linear-gradient(
+    to bottom,
+    var(--_c1, currentcolor),
+    var(--_c2, transparent)
+  )));
+  border-image-slice: 1;
+
+  &[class*=inline] {
+    border-inline-width: var(--line-width, thin);
+    border-image-slice: 0 1;
+  }
+
+  &[class*=block] {
+    border-block-width: var(--line-width, thin);
+    border-image-slice: 1 0;
+  }
+}
+
+.has-outline {
+  outline: var(--accent, currentcolor) hidden 4px;
+  outline-offset: 2px;
+}
+
+/* https://www.w3.org/TR/css-values-4/#example-baa620d3 */
+.aspect-ratio-box {
+  --ar: calc(16 / 9);
+  --w: calc(100% / 3);
+  --h: calc(var(--w) / var(--ar));
+  width: var(--w);
+  height: var(--h);
+}
+
+.sqr, .square {
+  aspect-ratio: var(--ratio-square, 1);
+}
+
+.squircle { /* https://en.wikipedia.org/wiki/Squircle */
+  aspect-ratio: var(--ratio-square, 1);
+  border-radius: 22.2222222222%; /* 100 / 4.5 */
+}
+
+.space-unset {
+  padding-block: unset;
+  padding-inline: unset;
+}
+
+.force-tap-size {
+  min-inline-size: var(--min-touch-target-size);
+  min-block-size: var(--min-touch-target-size);
+}
+
+.mirror,
+.reverse {
+  /* scale: -1; */
+  transform: scale(-1);
+
+  /* https://drafts.csswg.org/css-values-4/#sign-funcs */
+  transform: scale(sign(1));
+}
+
+/* https://codepen.io/rachelandrew/pen/yLoJrRX */
+:where([class*=keyline]) {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: var(--spacer-2x);
+  inline-size: 100%;
+
+  &::before,
+  &::after {
+    align-self: center;
+    border-top: 0.5px solid var(--border-color, currentcolor);
+    content: '';
+  }
+}
+
+/* -----------------------------------
+   MARK: Newly available
+   ----------------------------------- */
+
+/* https://developer.chrome.com/blog/entry-exit-animations */
+:is([class*=loaded]) * {
+  transition: opacity .5s ease-in;
+  @starting-style { opacity: 0 } /* to 1 when it is initially rendered */
+}
+
+/* https://12daysofweb.dev/2022/new-viewport-units/ */
+.cover-dynamic-viewport {
+  width: 100vw;
+  width: 100dvi;
+  height: 100vh;
+  height: 100dvb;
+}
+
+/* https://web.dev/articles/min-max-clamp */
+.clamp-inline-size {
+  --_min: 20ch;
+  --_max: 40ch;
+  --_sp: 2ch;
+  --_th: 50%;
+
+  inline-size: calc(var(--_th) - var(--_sp));
+  min-inline-size: var(--_min);
+  max-inline-size: var(--_max);
+}
+
+.relative-shadow {
+  --base: hsl(var(--tint, 214) 80% 27% / calc(var(--alpha, 4) * 1%));
+  --shade: hsl(from var(--base) calc(h + 8) 25 calc(l - 5));
+  --perfect-shadow:
+    0 0 0 1px var(--base),
+    0 1px 1px -0.5px var(--shade),
+    0 3px 3px -1.5px var(--shade),
+    0 6px 6px -3px var(--shade),
+    0 12px 12px -6px var(--base),
+    0 24px 24px -12px var(--base);
+}
+
+/* TODO check code for (un)used tw utility classes [and add fallback] */
+.w-px   { width: 1px }
+.w-full { width: 100% }
+
+.h-px   { height: 1px }
+.h-full { height: 100% }
+
+.w-11 { inline-size: 2.75rem }
+
+.gap-2 {
+  gap:var(--spacer-2x)
+}
+.gap-6 {
+  gap:var(--spacer-6x)
+}
+.gap-8 {
+  gap:var(--spacer-8x)
+}
+.gap-10 {
+  gap:var(--spacer-10x)
+}
+.gap-12 {
+  gap:var(--spacer-12x)
+}
+.gap-\[inherit\] {
+  gap:inherit
+}

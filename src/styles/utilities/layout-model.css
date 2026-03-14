@@ -1,0 +1,151 @@
+/* REFS
+   → https://1linelayouts.glitch.me/
+   → https://every-layout.dev/layouts/ */
+
+/* https://drafts.csswg.org/css-grid-2/ */
+.d-grid, .grid { display: grid; }
+
+/* https://drafts.csswg.org/css-flexbox-1/ */
+.d-flex, .flex { display: flex; }
+
+.block { display: block; }
+
+/* Flex utility classes */
+/* https://tailwindcss.com/docs/justify-content
+   https://github.com/primer/css/blob/main/src/utilities/flexbox.scss#L1 */
+
+.flex-row { flex-direction: row; }
+.flex-col { flex-direction: column; }
+.flex-row-reverse { flex-direction: row-reverse; }
+.flex-col-reverse	{ flex-direction: column-reverse; }
+
+.items-center { align-items: center; }
+.items-start  { align-items: flex-start; }
+.items-end    { align-items: flex-end; }
+
+.place-items-center { place-items: center; }
+.place-content-center { place-content: center; }
+
+/* https://drafts.csswg.org/css-flexbox/#justify-content-property
+   https://drafts.csswg.org/css-align/#align-justify-content */
+:where([class*=justify]) {
+  justify-content: var(--justify, normal);
+}
+
+/* https://drafts.csswg.org/css-align/#positional-values */
+.justify-start  { --justify: start }
+.justify-end    { --justify: end }
+.justify-center { --justify: center }
+
+/* https://drafts.csswg.org/css-align/#distribution-values */
+.justify-between { --justify: space-between }
+.justify-around  { --justify: space-around }
+.justify-evenly  { --justify: space-evenly }
+
+:where([class*=self]) {
+  place-self: var(--place, flex-start);
+}
+
+.self-start  { --place: start }
+.self-end    { --place: end }
+.self-center { --place: center }
+
+.flex-centered {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1ch;
+}
+
+/* https://every-layout.dev/layouts/stack/ */
+.grid-stack { grid: [stack] / [stack] }
+
+/* See → https://www.youtube.com/watch?v=6qpEOBkDr88 */
+.pile {
+  display: grid;
+  place-content: center;
+
+  > * { grid-area: 1 / 1 }
+}
+
+/* —or— */
+.pile-named-areas {
+  display: grid;
+  grid: [stack] 1fr / [stack] 1fr;
+
+  > * { grid-area: stack }
+}
+
+:where([class*=pile]) {
+  .center             { place-self: center }
+  .corner-start-start { place-self: start }
+  .corner-start-end   { place-self: start end }
+  .corner-end-start   { place-self: end start }
+  .corner-end-end     { place-self: end end }
+}
+
+/* The widest child (max-content) sets the width for all the rest.
+   Great for macro layouts containing paragraphs and headlines, prototypes, or generally things that need legible centering.
+*/
+.content-center {
+  display: grid;
+  place-content: center;
+  gap: 1ch;
+}
+
+/* Note: place-content is not exclusive to display: grid.
+   display: flex can also benefit from place-content and place-item shorthands.
+
+   See → https://web.dev/articles/centering-in-css
+*/
+
+/* https://www.smashingmagazine.com/2024/05/modern-css-layouts-no-framework-needed/#optional-subgrid-utility */
+.grid-cols-subgrid { grid-template-columns: subgrid; }
+
+.cols-subgrid {
+  grid-template-columns: inherit;
+  grid-template-columns: subgrid;
+  column-gap: inherit;
+}
+
+/* .rows-masonry { grid-template-rows: masonry; } */
+/* .cols-raf-10e { grid-template-columns: repeat(auto-fit, min(10em, 100%)); } */
+
+/* https://drafts.csswg.org/css-grid/#repeat-syntax */
+:where([class*=cols-repeat]) {
+  gap: var(--gutter);
+  grid-template-columns: repeat(
+    var(--col-count, 1), var(--col-width, minmax(0, 1fr))
+  );
+
+  &:is(.--ram) { /* RAM algo (i.e. repeat • auto-fit • minmax) */
+    --_min: 240px;
+    --col-count: auto-fit;
+    --col-width: minmax(var(--_min, min-content), 1fr);
+  }
+}
+
+.repeating-grid {
+  --_grid-repeat: var(--grid-repeat, var(--layout-default-repeat));
+  --_repeating-grid-gap: var(--grid-gap, var(--layout-default-gap));
+
+  display: grid;
+  grid-template-columns: repeat(var(--_grid-repeat), 1fr);
+  gap: var(--_repeating-grid-gap);
+}
+
+:where(:root) {
+  --layout-fluid-min: 35ch;
+  --layout-default-repeat: 3;
+  --layout-default-gap: 3vmax;
+}
+
+.grid-flow-row       { grid-auto-flow: row; }
+.grid-flow-col       { grid-auto-flow: column; }
+.grid-flow-dense     { grid-auto-flow: dense; }
+.grid-flow-row-dense { grid-auto-flow: row dense; }
+.grid-flow-col-dense { grid-auto-flow: column dense; }
+
+/* https://drafts.csswg.org/css-multicol/ */
+/* .multicol {} */

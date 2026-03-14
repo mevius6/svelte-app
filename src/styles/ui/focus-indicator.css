@@ -1,0 +1,43 @@
+:where(:root) { /* https://open-props.style/#easing */
+  --ease-out-5: cubic-bezier(0, 0, 0, 1);
+  --ease-spring-3:
+    linear(0 0%, 0.009 1.05%, 0.035 2.1%, 0.141 4.4%, 0.723 12.9%, 0.938 16.7%, 1.017 18.6%, 1.077 20.5%, 1.121 22.4%, 1.149 24.3%, 1.159 25.7%, 1.163 27.1%, 1.161 28.5%, 1.154 29.9%, 1.129 32.8%, 1.051 39.6%, 1.017 43.1%, 0.991 47.05%, 0.977 51%, 0.974 53.8%, 0.975 57.1%, 0.997 69.8%, 1.003 76.9%, 1 100%);
+  --ease-elastic-out-3: cubic-bezier(0.5, -0.5, 0.1, 1.5);
+}
+
+.has-focus-indicator { /* visual state indicator for child node(s) */
+  --_focus-color: var(--neon-purple);
+  --_focus-size: 0;
+  --_focus-duration: .2s;
+  --_focus-ease: var(--ease-out-5, ease-in);
+
+  /* e.g. for the accordion disclosure */
+  &:has(> span) > span,
+  &:has(> svg) {
+    box-shadow: 0 0 0 var(--_focus-size) var(--_focus-color, highlight);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    &:has(> span) > span,
+    &:has(> svg) {
+      transition: box-shadow var(--_focus-duration) var(--_focus-ease);
+    }
+  }
+
+  &:not(:active):is(:focus-visible,:hover) {
+    --_focus-duration: .5s;
+    --_focus-ease: var(--ease-elastic-out-3, ease-out);
+
+    @supports (transition-timing-function: linear(0,1)) {
+      & { --_focus-ease: var(--ease-spring-3) }
+    }
+  }
+
+  &:not(:active):is(:focus-visible) {
+    --_focus-size: 4px;
+  }
+
+  &:not(:active):is(:hover) {
+    --_focus-size: 3px;
+  }
+}

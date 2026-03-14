@@ -1,0 +1,247 @@
+@import "./type-scale.css" layer(fonts.scale);
+@import "./typesetting.css" layer(fonts.typeset);
+@import "./fontset.css" layer(fonts.fontset);
+
+@layer fonts {
+  @layer ua, scale, typeset, context;
+}
+
+/* @font-face {…} --> app.css */
+
+@layer fonts {
+  :where(body) {
+    font-family: var(--font-sans);
+    font-weight: 400;
+    line-height: 1.5; /* .5 extra leading */
+    font-kerning: normal;
+    font-synthesis: none;
+    letter-spacing: var(--tracking, normal);
+    text-rendering: optimizeLegibility; /* or optimizeSpeed */
+
+    /* font-feature-settings:
+      "kern" var(--kern, 1),
+      "liga" var(--liga, 1),
+      "clig" var(--clig, 1),
+      "tnum" var(--tnum, 0),
+      "zero" var(--zero, 0),
+      "case" var(--case, 0),
+      "cpsp" var(--cpsp, 0); */
+
+    font-variation-settings:
+      "opsz" var(--opsz, var(--px-size, 14)),
+      "wght" var(--wght, 400);
+  }
+
+  @media screen and (min-resolution: 192dpi),
+         screen and (min-resolution: 2dppx),
+         screen and (-webkit-min-device-pixel-ratio: 2) {
+    body {
+      -moz-osx-font-smoothing: grayscale;
+      -webkit-font-smoothing: antialiased;
+    }
+  }
+
+  :where(h1, h2, h3, h4, h5, h6) {
+    font-family: var(--font-headliner, var(--font-sans));
+    line-height: 1.25;
+    font-style: normal;
+    width: fit-content;
+    hyphens: auto;
+    letter-spacing: normal;
+
+    @supports (text-wrap: balance) {
+      /* www.w3.org/TR/css-text-4/#text-wrap */
+      & { text-wrap: var(--head-wrap-mode, balance) }
+    }
+  }
+
+  :where(h1) {
+    max-inline-size: min(40ch, 80vw);
+    line-height: 1.1cap; /* https://seek-oss.github.io/capsize/ */
+  }
+
+  /* demos: https://nerdy.dev/text-box-ftw */
+  @supports ( text-box: trim-both cap ) {
+    :where(h1, button) {
+      text-box: trim-both cap alphabetic;
+    }
+  }
+
+  :where(p, li) {
+    word-break: break-word;
+    word-wrap: break-word;
+    hyphens: auto;
+  }
+
+  :where(p) {
+    text-wrap: pretty;
+  }
+
+  :where(.copy, .copr) {
+    color: color-mix(in oklab, var(--foreground) 25%, var(--background) 75%);
+    letter-spacing: 0.05em;
+  }
+
+  button, input[type], select, label {
+    font-family: var(--font-sans);
+    font-variation-settings: var(--forma-500-micro);
+  }
+
+  /* ---------------------------------- ⟡ ⟡ ⟡ --------------------------------- */
+  /* Stars and asterisks: https://www.unicode.org/charts/PDF/U2700.pdf */
+  .dinkus {
+    /* Em-Space */
+    --emsp: '\2003';
+
+    /* '✧' White Four Pointed Star */
+    --seq-star-emsp: '\2727\2003\2727\2003\2727';
+
+    /* '∞' Infinity Symbol */
+    --seq-infin-emsp: '\221E\2003\221E\2003\221E';
+
+    /* '❧' Rotated Floral Heart Bullet = hedera, ivy leaf */
+    --sym-hedera: '\2767';
+
+    /* '⁂' Asterism */
+    --sym-asterism: '\2042';
+
+    display: inline-block;
+    inline-size: 100%;
+    color: var(--dinkus-color, currentcolor);
+    font: var(--dinkus-face, inherit);
+    text-align: center;
+
+    &::after {
+      content: var(--dinkus, var(--seq-infin-emsp));
+      /* filter: drop-shadow(0 3px 6px hsl(var(--shadow-color))); */
+    }
+  }
+
+  .callout,
+  .pullquote,
+  .quote {
+    padding-inline-start: 1.77rem;
+    border-inline-start: 5px solid;
+  }
+}
+
+@layer fonts.context {
+  /* Define max line lengths for article and inner elements */
+  :where(article) {
+    max-inline-size: var(--max-line-length, 39ch);
+
+    & :is(h2, h3, h4, h5, h6) {
+      text-align: left;
+    }
+
+    & :is(h1, h2, h3, h4) {
+      max-inline-size: 30ch; /* 30–40 chars */
+    }
+
+    & :is(p, li) {
+      max-inline-size: 40ch;
+    }
+
+    & :where(p > b:is(.lede, .lead)) { /* i.e. 1st line of text block */
+      --opsz: 24;
+      --wght: 500;
+
+      font-size: inherit;
+      line-height: inherit;
+    }
+  }
+
+  @media (width >= 48em) {
+    :where(article) {
+      --max-line-length: 66ch; /* 60–75 chars */
+
+      & :is(h2, h3, h4) {
+        max-inline-size: 33ch; /* 30–40 chars */
+
+        @supports (text-wrap: pretty) {
+          & {
+            --head-wrap-mode: pretty;
+          }
+        }
+      }
+
+      & :is(p, li) {
+        /* https://drafts.csswg.org/css-text-4/#valdef-text-wrap-balance */
+        text-wrap: balance;
+        inline-size: min(fit-content, 100%);
+        max-inline-size: 100%;
+      }
+    }
+  }
+
+  /* HACK dropcaps
+  @supports ( font-size-adjust: 1.0 ) {
+    article { font-size-adjust: 0.5 }
+  } */
+
+  @supports ( text-size-adjust: 1.0 ) {
+    article { text-size-adjust: 0.5 }
+  }
+
+  @supports (line-height: 1rlh) {
+    article {
+      padding: 1rlh;
+      gap: 1rlh;
+
+      & ul:not([class]) {
+        display: grid;
+        grid-auto-rows: 1rlh;
+        gap: 1rlh;
+      }
+    }
+  }
+}
+
+/* https://developer.mozilla.org/en-US/blog/h1-element-styles/#whats_changing */
+@layer fonts.ua {
+  :where(i, em) {
+    font-style: normal;
+  }
+
+  /* Prevent the browser to synthesize a slanted/oblique typeface
+     if it does not exist in the font family */
+
+  :is(b, strong, i, cite, em, var, address) {
+    font-synthesis-style: none !important;
+    font-synthesis-weight: none !important;
+  }
+
+  /**
+   * References:
+   * - https://hell.meiert.org/core/css/css-2.2.css
+   * - https://html.spec.whatwg.org/multipage/text-level-semantics.html
+   *   - https://html.spec.whatwg.org/#the-b-element
+   *   - https://html.spec.whatwg.org/#the-u-element
+   */
+
+  /* b != strong, e.g. marking key words or (lead) phrases */
+  b,
+  strong          { font-weight: 700 } /* ua stylesheet */
+
+  q,
+  blockquote      { /* … */ }
+
+  i, cite, em,
+  var, address    { --ital: 1 } /* font-style: italic */
+
+  /*
+  big             { font-size: 1.17em }
+  small, sub, sup { font-size: .83em } */
+  sub             { vertical-align: sub }
+  sup             { vertical-align: super }
+  s, strike, del  { text-decoration: line-through }
+
+  u { text-decoration: var(--underline-color, var(--accent)) wavy underline; }
+
+  /* mark { background: highlight } */
+
+  time {
+    display: inline-block;
+    font-feature-settings: "tnum" on;
+  }
+}

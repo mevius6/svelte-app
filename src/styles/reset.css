@@ -1,0 +1,280 @@
+@namespace "http://www.w3.org/1999/xhtml";
+
+/* :where(*, *::before, *::after) { all: initial } */
+/* :where(*, *::before, *::after) { all: initial !important } */
+
+/* TODO Add :where() selector */
+
+/* https://drafts.csswg.org/css2/#html-stylesheet */
+article,
+aside,
+details,
+figcaption,
+figure,
+footer,
+header,
+hgroup,
+main,
+nav,
+section,
+summary {
+  display: block;
+}
+
+img,
+svg,
+video {
+  vertical-align: middle;
+}
+
+/* https://github.com/hankchizljaw/modern-css-reset/blob/master/src/reset.css */
+body, /* 8px */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+ul,
+ol,
+li,
+form,
+figure,
+figcaption,
+blockquote,
+dl,
+dd {
+  margin: 0;
+}
+
+ul[class],
+ol[class] {
+  padding: 0;
+  list-style: none;
+}
+
+details {
+  list-style: none;
+
+  summary {
+    cursor: pointer;
+    & > * { display: inline; }
+  }
+}
+
+summary {
+  list-style: none;
+
+  /* https://github.com/GoogleChrome/lighthouse/issues/12089 */
+  &::marker,
+  &::before {
+    display: none;
+  }
+}
+
+input,
+button,
+textarea,
+select {
+  /**
+   * font-size: inherit;
+   * font-family: inherit;
+   * font-style: inherit;
+   * font-weight: inherit;
+   */
+  font: inherit;
+}
+
+/* https://github.com/necolas/normalize.css/blob/master/normalize.css */
+html {
+  /* https://allthingssmitty.com/2020/05/11/css-fix-for-100vh-in-mobile-webkit */
+  block-size: 100%;
+  block-size: -webkit-fill-available;
+
+  /* autoprefixer: off */
+  box-sizing: border-box;
+  font-family: sans-serif, system-ui;
+  font-weight: 400;
+  line-height: 1.15;
+  -webkit-tap-highlight-color: transparent;
+
+  /* https://kilianvalkhof.com/2022/css-html/your-css-reset-needs-text-size-adjust-probably/ */
+  -moz-text-size-adjust: none;
+  -webkit-text-size-adjust: none;
+  text-size-adjust: none;
+}
+
+/* autoprefixer: on */
+
+a {
+  color: inherit;
+  background-color: transparent;
+
+  &:link,
+  &:visited,
+  &:hover,
+  &:active {
+    text-decoration: none;
+    outline: 0;
+  }
+
+  &:focus:not(:focus-visible) { outline: 0; }
+}
+
+abbr[title] {
+  border-bottom: 0;
+}
+
+q {
+  quotes: '\201C''\201D''\2018''\2019';
+}
+
+small {
+  font-size: 80%;
+}
+
+img,
+picture {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 0;
+}
+
+img {
+  object-fit: cover;
+  object-position: 50% 50%;
+
+  &:not([src]):not([srcset]) {
+    visibility: hidden;
+  }
+}
+
+svg {
+  /* https://svgwg.org/svg2-draft/painting.html#RenderingHints */
+  /* shape-rendering: crispEdges; */
+  shape-rendering: geometricPrecision;
+
+  &:not(:root) {
+    display: block;
+    overflow: hidden;
+  }
+
+  &:where(:not([fill])) {
+    fill: currentcolor;
+  }
+}
+
+hr {
+  height: 1px;
+  background: hsl(0 0% 0%);
+  border: 0;
+}
+
+button {
+  border: 0;
+  outline: transparent;
+}
+
+button,
+input {
+  overflow: visible;
+}
+
+button,
+select {
+  text-transform: none;
+}
+
+button,
+[type='button'],
+[type='reset'],
+[type='submit'] {
+  appearance: button;
+  cursor: pointer;
+}
+
+button::-moz-focus-inner,
+[type=button]::-moz-focus-inner,
+[type=reset]::-moz-focus-inner,
+[type=submit]::-moz-focus-inner {
+  padding: 0;
+  border-style: hidden;
+}
+
+button:-moz-focusring,
+[type='button']:-moz-focusring,
+[type='reset']:-moz-focusring,
+[type='submit']:-moz-focusring {
+  outline: thin dotted;
+}
+
+fieldset {
+  padding: 0;
+  margin: 0;
+  border: 0;
+}
+
+legend {
+  display: table;
+  max-width: 100%;
+  box-sizing: border-box;
+  padding: 0;
+  color: inherit;
+  white-space: normal;
+}
+
+textarea {
+  overflow: auto;
+  vertical-align: top;
+  resize: block;
+}
+
+[type='checkbox'],
+[type='radio'] {
+  box-sizing: border-box;
+  padding: 0;
+}
+
+[type='search'] {
+  appearance: textfield;
+  outline-offset: -2px;
+
+  &::-webkit-search-decoration {
+    appearance: none;
+  }
+}
+
+[disabled],
+[aria-disabled=true] {
+  /* pointer-events: none; */
+  cursor: not-allowed;
+  filter: grayscale(100%) opacity(50%);
+}
+
+[hidden] { display: none !important; }
+
+/* 🪨 https://web.dev/articles/inert */
+[inert],
+[inert] * {
+  opacity: 0.5;
+  pointer-events: none;
+  cursor: default;
+  user-select: none;
+}
+
+/* https://drafts.csswg.org/mediaqueries-5/#mf-user-preferences */
+@media screen and (prefers-reduced-motion: reduce) {
+  * {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+
+/* https://drafts.csswg.org/cssom-view/#scrolling */
+@media screen and (prefers-reduced-motion: no-preference) {
+  html,
+  body { scroll-behavior: smooth; }
+}

@@ -1,0 +1,330 @@
+/* @import "./fallback.css" layer(color.ui-adjust); */
+@import "./oklch-model.css" layer(color.ui-adjust);
+
+/* REFS WG Specs
+  - https://drafts.csswg.org/mediaqueries-5/#prefers-color-scheme
+  - https://drafts.csswg.org/mediaqueries-5/#forced-colors
+  - https://drafts.csswg.org/css-color-adjust-1/#color-scheme
+  - https://drafts.csswg.org/css-color-adjust-1/#color-scheme-prop */
+
+@layer color {
+  @layer
+    swatches,
+    palettes,
+    gradients,
+    roles,
+    /* ui-tokens, ← design-tokens */
+    ui-adjust;
+}
+
+/**
+ * MARK: - Color scheme
+ */
+
+@layer color.ui-adjust {
+  @layer fallback, auto, forced;
+
+  /* NOTE https://lightningcss.dev/transpilation.html#light-dark()-color-function */
+  @layer auto {
+    /*
+      MARK: - OS's preferences
+      Automatic switch between light and dark modes
+    */
+    @supports (color-scheme: light dark) and
+              (color: light-dark(#000, #fff)) {
+      :where(:root, :host) {
+        --background: light-dark(
+          var(--bg-light, var(--gray-0)),
+          var(--bg-dark, var(--gray-9))
+        );
+        --foreground: light-dark(
+          var(--text-light, var(--gray-12)),
+          var(--text-dark, var(--gray-0))
+        );
+
+        /* https://acorn.firefox.com/latest/components/button/desktop-udQAPeGf#section-destructive-danger-9a */
+        --destructive: hsl(0 60% 50%);
+        --destructive-foreground: hsl(0 0% 98%);
+
+        --link: light-dark(var(--indigo-7), var(--indigo-3));
+        --link-visited: light-dark(var(--purple-7), var(--purple-3));
+
+        --text-1: light-dark(var(--gray-12), var(--gray-1));
+        --text-2: light-dark(var(--gray-7), var(--gray-4));
+
+        --surface-1: light-dark(var(--gray-0), var(--gray-9));
+        --surface-2: light-dark(var(--gray-2), var(--gray-8));
+        --surface-3: light-dark(var(--gray-3), var(--gray-7));
+        --surface-4: light-dark(var(--gray-4), var(--gray-6));
+
+        --scrollthumb-color: light-dark(var(--gray-7), var(--gray-6));
+
+        --shadow-color-light: 220 3% 15%; /* on light */
+        --shadow-strength-light: 2%;
+        --inner-shadow-highlight-light:
+          inset 0 -.5px 0 0 #fff,
+          inset 0 .5px 0 0 #0001;
+
+        --shadow-color-dark: 220 40% 2%; /* on dark */
+        --shadow-strength-dark: 20%; /* <= 80% */
+        --inner-shadow-highlight-dark:
+          inset 0 -.5px 0 0 #fff1,
+          inset 0 .5px 0 0 #0007;
+
+        /* --accent: light-dark(
+          var(--color-neon-pink, deeppink),
+          var(--color-neon-lime, lime)
+        ); */
+
+        /* --border-hsl: 240 6% 20%;
+        --border-hover: hsl(var(--border-hsl) / .15); */
+
+        --border: light-dark(var(--gray-7), var(--surface-3));
+        --border-hover: light-dark(var(--gray-7), var(--surface-4));
+        /* --border-active: var(--accent); */
+
+        color-scheme: dark light;
+        accent-color: var(--accent, var(--neon-purple));
+      }
+    }
+  }
+
+  /* overriding the color scheme and explicitly forbidding auto-adjustment */
+  /* https://developer.chrome.com/blog/auto-dark-theme#per_element_opt-out */
+
+  /* @media (prefers-color-scheme: dark) {
+    :where(:root, :host) { color-scheme: dark only }
+  }
+
+  @media (prefers-color-scheme: light) {
+    :where(:root, :host) { color-scheme: light only }
+  } */
+
+  @layer forced {
+    /*
+      MARK: - Forced Color Palettes
+              Light | Dark | Dim | Monochrome | etc.
+      § https://drafts.csswg.org/css-color-adjust-1/#forced
+      § https://www.w3.org/TR/mediaqueries-5/#forced-colors
+      § https://www.w3.org/TR/css-color-adjust-1/#forced
+    */
+    :where(:root, :host) {
+      /*
+        MARK: 1. Day mode
+      */
+      &:has(.theme > [value="light"]:checked) {
+        color-scheme: light;
+
+        /* Forced light color palette */
+        --text-1: var(--gray-12);
+        --text-2: var(--gray-7);
+
+        --surface-1: var(--gray-0);
+        --surface-2: var(--gray-2);
+        --surface-3: var(--gray-3);
+        --surface-4: var(--gray-4);
+
+        --background: var(--surface-1);
+      }
+
+      /*
+        MARK: 2. Night mode
+      */
+      &:has(.theme > [value="dark"]:checked) {
+        color-scheme: dark;
+
+        /* Forced dark color palette */
+        --text-1: var(--gray-0);
+        --text-2: var(--gray-4);
+
+        --surface-1: var(--gray-12);
+        --surface-2: var(--gray-11);
+        --surface-3: var(--gray-10);
+        --surface-4: var(--gray-9);
+
+        --background: var(--surface-1);
+      }
+
+      /*
+        MARK: 3. Monochrome OKLCH
+      */
+      &:has(.theme > [value="monochrome"]:checked) {
+        /* TODO Monochrome color scheme for day and night modes
+           See:
+                - https://www.benjaminmoore.com/en-us/color-overview/color-insights/monochromatic-color-schemes
+                - https://www.wix.com/studio/blog/monochromatic-web-design
+                - https://29a.ch/sandbox/2016/monochrome-photo-pca/
+                - https://open-props.style/ */
+
+        --color-hue: var(--theme-hue, var(--hue-teal));
+
+        /* TODO --scheme-related: light-dark(); */
+        --background: var(--color-14);
+        --surface-1: var(--color-13);
+        --surface-2: var(--color-12);
+        --surface-3: var(--color-11);
+        --surface-4: var(--color-10);
+        --foreground: var(--color-6);
+        --border: var(--color-10);
+
+        --card: var(--background);
+        --card-border: var(--foreground);
+        --card-foreground: var(--color-3);
+      }
+    }
+  }
+}
+
+/**
+ * MARK: - Mapping
+ */
+
+/* TODO Distributing primary, neutral and accent roles among hues. */
+@layer color.roles {
+  :where(html) {
+    /* Neutrals */
+    --gray-0: #f8f9fa;
+    --gray-1: #f1f3f5;
+    --gray-2: #e9ecef;
+    --gray-3: #dee2e6;
+    --gray-4: #ced4da;
+    --gray-5: #adb5bd;
+    --gray-6: #868e96;
+    --gray-7: #495057;
+    --gray-8: #343a40;
+    --gray-9: #212529;
+    --gray-10: #16191d;
+    --gray-11: #0d0f12;
+    --gray-12: #030507;
+
+    /* Go → https://unpkg.com/browse/open-props@latest/
+            https://yeun.github.io/open-color/
+            https://github.com/fchristant/colar */
+    --purple-3: #e599f7;
+    --purple-7: #ae3ec9;
+    --indigo-3: #91a7ff;
+    --indigo-7: #4263eb;
+  }
+}
+
+@layer color.swatches { /* Pre-defined color props */
+  /* Sub-layers order */
+  @layer families, neon;
+
+  @layer families {
+    /*
+      MARK: - HSL color system
+      https://color.sanity.build/tool
+    */
+    /* #region SW color swatches */
+    @layer green {
+      :where(html) {
+        /*
+          MARK: Green
+        */
+        --sw-honeydew: 64deg 32% 80%;      /* DBDDBD SW6428 Honeydew */
+        --sw-pearl-gray: 80deg 8% 79%;     /* CBCEC5 SW0052 Pearl Gray */
+        --sw-sea-salt: 97deg 8% 81%;       /* CDD2CA SW6204 Sea Salt */
+        --sw-acacia-haze: 96deg 5% 59%;    /* 969C92 SW9132 Acacia Haze */
+        --sw-retreat: 96deg 4% 48%;        /* 7A8076 SW6207 Retreat */
+        --sw-pewter-green: 87deg 5% 37%;   /* 5E6259 SW6208 Pewter Green */
+        --sw-rock-bottom: 135deg 3% 29%;   /* 484C49 SW7062 Rock Bottom */
+        --sw-palm-leaf: 47deg 29% 30%;     /* 635936 SW7735 Palm Leaf */
+        --sw-night-watch: 180deg 6% 20%;   /* 303636 SW9680 Night Watch */
+
+        /* https://www.sherwin-williams.com/architects-specifiers-designers/inspiration/stir/immerse-yourself-in-capsules-2025-colormix-forecast */
+        --sw-cascades: 180deg 23% 20%; /* 273E3E SW7623 Cascades */
+        --sw-dark-night: 195deg 29% 19%; /* 23383F SW6237 Dark Night */
+      }
+    }
+    @layer red {
+      :where(html) {
+        /*
+          MARK: Red
+        */
+        --sw-rookwood-red: 4deg 38% 28%; /* 63302D SW2802 Rookwood Red */
+      }
+    }
+    @layer yellow {
+      :where(html) {
+        /*
+          MARK: Yellow
+        */
+        --sw-quilt-gold: 42deg 76% 66%; /* EAC365 SW6696 Quilt Gold */
+      }
+    }
+    @layer orange {
+      :where(html) {
+        /*
+          MARK: Orange
+        */
+        --sw-caribbean-coral: 17deg 42% 56%; /* BE795E SW2854 Caribbean Coral */
+        --sw-sun-bleached-ochre: 28deg 65% 69%; /* E3AB7C SW9011 Sun Bleached Ochre */
+        --sw-bosc-pear: 33deg 47% 55%; /* C29157 SW6390 Bosc Pear */
+        --sw-persimmon: 18deg 55% 67%; /* D9987C SW6339 Persimmon */
+      }
+    }
+    @layer purple {
+      :where(html) {
+        /*
+          MARK: Purple
+        */
+        --sw-fashionable-gray: 0deg 4% 73%;
+        --sw-mystical-shade: 348deg 3% 67%;
+        --sw-carnelian: 0deg 17% 29%; /* 573E3E SW 7580 Carnelian */
+        --sw-perle-noir: 270deg 3% 31%;
+      }
+    }
+    @layer neutral {
+      :where(html) {
+        /*
+          MARK: Neutral
+        */
+        --sw-westchester-gray: 60deg 0% 47%;
+        --sw-chelsea-gray: 69deg 5% 70%;
+        --sw-tricorn-black: 240deg 1% 19%;
+        --sw-black-magic: 300deg 1% 19%;
+        --sw-urbane-bronze: 36deg 6% 31%;
+        --sw-silver-strand: 86deg 6% 78%;
+        --sw-drift-of-mist: 40deg 15% 84%; /* DCD8D0 SW9166 Drift of Mist */
+        --sw-shiitake: 35deg 21% 73%;      /* C8BCAB SW9173 Shiitake */
+        --sw-loggia: 35deg 21% 71%;
+        --sw-foothills: 30deg 12% 45%;
+      }
+    }
+    @layer pastel {
+      :where(html) {
+        /*
+          MARK: White & Pastel
+        */
+        --sw-pure-white: 51deg 16% 92%;   /* EDECE6 SW7005 Pure White */
+        --sw-paperwhite: 41deg 61% 92%;   /* F7EFDE SW7105 Paperwhite */
+        --sw-westhighland: 41deg 40% 92%; /* F3EEE3 SW7566 Westhighland White */
+      }
+    }
+    /* #endregion */
+  }
+
+  @layer neon { /* Set of fluo(rescent) colors */
+    :where(html) {
+      --neon-red: color(display-p3 1 0 0);
+      --neon-green: color(display-p3 0 1 0);
+      --neon-blue: color(display-p3 0 0 1);
+      --neon-cyan: color(display-p3 0 1 1);
+      --neon-pink: color(display-p3 1 0 1);
+      --neon-purple: color(display-p3 .5 0 1);
+      --neon-lime: color(display-p3 0.25 1 0);
+      --neon-yellow: color(display-p3 1 1 0);
+
+      /* PANTONE® Neon Colors */
+      --c-blue: 195deg, 100%, 40%;   /* #009bcd 801 C */
+      --c-green: 112deg, 67%, 51%;   /* #44d62c 802 C */
+      --c-yellow: 55deg, 100%, 50%;  /* #ffe900 803 C */
+      --c-orange: 31deg, 100%, 65%;  /* #ffaa4e 804 C */
+      --c-red: 358deg, 100%, 72%;    /* #ff7277 805 C */
+      --c-pink: 323deg, 100%, 62%;   /* #ff3fb6 806 C */
+      --c-magenta: 313deg, 83%, 54%; /* #eb27c2 807 C */
+      --c-teal: 170deg, 100%, 36%;   /* #00b797 808 C */
+    }
+  }
+}

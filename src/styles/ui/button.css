@@ -1,0 +1,157 @@
+/* :where(.btn,
+        button,
+        input:is([type='button'], [type='submit'], [type='reset'])),
+:where(input[type='file'])::-webkit-file-upload-button,
+:where(input[type='file'])::file-selector-button {…} */
+
+.btn,
+button,
+input:is([type='button'], [type='submit'], [type='reset']),
+input[type='file']::-webkit-file-upload-button,
+input[type='file']::file-selector-button {
+  --_accent: initial;
+  --_text: initial;
+  --_size: initial;
+
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+
+  padding-block: .75ch;
+  padding-inline: 2ex;
+
+  font-family: var(--font-sans, inherit);
+  font-size: var(--_size);
+  font-variation-settings: "opsz" 14;
+  /* font-weight: 600; */
+
+  color: var(--_text);
+  text-align: center;
+  white-space: nowrap;
+  user-select: none;
+  background: var(--_bg, buttonface);
+  border: thin solid var(--_border, transparent);
+  border-radius: 6px;
+  box-shadow:
+    /* var(--shadow), */
+    /* 0 1px var(--_bg), */
+    0 0 0 var(--_highlight-size) var(--_highlight);
+
+  -webkit-tap-highlight-color: transparent;
+  -webkit-touch-callout: none;
+  gap: 1ex;
+
+  &.squircle {
+    corner-shape: squircle;
+  }
+
+  &.superellipse {
+    corner-shape: superellipse(1.25);
+  }
+}
+
+.btn,
+button,
+input:is([type='button'], [type='submit'], [type='reset']) {
+  will-change: transform;
+  transform: translateY(var(--ty, 0)) scale(var(--scale, 1));
+
+  &:hover  { --scale: 1.1; }
+
+  &:active { --scale: 0.9;
+             --ty: .125ex; }
+
+  /* &:is(:hover, :focus) {
+    --_border: color-mix(in oklab, var(--accent), white 50%);
+  } */
+
+  &.--muted { filter: grayscale(1) }
+  &.--ghost { border: thin solid currentcolor; }
+}
+
+@supports (color: hsl(from white h s l)) {
+  /*
+    https://caniuse.com/css-relative-colors
+    https://www.w3.org/TR/css-color-5/#relative-HSL
+  */
+  .btn,
+  button,
+  input:is([type='button'], [type='submit'], [type='reset']) {
+    --_bg-light: hsl(205deg 15% 78%); /* BFC9D0 */
+    --_bg-dark: hsl(197deg 58% 32%); /* 22657F */
+    background-color: var(--_upd, var(--_bg));
+
+    &:hover  { --_upd: hsl(from var(--_bg) h s calc(l + 10)) }
+    &:active { --_upd: hsl(from var(--_bg) h s calc(l - 10)) }
+
+    :where(html:has(
+      :is([value*=dark], [value*=light]):not(:checked)
+    )) & {
+      --_bg: var(--_bg-dark);
+    }
+
+    :where(html:has([value*=light]:checked)) & {
+      --_bg: var(--_bg-light);
+    }
+
+    :where(html:has([value*=dark]:checked)) & {
+      --_bg: var(--_bg-dark);
+    }
+  }
+}
+
+@supports not (color: hsl(from white h s l)) {
+  .btn,
+  button,
+  input:is([type='button'], [type='submit'], [type='reset']) {
+    background-color: hsl(210 60% var(--_upd, var(--lightness)));
+
+    &:hover  { --_upd: calc(var(--lightness) + 10%) }
+    &:active { --_upd: calc(var(--lightness) - 10%) }
+
+    :where(html:has(
+      :is([value*=dark], [value*=light]):not(:checked)
+    )) & {
+      --lightness: 30%;
+    }
+
+    :where(html:has([value*=light]:checked)) & {
+      --lightness: 70%;
+    }
+
+    :where(html:has([value*=dark]:checked)) & {
+      --lightness: 30%;
+    }
+  }
+}
+
+/* @supports (color: light-dark(black, snow)) {…} */
+
+@media (prefers-reduced-motion: no-preference) {
+  .btn,
+  button,
+  input:is([type='button'], [type='submit'], [type='reset']),
+  input[type='file']::-webkit-file-upload-button {
+    transition:
+      background-color 0.25s, transform 0.25s,
+      border-color 0.5s var(--ease-3, cubic-bezier(.25,0,.3,1)),
+      box-shadow 145ms var(--ease-4, cubic-bezier(.25,0,.2,1)),
+      outline-offset 145ms var(--ease-4, cubic-bezier(.25,0,.2,1)),
+      opacity 0.5s ease-in;
+  }
+}
+
+.btn, button, input:is([type='button'], [type='submit'], [type='reset'])
+  > :where(svg) {
+  inline-size: var(--_icon-size);
+  block-size: var(--_icon-size);
+
+  /* filter: drop-shadow(var(--*)); */
+  flex-shrink: 0;
+}
+
+.btn, button, input:is([type='button'], [type='submit'], [type='reset'])
+  > :where(svg > *) {
+  stroke: var(--_icon-color);
+  stroke-width: var(--_icon-line, 2px);
+}

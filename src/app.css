@@ -1,0 +1,421 @@
+@layer reset, theme, base, components, utilities;
+
+/* this layer contains color swatches and schemas configuration */
+@import "./styles/theme/colors.css" layer(theme);
+
+/* this layer contains typography rules; scale and typeset */
+@import "./styles/theme/fonts.css" layer(theme);
+
+/* this layer contains custom properties and helper tokens */
+@import "./styles/theme/props.css" layer(theme);
+
+@import "./styles/reset.css" layer(reset);
+
+@import "./styles/ui/link.css" layer(components.link);
+@import "./styles/ui/button.css" layer(components.button);
+@import "./styles/ui/sidenav.css" layer(components.sidenav);
+/* etc… */
+
+@import "./styles/hero.css" layer(components.hero);
+
+@import "./styles/utils.css" layer(utilities);
+@import "./styles/utilities/layout-model.css" layer(utilities.layout);
+@import "./styles/utilities/editorial-grid.css" layer(utilities.grid);
+@import "./styles/utilities/masonry.css" layer(utilities.grid);
+
+@import "./styles/ui/focus-indicator.css" layer(utilities.focus);
+
+/* 3d font
+- https://velvetyne.fr/fonts/pilowlava/
+- https://velvetyne.fr/news/pilowlava-3d/ */
+
+/* https://djr.com/forma */
+@font-face {
+  font-family: "forma";
+  src: url("./fonts/FormaDJRCyrillicVariable.woff2") format("woff2");
+  font-weight: 200 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "roslindale";
+  src: url("./fonts/RoslindaleCyrillicVariable.woff2") format("woff2");
+  font-weight: 200 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* https://djr.com/fern */
+@font-face {
+  font-family: "fern";
+  src: url("./fonts/FernOrnaments-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* https://djr.com/input */
+@font-face {
+  font-family: "input";
+  src: url("./fonts/Input.woff2") format("woff2");
+  font-display: swap;
+}
+@font-face {
+  font-family: "input v2";
+  src: url("./fonts/Input-VF.woff2") format("woff2");
+  font-display: swap;
+}
+
+@layer theme.fonts.typeset {
+  .font-mono {
+    /* font-family: 'Courier New', Courier, ui-monospace, monospace; */
+
+    font-family: 'input', monospace;
+    font-size: var(--size-6);
+    line-height: var(--lh-eighty);
+    letter-spacing: -0.002em;
+    font-variation-settings: "MONO" 1, "SRIF" 1;
+    font-weight: 300;
+    font-stretch: 73%;
+    /* font-style: oblique 8deg; */
+    font-feature-settings: "ss12", "calt", "liga", "rlig", "rvrn", "kern", "rclt";
+
+    white-space: pre;
+    text-wrap: nowrap;
+  }
+}
+
+/* NOTE mv presets for variable font axes -> ./styles/theme/fontset.css */
+
+html {
+  /* so its descendants know its width
+	 * minus vertical scrollbar,
+	 * if there is any, as 100cqw */
+  container-type: inline-size;
+
+  scrollbar-width: auto;
+  scrollbar-color: var(--bm-silhouette) #0000;
+}
+
+/**
+ * MARK: - Layouts
+ */
+
+@layer sidenav {
+  .page:has(> aside) {
+    display: grid;
+    grid: [stack] 1fr [foot] auto / min-content [stack] 1fr;
+    place-content: center;
+
+    & > footer {
+      margin-block-end: 2rem;
+    }
+
+    @media (width < 768px) {
+      row-gap: var(--spacer-3x);
+
+      & > header { gap: initial }
+
+      & > footer {
+        flex-direction: column;
+        margin-block-end: 7rem;
+      }
+    }
+
+    & > *:not(footer) { grid-area: stack }
+
+    & > footer { grid-area: foot/stack }
+  }
+}
+
+/**
+ * MARK: - Base 📸
+ */
+
+@layer base {
+  :root { --theme-hue: 196 }
+
+  @supports (interpolate-size: allow-keywords) {
+    :root {
+      interpolate-size: allow-keywords;
+    }
+  }
+
+  html {
+    block-size: 100%;
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: #0000;
+
+    > body {
+      min-block-size: 100%;
+    }
+  }
+
+  :where(body, button, input, select, textarea) {
+    font-synthesis: none;
+    -moz-font-feature-settings: "kern";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    direction: ltr;
+    text-align: left;
+  }
+
+  :where(body) {
+    --theme-time: .25s; /* 200–300 ms */
+    --theme-ease: ease;
+    /* REFS
+      - https://drafts.csswg.org/css-color-adjust-1/#forced-colors-properties
+      - https://developer.mozilla.org/en-US/docs/Web/CSS/@media/forced-colors
+    */
+    --theme-changed-props: color, fill, stroke, -webkit-text-decoration-color,
+      text-decoration-color,
+      text-emphasis-color,
+      border-color,
+      outline-color,
+      column-rule-color,
+      background-color,
+      caret-color,
+      flood-color,
+      lighting-color;
+
+    color: var(--foreground, CanvasText);
+    background: var(--background, Canvas);
+
+    /* TODO Smooth color theme switching */
+    /* transition: var(--theme-time) var(--theme-ease); */
+  }
+
+  /* @media (prefers-reduced-motion: no-preference) {
+    * {
+      transition-delay: 0ms;
+      transition-property: var(--theme-changed-props);
+      transition-timing-function: cubic-bezier(.4,0,.2,1);
+      transition-duration: .15s;
+    }
+  } */
+
+  :where(figure, picture, img, svg) {
+    @media (prefers-reduced-motion: no-preference) {
+      @supports (transition-property: filter) {
+        & {
+          transition: var(--theme-time) ease-in-out;
+          transition-property: filter, opacity, transform;
+        }
+      }
+    }
+  }
+}
+
+/**
+ * MARK: - Upd theme style ✨
+ */
+
+/* @layer theme.color.ui-adjust {
+  :where(html[data-theme-style=light]) {…}
+  :where(html[data-theme-style=dark]) {…}
+} */
+
+@layer theme.color.palettes {
+  /* https://www.sherwin-williams.com/en-us/color/color-collections/colormix-forecast/2024 */
+
+  :where(html) {
+    --green-dark: var(--sw-night-watch);
+    --blue-light: var(--sw-upward, powderblue); /* SW COTY 2024 */
+
+    --honeydew: var(--sw-honeydew, honeydew); /* SW COTM June 2024 */
+    --maroon: var(--sw-carnelian, maroon);
+  }
+}
+
+/**
+ * MARK: - Add colors 🎨
+ */
+
+@layer theme.color.swatches {
+  :where(html) {
+    /* https://en.wikipedia.org/wiki/Prussian_blue */
+    --blueprint-pb: hsl(205 100% 16%); /* #003153 */
+
+    /* RISO inks palette */
+    --riso-black: hsl(30deg 3% 13%); /* #21201F */
+
+    /* DayGlo's eye-catching fluo colors
+     * https://www.dayglo.com/products/aax-pigments/ */
+    --dayglo-pink: #fe0276;
+    --dayglo-aurora-pink: #ff0771;
+    --dayglo-neon-red: #ff3287;
+    --dayglo-blaze-orange: #ff7000;
+    --dayglo-saturn-yellow: #ffff00;
+    --dayglo-safety-yellow: #ffff32; /* Hi-Vis */
+    --dayglo-corona-magenta: #e80771;
+    /* https://www.dayglo.com/products/nightglo-ng200-phosphorescent-pigment/ */
+    --nightglo-ng200: #c9f08a;
+
+    /* Banjamin Moore rich colors */
+    --bm-misted-fern: rgb(150, 154, 114);
+    --bm-fernwood-green: rgb(204, 204, 163);
+    --bm-bed-of-ferns: rgb(153, 146, 117);
+
+    --bm-swiss-coffee: rgb(238, 236, 225);
+    --bm-lush: rgb(115, 128, 113);
+    --bm-narragansett-green: rgb(67, 81, 85);
+    --bm-silhouette: rgb(87, 80, 76);
+  }
+
+  @layer art-surface {
+    :where(html) {
+      --bm-davincis-canvas: hsl(43deg 59% 70%); /* Da Vinci's Canvas 208 */
+      --bm-canvas: hsl(43deg 55% 90%); /* Canvas 267 */
+    }
+  }
+
+  @layer boho {
+    /* '70s Boho Color Collection */
+    :where(html) {
+      --sw-pale-moss: #DCC797; /* SW 9027 Pale Moss */
+      --sw-chinchilla: #867875; /* SW 6011 Chinchilla */
+      --sw-oat-milk: #DEDACD; /* SW 9501 Oat Milk */
+      --sw-antiq-brown: #946644; /* SW 0045 Antiquarian Brown */
+      --sw-carnelian: 0deg 17% 29%; /* 573E3E SW 7580 Carnelian */
+      --sw-jogging-path: #C0B9A9; /* SW 7638 Jogging Path */
+      --sw-palm-leaf: 47deg 29% 30%; /* 635936 SW 7735 Palm Leaf */
+    }
+  }
+}
+
+/**
+ * MARK: - Start here 🎬
+ */
+
+@layer reset {
+  @layer wildcard, controls, cursor;
+
+  @layer controls {
+    :where(input, button, textarea, select),
+    :where(input[type="file"])::-webkit-file-upload-button {
+      color: inherit;
+      font: inherit;
+      font-size: inherit;
+      font-size: inherit;
+      letter-spacing: inherit;
+    }
+
+    :where(
+      a[href],
+      area,
+      button,
+      input,
+      label[for],
+      select,
+      summary,
+      textarea,
+      [tabindex]:not([tabindex*="-"])
+    ) {
+      -webkit-tap-highlight-color: transparent;
+      touch-action: manipulation;
+    }
+
+    :where(
+      a[href],
+      area,
+      button,
+      input:not([type],
+        [type="text"],
+        [type="email"],
+        [type="number"],
+        [type="password"],
+        [type="tel"],
+        [type="url"]),
+      label[for],
+      select,
+      summary,
+      [tabindex]:not([tabindex*="-"], pre)
+    ):not([disabled]) {
+      --cursor: var(--ctp-cursor-pointer) 10.125 0, pointer !important;
+
+      & > * {
+        --cursor: var(--ctp-cursor-pointer) 10.125 0, pointer;
+
+        &::before,
+        &::after,
+        & > * {
+          cursor: inherit;
+        }
+      }
+    }
+
+    input[type=range] {
+      max-inline-size: 20ch;
+    }
+
+    /* input, textarea */
+    :where([type="text"], [type="email"], [type="url"]) {
+      caret-color: var(--accent);
+    }
+  }
+
+  /**
+   * MARK: - Custom cursor 🐁
+   */
+
+  @layer cursor {
+    /* NOTE Enable hover only on non-touch devices */
+    @media (hover: hover) and (pointer: fine) {
+      *,
+      *::before,
+      *::after {
+        /* https://drafts.csswg.org/css-ui/#cursor */
+        /* cursor: var(--cursor) 8 8, auto !important */
+        cursor: var(--cursor, var(--ctp-cursor-arrow) 0 0, auto);
+      }
+
+      :where(:link,:visited) {
+        --cursor: var(--ctp-cursor-pointer) 10.25 0,
+          pointer
+      }
+
+      :where(:is([type=text]):hover) {
+        --cursor: var(--ctp-cursor-text) 0 0,
+          text
+      }
+
+      :where(:disabled) {
+        --cursor: var(--ctp-cursor-not-allowed) 0 0,
+          not-allowed
+      }
+    }
+  }
+
+  /**
+   * MARK: - Any and pseudos
+   */
+
+  @layer wildcard {
+    * {
+      box-sizing: inherit;
+      background-origin: border-box;
+      background-repeat: no-repeat;
+
+      scrollbar-width: none;
+      scrollbar-color: inherit;
+
+      &::before,
+      &::after { box-sizing: inherit }
+
+      &::selection {
+        color: var(--selection-foreground, currentcolor);
+        text-shadow: none;
+        background: var(--selection-background, inherit); /* highlight */
+        -webkit-tap-highlight-color: var(--trn, #0000);
+      }
+    }
+  }
+
+  :where(:root) {
+    --ctp-cursor-arrow:url('data:image/svg+xml,%3Csvg width="19" height="25" viewBox="0 0 19 25" fill="none" xmlns="http://www.w3.org/2000/svg"%3E%3Cg opacity="0.2" filter="url(%23filter)"%3E%3Cpath d="M2.51098 1.1957C1.97981 1.22278 1.56289 1.66144 1.56249 2.19367L1.54883 22.1922C1.5475 23.3279 3.13882 23.5864 3.49655 22.5086C4.4077 19.7732 6.53164 17.3328 8.60982 16.2239C9.88548 15.5748 11.2448 15.2034 12.5422 15.1937C13.8236 15.1841 15.0444 15.5288 16.067 16.0755C17.1007 16.6311 18.0799 15.2577 17.2184 14.4603L3.24284 1.4613C3.0448 1.27741 2.78078 1.1816 2.51098 1.1957Z" fill="black"/%3E%3C/g%3E%3Cpath d="M2.01093 0.695795C1.47975 0.722252 1.06284 1.1615 1.06244 1.69373L1.04883 21.6923C1.0475 22.828 2.63882 23.0865 2.99655 22.0086C3.90769 19.2733 6.03164 16.8329 8.10982 15.7239C9.38549 15.0748 10.7449 14.7035 12.0422 14.6938C13.3236 14.6862 14.5444 15.029 15.567 15.5755C16.6007 16.1312 17.5799 14.7577 16.7184 13.9604L2.74284 0.96137C2.5448 0.777307 2.28073 0.681811 2.01093 0.695795Z" fill="%23CDD6F4"/%3E%3Cpath d="M2.0628 1.69434L2.04883 21.6943C3.04883 18.6943 5.29546 16.0904 7.65165 14.8372C9.07144 14.1132 10.5884 13.7042 12.0488 13.6943C13.4847 13.683 14.866 14.0625 16.0488 14.6944L2.0628 1.69434Z" fill="%23181825"/%3E%3Cdefs%3E%3Cfilter id="filter" x="0.408828" y="0.054336" width="18.28" height="24.28" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"%3E%3CfeFlood flood-opacity="0" result="BackgroundImageFix"/%3E%3CfeBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/%3E%3CfeGaussianBlur stdDeviation="0.57" result="effect_foregroundBlur"/%3E%3C/filter%3E%3C/defs%3E%3C/svg%3E%0A');
+    --ctp-cursor-pointer:url('data:image/svg+xml,%3Csvg width="23" height="25" viewBox="0 0 23 25" fill="none" xmlns="http://www.w3.org/2000/svg"%3E%3Cg opacity="0.2" filter="url(%23filter)"%3E%3Cpath d="M9.82812 1.33887C9.10777 1.33887 8.42409 1.73275 7.98813 2.33496C7.55216 2.93718 7.32792 3.73116 7.32792 4.66894V12.0088C6.75418 11.5817 6.08788 10.9253 5.5934 10.71C4.61298 10.2829 3.69539 10.2513 2.98771 10.5498C1.57234 11.1467 1.3489 12.6416 1.3489 12.6416C1.31084 12.835 1.33077 13.0353 1.40618 13.2174C1.48159 13.3994 1.60913 13.5552 1.77276 13.665C3.23549 14.6472 4.67269 16.9258 6.05242 19.0322C6.74228 20.0854 7.42667 21.0937 8.20494 21.8936C8.98321 22.6934 9.92585 23.3463 11.0782 23.3389H19.6727C19.9268 23.3389 20.1714 23.2422 20.3567 23.0684C20.5421 22.8947 20.6544 22.6569 20.6708 22.4033L21.3135 12.5869L21.3096 12.624C21.4547 11.2292 20.8199 9.99982 19.7313 9.56153C19.2461 9.36616 18.6717 9.43305 18.1589 9.64161C17.8059 9.0796 17.3179 8.6579 16.7291 8.48926C16.1932 8.33579 15.6198 8.41346 15.104 8.6377C14.7167 8.109 14.1866 7.71199 13.5999 7.53809C13.2008 7.41976 12.7589 7.51591 12.3283 7.59082V4.66894C12.3283 3.73116 12.106 2.93718 11.6701 2.33496C11.2341 1.73275 10.5485 1.33887 9.82812 1.33887Z" fill="black"/%3E%3C/g%3E%3Cpath d="M9.32812 0.838867C8.60774 0.838867 7.92406 1.23273 7.48813 1.83496C7.05216 2.43715 6.82791 3.23119 6.82791 4.16896V11.5088C6.25418 11.0817 5.58787 10.4253 5.0934 10.2099C4.11299 9.7829 3.19538 9.75132 2.4877 10.0497C1.07235 10.6466 0.848896 12.1415 0.848896 12.1415C0.81084 12.3349 0.830786 12.5352 0.906192 12.7173C0.981598 12.8993 1.10912 13.0551 1.27275 13.165C2.7355 14.1471 4.17271 16.4258 5.55243 18.5322C6.24231 19.5854 6.92666 20.5936 7.70494 21.3935C8.48322 22.1933 9.42582 22.8462 10.5782 22.8387H19.1727C19.4268 22.8388 19.6714 22.7421 19.8567 22.5683C20.0421 22.3946 20.1544 22.1568 20.1708 21.9032L20.8135 12.0868L20.8097 12.1246C20.9548 10.7298 20.3201 9.50043 19.2314 9.06212C18.7462 8.86672 18.1718 8.93359 17.659 9.14222C17.306 8.58021 16.8181 8.15854 16.2292 7.9899C15.6934 7.83645 15.12 7.91396 14.6041 8.13846C14.2169 7.60978 13.6867 7.21274 13.1001 7.03885C12.7009 6.92055 12.259 7.01614 11.8285 7.09173V4.16983C11.8285 3.23205 11.6062 2.43811 11.1702 1.83588C10.7343 1.23365 10.0485 0.838867 9.32812 0.838867Z" fill="%23CDD6F4"/%3E%3Cpath d="M10.5712 21.8388L19.1722 21.8389L19.8144 12.0208C20.0328 9.92111 17.9156 9.04744 17.1892 10.9849C17.1968 8.65656 14.8902 8.26508 14.1648 9.84889C14.2555 7.92519 11.5864 7.18063 10.8284 8.81301V4.16963C10.8284 1.06195 7.82893 1.06195 7.82893 4.16963V13.4926C2.62112 8.31314 1.83008 12.3349 1.83008 12.3349C5.369 14.7112 7.53365 21.8583 10.5712 21.8388Z" fill="%23181825"/%3E%3Cdefs%3E%3Cfilter id="filter" x="0.0700781" y="0.0788672" width="22.52" height="24.52" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"%3E%3CfeFlood flood-opacity="0" result="BackgroundImageFix"/%3E%3CfeBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/%3E%3CfeGaussianBlur stdDeviation="0.63" result="effect_foregroundBlur"/%3E%3C/filter%3E%3C/defs%3E%3C/svg%3E%0A');
+    --ctp-cursor-text:url('data:image/svg+xml,%3Csvg width="7" height="24" viewBox="0 0 7 24" fill="none" xmlns="http://www.w3.org/2000/svg"%3E%3Cg opacity="0.2" filter="url(%23filter)"%3E%3Cpath d="M2.13281 0.822266C1.8676 0.822292 1.61327 0.927657 1.42574 1.11519C1.2382 1.30272 1.13284 1.55706 1.13281 1.82227V2.82227C1.13284 3.08747 1.2382 3.34181 1.42574 3.52934C1.61327 3.71687 1.8676 3.82224 2.13281 3.82227V19.8223C1.8676 19.8223 1.61327 19.9277 1.42574 20.1152C1.2382 20.3027 1.13284 20.5571 1.13281 20.8223V21.8223C1.13284 22.0875 1.2382 22.3418 1.42574 22.5293C1.61327 22.7169 1.8676 22.8222 2.13281 22.8223H3.13281H4.13281H5.13281C5.39802 22.8222 5.65236 22.7169 5.83989 22.5293C6.02742 22.3418 6.13279 22.0875 6.13281 21.8223V20.8223C6.13279 20.5571 6.02742 20.3027 5.83989 20.1152C5.65236 19.9277 5.39802 19.8223 5.13281 19.8223V3.82227C5.39802 3.82224 5.65236 3.71687 5.83989 3.52934C6.02742 3.34181 6.13279 3.08747 6.13281 2.82227V1.82227C6.13279 1.55706 6.02742 1.30272 5.83989 1.11519C5.65236 0.927657 5.39802 0.822292 5.13281 0.822266H4.13281H3.13281H2.13281Z" fill="black"/%3E%3C/g%3E%3Cpath d="M1.63283 0.322266C1.36762 0.322285 1.11326 0.427648 0.925724 0.615177C0.738188 0.802705 0.632842 1.05701 0.632812 1.32222V2.3223C0.632842 2.58751 0.738188 2.84181 0.925724 3.02934C1.11326 3.21687 1.36762 3.32223 1.63283 3.32225V19.3223C1.36762 19.3223 1.11326 19.4277 0.925724 19.6152C0.738188 19.8027 0.632842 20.057 0.632812 20.3222V21.3222C0.632842 21.5875 0.738188 21.8418 0.925724 22.0293C1.11326 22.2169 1.36762 22.3222 1.63283 22.3223H2.63284H3.6328H4.63282C4.89802 22.3222 5.15239 22.2169 5.33992 22.0293C5.52745 21.8418 5.6328 21.5874 5.63283 21.3222V20.3222C5.6328 20.057 5.52745 19.8027 5.33992 19.6152C5.15239 19.4277 4.89802 19.3223 4.63282 19.3223V3.32225C4.89802 3.32222 5.15239 3.21687 5.33992 3.02934C5.52745 2.84182 5.6328 2.5875 5.63283 2.3223V1.32222C5.6328 1.05702 5.52745 0.802704 5.33992 0.615177C5.15239 0.427649 4.89802 0.322295 4.63282 0.322266H3.6328H2.63284H1.63283Z" fill="%23CDD6F4"/%3E%3Cpath d="M1.63281 1.32227V2.32234H2.63283V20.3223H1.63281V21.3223H2.63283H3.63279H4.6328V20.3223H3.63279V2.32234H4.6328V1.32227H3.63279H2.63283H1.63281Z" fill="%23181825"/%3E%3Cdefs%3E%3Cfilter id="filter" x="0.322812" y="0.0122656" width="6.62" height="23.62" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"%3E%3CfeFlood flood-opacity="0" result="BackgroundImageFix"/%3E%3CfeBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/%3E%3CfeGaussianBlur stdDeviation="0.405" result="effect_foregroundBlur"/%3E%3C/filter%3E%3C/defs%3E%3C/svg%3E%0A');
+    --ctp-cursor-not-allowed:url('data:image/svg+xml,%3Csvg width="25" height="25" viewBox="0 0 25 25" fill="none" xmlns="http://www.w3.org/2000/svg"%3E%3Cg opacity="0.2" filter="url(%23filter)"%3E%3Cpath d="M12.4579 1.41113C9.6388 1.41113 6.81974 2.48492 4.67466 4.62988C0.38449 8.9198 0.38449 15.9044 4.67466 20.1943C8.96482 24.4843 15.9509 24.4843 20.2411 20.1943C24.5312 15.9044 24.5312 8.9198 20.2411 4.62988C18.096 2.48492 15.2769 1.41113 12.4579 1.41113Z" fill="black"/%3E%3C/g%3E%3Cpath d="M11.957 0.911133C9.13815 0.911133 6.31933 1.98493 4.17441 4.12981C-0.115429 8.41961 -0.115429 15.404 4.17441 19.6938C8.46425 23.9836 15.4498 23.9836 19.7396 19.6938C24.0295 15.404 24.0295 8.41961 19.7396 4.12981C17.5947 1.98493 14.7758 0.911133 11.957 0.911133Z" fill="%23F38BA8"/%3E%3Cpath d="M11.8105 1.9122C9.20925 1.95047 6.72523 3.00082 4.88562 4.84033C3.01044 6.71585 1.95703 9.25937 1.95703 11.9115C1.95703 14.5636 3.01044 17.1071 4.88562 18.9826C6.76121 20.8578 9.30482 21.9112 11.957 21.9112C14.6092 21.9112 17.1528 20.8578 19.0284 18.9826C20.9036 17.1071 21.957 14.5636 21.957 11.9115C21.957 9.25937 20.9036 6.71585 19.0284 4.84033C18.0823 3.8943 16.956 3.14769 15.7162 2.64473C14.4764 2.14178 13.1483 1.89269 11.8105 1.9122Z" fill="%23181825"/%3E%3Cpath opacity="0.2" d="M21.957 11.9111C21.9571 13.2243 21.6984 14.5247 21.1959 15.7379C20.6933 16.9512 19.9567 18.0536 19.0281 18.9822C18.0995 19.9108 16.9971 20.6473 15.7839 21.1499C14.5706 21.6524 13.2702 21.9111 11.957 21.9111C10.6438 21.9111 9.34345 21.6524 8.13019 21.1499C6.91694 20.6473 5.81455 19.9107 4.88597 18.9822C3.95738 18.0536 3.22078 16.9512 2.71823 15.7379C2.21569 14.5247 1.95703 13.2243 1.95703 11.9111C1.95703 9.25895 3.01061 6.71543 4.88597 4.84007C6.76133 2.96471 9.30485 1.91114 11.957 1.91113C13.2702 1.91113 14.5706 2.16979 15.7839 2.67233C16.9971 3.17488 18.0995 3.91143 19.0281 4.84001C19.9567 5.7686 20.6933 6.87098 21.1959 8.08424C21.6984 9.29749 21.957 10.5979 21.957 11.9111Z" fill="%231E1E2E"/%3E%3Cg opacity="0.2" filter="url(%23filter1_f_422_1522)"%3E%3Cpath d="M7.50728 7.46138C6.19453 8.77414 5.45703 10.5546 5.45703 12.4111C5.45703 14.2676 6.19453 16.0481 7.50728 17.3609C8.82004 18.6736 10.6005 19.4111 12.457 19.4111C14.3135 19.4111 16.094 18.6736 17.4068 17.3609C18.7195 16.0481 19.457 14.2676 19.457 12.4111C19.457 10.5546 18.7195 8.77414 17.4068 7.46138C16.094 6.14863 14.3135 5.41113 12.457 5.41113C10.6005 5.41113 8.82004 6.14863 7.50728 7.46138ZM8.21439 8.16849C9.27865 7.10583 10.7032 6.48161 12.2059 6.41945C13.7086 6.3573 15.1798 6.86175 16.3282 7.83289L7.87879 16.2823C6.90765 15.1339 6.4032 13.6627 6.46535 12.16C6.52751 10.6573 7.15173 9.23276 8.21439 8.16849ZM8.5859 16.9894L17.0353 8.54C18.0064 9.68839 18.5109 11.1596 18.4487 12.6623C18.3866 14.165 17.7623 15.5895 16.6997 16.6538C15.6354 17.7164 14.2109 18.3407 12.7082 18.4028C11.2055 18.465 9.73428 17.9605 8.5859 16.9894Z" fill="%23E38C8F"/%3E%3C/g%3E%3Cpath d="M7.00729 6.96134C5.69454 8.27409 4.95703 10.0546 4.95703 11.9111C4.95703 13.7676 5.69454 15.5481 7.00729 16.8609C8.32005 18.1736 10.1005 18.9111 11.957 18.9111C13.8135 18.9111 15.5941 18.1736 16.9068 16.8609C18.2196 15.5481 18.957 13.7676 18.957 11.9111C18.957 10.0546 18.2196 8.27409 16.9068 6.96134C15.5941 5.64858 13.8135 4.91113 11.957 4.91113C10.1005 4.91113 8.32005 5.64858 7.00729 6.96134ZM7.7144 7.6685C8.77866 6.60583 10.2032 5.98161 11.7059 5.91945C13.2085 5.8573 14.6798 6.36171 15.8282 7.33285L7.37881 15.7822C6.40767 14.6338 5.90325 13.1626 5.96541 11.66C6.02757 10.1573 6.65173 8.73276 7.7144 7.6685ZM8.08591 16.4893L16.5353 8.04002C17.5064 9.18841 18.0109 10.6596 17.9488 12.1623C17.8866 13.665 17.2623 15.0895 16.1996 16.1538C15.1354 17.2165 13.7109 17.8407 12.2082 17.9029C10.7055 17.965 9.2343 17.4605 8.08591 16.4893Z" fill="%23F38BA8"/%3E%3Cdefs%3E%3Cfilter id="filter0_" x="0.137031" y="0.0911328" width="24.642" height="24.641" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"%3E%3CfeFlood flood-opacity="0" result="BackgroundImageFix"/%3E%3CfeBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/%3E%3CfeGaussianBlur stdDeviation="0.66" result="effect_foregroundBlur"/%3E%3C/filter%3E%3Cfilter id="filter1_f_422_1522" x="4.61703" y="4.57113" width="15.68" height="15.68" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB"%3E%3CfeFlood flood-opacity="0" result="BackgroundImageFix"/%3E%3CfeBlend mode="normal" in="SourceGraphic" in2="BackgroundImageFix" result="shape"/%3E%3CfeGaussianBlur stdDeviation="0.42" result="effect_foregroundBlur"/%3E%3C/filter%3E%3C/defs%3E%3C/svg%3E%0A')
+  }
+}

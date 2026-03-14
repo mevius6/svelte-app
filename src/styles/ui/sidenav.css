@@ -1,0 +1,120 @@
+/* REFS Sidenav component
+    → https://web.dev/articles/building/a-sidenav-component
+    → https://drafts.csswg.org/css-ui/#keyboard
+    → https://drafts.csswg.org/css-ui/#nav-dir */
+
+/* TODO https://drafts.csswg.org/css-ui-4/#example-d7e76d42 */
+
+/*
+  MARK: - Sidebar pane styling
+*/
+:where(#sidenav-open) {
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --duration: .6s;
+
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 1010;
+
+  display: grid;
+  /* grid-template-columns: [nav] 2fr [esc] 1fr; */
+  grid-template-columns: [nav] 1fr [esc] 1fr;
+
+  min-block-size: 100svh;
+  max-block-size: 100lvh;
+  block-size: 100dvh;
+  overflow: hidden auto;
+
+  visibility: hidden; /* not keyboard accessible when closed */
+  will-change: transform;
+  transition:
+    transform var(--duration) var(--ease-out-expo) var(--delay, .25s),
+    visibility 0s linear var(--duration);
+  transform: translateX(-100vw);
+  overscroll-behavior: contain;
+
+  /* https://html.spec.whatwg.org/multipage/links.html#attr-hyperlink-target */
+  &:target {
+    --delay: 0s;
+    visibility: visible;
+    transform: translateX(0);
+    transition:
+      transform var(--duration) var(--ease-out-expo) var(--delay);
+  }
+
+  & nav {
+    /* NOTE Need a safe area for the disclosure button */
+    max-inline-size: 75cqi;
+
+    /* to indicate the closure area (on tap/click) */
+    border-inline-end: 1px var(--border) solid;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    & { --duration: 1ms; }
+  }
+}
+
+/*
+  MARK: - Nav element styling
+*/
+:where(nav:is([id^=nav i])) {
+  display: grid;
+  place-content: center;
+
+  background-color: color-mix(in oklab,
+    var(--background, var(--surface-1)),
+    transparent 80%
+  );
+
+  & [class*="__items"] {
+    display: flex;
+    flex-flow: column;
+    gap: var(--spacer-2x);
+  }
+
+  li:has(> a) {
+    /* inline-size: 100%; */
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+ul[itemtype*=SiteNavigationElement] {
+  transform: translate3d(0,0,0); /* acceleration */
+
+  li:nth-child(2) { --idx: 2 } /* 100ms */
+  li:nth-child(3) { --idx: 3 } /* 150ms */
+  li:nth-child(4) { --idx: 4 } /* 200ms */
+  li:nth-child(5) { --idx: 5 } /* 250ms */
+
+  li { overflow: hidden }
+
+  :is(#sidenav-open:target) & {
+    --ty: 0;
+
+    will-change: transform; /* hint */
+
+    /* transition-delay: var(--delay); */
+    /* transition-behavior: allow-discrete; */
+  }
+
+  [itemprop=url] > span {
+    --delay: calc(var(--idx, 1) * 50ms);
+
+    transform: translateY(var(--ty, 100%));
+    transition-property: transform;
+    transition-duration: .6s;
+    transition-timing-function: var(--ease-elastic-out-3);
+    transition-delay: calc(50ms + var(--delay));
+  }
+}
+
+@media(hover: hover) and (pointer: fine) {
+  nav ul:is(:hover, :focus-within) > li:where(:not(:hover)) { --a: .25; }
+  nav ul:is(:hover, :focus-within) > li:hover { --a: 1; }
+}
+
+/* https://codepen.io/thebabydino/pen/yLZYLja */

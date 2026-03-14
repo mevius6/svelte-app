@@ -1,0 +1,73 @@
+@layer fallback {
+  @supports not (color: light-dark(#000, #fff)) {
+    /* Automatic dark mode; fallback */
+    :root, :host {
+      /* :link { color: LinkText; } */
+      --link: LinkText;
+      /* :visited { color: VisitedText; } */
+      --link-visited: VisitedText;
+      /* :active { color: ActiveText; } */
+      --link-active: ActiveText;
+      /*
+        https://www.w3.org/TR/css-color-4/#css-system-colors
+        https://drafts.csswg.org/css-color-4/#css-system-colors
+      */
+      --foreground: CanvasText;
+      --background: Canvas;
+      --muted: GrayText;
+
+      /* https://drafts.csswg.org/css-backgrounds-3/#canvas-surface */
+      --surface-1: #111;
+      --surface-2: #222;
+      --surface-3: #333;
+      --surface-4: #444;
+      --border: #666;
+
+      /* https://vercel.com/geist/colors
+      --foreground: #fff;
+      --background: #000;
+      --accents-8: #fafafa;
+      --accents-7: #eaeaea;
+      --accents-6: #999;
+      --accents-5: #888;
+      --accents-4: #666;
+      --accents-3: #444;
+      --accents-2: #333;
+      --accents-1: #111; */
+
+      color-scheme: dark light;
+      accent-color: var(--accent, rebeccapurple);
+
+      /* https://github.com/mbarker84/style-stage-pink-lime */
+      @media (prefers-color-scheme: dark) {
+        color-scheme: dark only;
+        --accent: var(--color-neon-lime, lime);
+        --foreground: #f4f4f4;
+
+        --surface-1: #161616;
+        --surface-2: #262626;
+        --surface-3: #393939;
+        --surface-4: #404040;
+        --border: #525252;
+      }
+
+      @media (not (prefers-color-scheme: dark)) {
+        color-scheme: only light;
+        --accent: var(--color-neon-pink, deeppink);
+
+        --surface-1: #f5f5f5;
+        --surface-2: #e5e5e5;
+        --surface-3: #d4d4d4;
+        --surface-4: #a3a3a3;
+        --border: #737373;
+
+        @supports (color: color(display-p3 0 0 0)) {
+          & {
+            --link: color(display-p3 .1 .4 1);
+            --link-visited: color(display-p3 .6 .2 1);
+          }
+        }
+      }
+    }
+  }
+}

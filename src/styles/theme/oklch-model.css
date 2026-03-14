@@ -1,0 +1,55 @@
+/* TODO Upgrade to the Oklch color model and
+        bring a color picker tool to the UI.
+    - https://www.w3.org/TR/css-color-5/#relative-Oklch
+    - https://www.w3.org/TR/css-color-4/#color-type
+    - https://www.w3.org/TR/css-color-4/#color-difference-OK
+    - https://www.w3.org/TR/css-color-4/#biblio-oklab
+    - https://evilmartians.com/chronicles/oklch-in-css-why-quit-rgb-hsl
+    - https://evilmartians.com/chronicles/better-dynamic-themes-in-tailwind-with-oklch-color-magic
+    - https://github.com/dkzlv/simple-hue-picker
+    - https://codepen.io/Anton-Lovchikov/full/XWoxYOV
+    - https://observablehq.com/search?query=oklab */
+
+/* Tools
+    - https://oklch.com
+    - https://gradient.style */
+
+/* Source → https://github.com/argyleink/open-props/blob/main/src/
+            ├── props.colors-oklch-hues.css
+            └── props.colors-oklch.css */
+@layer oklch {
+  :where(:root) {
+    --hue-red: 25;
+    --hue-pink: 350;
+    --hue-purple: 310;
+    --hue-violet: 290;
+    --hue-indigo: 270;
+    --hue-blue: 240;
+    --hue-cyan: 210;
+    --hue-teal: 185;
+    --hue-green: 145;
+    --hue-lime: 125;
+    --hue-yellow: 100;
+    --hue-orange: 75;
+
+    /* See: https://www.w3.org/TR/css-color-4/#funcdef-oklch */
+    --color-hue: initial;
+    --color-0: oklch(99% .03 var(--color-hue, 0));
+    --color-1: oklch(95% .06 var(--color-hue, 0));
+    --color-2: oklch(88% .12 var(--color-hue, 0));
+    --color-3: oklch(80% .14 var(--color-hue, 0));
+    --color-4: oklch(74% .16 var(--color-hue, 0));
+    --color-5: oklch(68% .19 var(--color-hue, 0));
+    --color-6: oklch(63% .20 var(--color-hue, 0));
+    --color-7: oklch(58% .21 var(--color-hue, 0));
+    --color-8: oklch(53% .20 var(--color-hue, 0));
+    --color-9: oklch(49% .19 var(--color-hue, 0));
+    --color-10: oklch(42% .17 var(--color-hue, 0));
+    --color-11: oklch(35% .15 var(--color-hue, 0));
+    --color-12: oklch(27% .12 var(--color-hue, 0));
+    --color-13: oklch(20% .09 var(--color-hue, 0));
+    --color-14: oklch(14% .07 var(--color-hue, 0));
+    --color-15: oklch(11% .05 var(--color-hue, 0));
+    --color-bright: oklch(65% .3 var(--color-hue, 0));
+  }
+}

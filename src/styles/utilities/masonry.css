@@ -1,0 +1,41 @@
+/*
+  MARK: - Masonry algos
+*/
+
+/* https://drafts.csswg.org/css-grid-3/#grid-template-masonry */
+/* https://ishadeed.com/article/css-grid-masonry/ */
+.grid-masonry {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: masonry;
+  grid-gap: 1rem;
+}
+
+.grid-masonry-ram { /* RAM algo */
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+  grid-template-rows: masonry;
+  grid-gap: 1rem;
+}
+
+.grid-rows-masonry {
+  grid-template-rows: masonry;
+  grid-auto-flow: row dense;
+}
+
+/* when the layout was switched to masonry, but… */
+@supports not (grid-template-rows: masonry) {
+
+  /* fall back to multi-column layout */
+  :where([class*=grid]:is([class*=masonry])) {
+    display: block !important;
+    columns: var(--cols, 3) 25ch;
+    column-gap: 1.5rem;
+    /* etc. */
+
+    > * { margin-block-end: 1.5rem }
+
+    /* cover style */
+    /* > :first-child { column-span: all } */
+  }
+}
