@@ -201,6 +201,12 @@ void main()
     vec2  coord = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / u_resolution.y;
     const float horizon = 0.5;
 
+#ifdef DEBUG_RIPPLE
+    float debugHeight = texture(u_rippleTex, uv).r;
+    fragColor = vec4(vec3(debugHeight * 0.5 + 0.5), 1.0);
+    return;
+#endif
+
     vec3 col;
     vec2 sunPos; vec3 sunCol;
     sun(u_scroll, sunPos, sunCol);
@@ -210,6 +216,16 @@ void main()
     // ════════════════════════════════════════════════
     if (uv.y >= horizon)
     {
+#ifdef DEBUG_NORMALS
+        fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+        return;
+#endif
+
+#ifdef DEBUG_REFLECTION
+        fragColor = vec4(tonemap(skyColor(uv.y, u_scroll)), 1.0);
+        return;
+#endif
+
         vec3 sky = skyColor(uv.y, u_scroll);
 
         float d        = length(uv - sunPos);
@@ -310,8 +326,14 @@ void main()
             float rxN = texture(u_rippleTex, rUV-vec2(rt,0.0)).r;
             float ryP = texture(u_rippleTex, rUV+vec2(0.0,rt)).r;
             float ryN = texture(u_rippleTex, rUV-vec2(0.0,rt)).r;
-            n = normalize(n + vec3(-(rxP-rxN)/perspScale*5.0, 0.0, -(ryP-ryN)*5.0));
+            // AI: keep ripple perturbation in ripple-texture space; no extra perspective scaling at this stage.
+            n = normalize(n + vec3(-(rxP-rxN)*5.0, 0.0, -(ryP-ryN)*5.0));
         }
+
+#ifdef DEBUG_NORMALS
+        fragColor = vec4(n * 0.5 + 0.5, 1.0);
+        return;
+#endif
 
         // ── MICRO NORMAL NOISE ───────────────────────────────────────────
         {
@@ -358,6 +380,11 @@ void main()
                 skyRefl = mix(skyRefl, vReflBase, vegReflMask * (0.65 + 0.35 * depth));
             }
         }
+
+#ifdef DEBUG_REFLECTION
+        fragColor = vec4(tonemap(skyRefl), 1.0);
+        return;
+#endif
 
         // ── СОЛНЕЧНАЯ ДОРОЖКА ────────────────────────────────────────────
         vec2  sunRefl   = vec2(sunPos.x, 2.0*horizon-sunPos.y);

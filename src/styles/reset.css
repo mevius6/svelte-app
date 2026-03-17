@@ -1,4 +1,4 @@
-@namespace "http://www.w3.org/1999/xhtml";
+/* @namespace "http://www.w3.org/1999/xhtml"; */
 
 /* :where(*, *::before, *::after) { all: initial } */
 /* :where(*, *::before, *::after) { all: initial !important } */

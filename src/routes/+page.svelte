@@ -2,13 +2,7 @@
   import type { PageProps } from './$types';
 
   import Cover from "$lib/components/Cover.svelte";
-  import Landscape from "$lib/components/Landscape.svelte";
-  // import WaterText from "$lib/components/WaterText.svelte";
-
-  import LandscapeShader from '$lib/components/LandscapeShader.svelte';
-
-  // import ArticleNavList from "$lib/components/ArticleNavList.svelte";
-  // import GlyphStagger from "$lib/components/GlyphStagger.svelte";
+  import LandscapeShader from '$lib/components/LandscapeViewport.svelte';
 
   let { data }: PageProps = $props();
 </script>
@@ -39,22 +33,6 @@ MARK: Scene I. Intro
 
     <!-- WebGL Environment Shader -->
     <LandscapeShader />
-
-    <!-- SVG Implementation -->
-    <!-- <Landscape /> -->
-
-    <!-- Last News / Top-List -->
-    <!-- <nav aria-label="Опубликованные статьи">
-      {#if data.navError}
-        <p class="article-nav-empty">{data.navError}</p>
-      {:else if data.navItems.length === 0}
-        <p class="article-nav-empty">Пока нет опубликованных статей.</p>
-      {:else}
-        <GlyphStagger>
-          <ArticleNavList items={data.navItems} />
-        </GlyphStagger>
-      {/if}
-    </nav> -->
 </div>
 
   <!-- CSS Masked Portal -->
@@ -71,14 +49,6 @@ MARK: Scene I. Intro
   :global([class*='multicol']) {
     grid-template-columns: repeat(auto-fill, minmax(22ch, 1fr));
   }
-
-  /* .article-nav-empty {
-    margin: 0;
-    font-family: var(--font-sans);
-    font-size: var(--size-2);
-    color: var(--bm-swiss-coffee);
-    text-shadow: 0 1px 2px rgb(0 0 0 / 45%);
-  } */
 
   /* HDR sunset palette */
   /* .swatch {

@@ -4,13 +4,11 @@
   import favicon from '$lib/assets/favicon.svg';
   import Navigation from '$lib/components/Navigation.svelte';
   import { runViewTransition } from '$lib';
-  // import PageBanner from "$lib/components/GlobalBanner.svelte";
-  // import ThemeSelect from '$lib/components/ThemeSelect.svelte';
 
   let { children } = $props();
 
-  const BRAND_NAME_RU = 'Чистые пруды';
-  const YYYY = new Date(Date.now()).getFullYear();
+  // const BRAND_NAME_RU = 'Чистые пруды';
+  // const YYYY = new Date(Date.now()).getFullYear();
   const HOME_ROUTE_ID = '/';
   const ARTICLES_ROUTE_PREFIX = '/articles';
 
