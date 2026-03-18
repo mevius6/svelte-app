@@ -115,11 +115,19 @@
     inset-inline-end: 1rem;
     z-index: 90;
     display: grid;
-    gap: 0.6rem;
+    gap: 2ch;
     padding: 0.85rem;
     min-inline-size: 13rem;
-    background: color-mix(in oklab, #091118 88%, #3b4f5d 12%);
-    border: 1px solid color-mix(in oklab, #b9d0dc 22%, transparent);
+    background-color: color-mix(
+      in oklab,
+      #091118 88%,
+      #3b4f5d 12%
+    );
+    border: 1px solid color-mix(
+      in oklab,
+      #b9d0dc 22%,
+      #0000
+    );
     border-radius: 0.9rem;
     box-shadow: 0 18px 48px rgb(0 0 0 / 0.28);
     backdrop-filter: blur(14px);
@@ -127,20 +135,22 @@
 
   .debug-field {
     display: grid;
-    gap: 0.35rem;
+    gap: 1ch;
     color: #e9f1f6;
-    font: 600 0.74rem/1.2 "Input", "Input VF", monospace;
+    font: 600 0.74rem/1.2 "input", monospace;
+    font-variation-settings: "SRIF" 1, "MONO" 1;
     letter-spacing: 0.04em;
     text-transform: uppercase;
   }
 
   .debug-field select {
-    padding: 0.58rem 0.7rem;
+    padding: 0.5rlh 1ch;
     color: #f4f8fb;
-    background: rgb(255 255 255 / 0.06);
+    background-color: rgb(255 255 255 / 0.06);
     border: 1px solid rgb(255 255 255 / 0.16);
     border-radius: 0.65rem;
-    font: 500 0.9rem/1.2 "Input", "Input VF", monospace;
+    font: 500 0.9rem/1.2 "input", monospace;
+    font-variation-settings: "SRIF" 1, "MONO" 1;
   }
 
   .debug-field select:disabled {
