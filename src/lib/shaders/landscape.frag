@@ -95,23 +95,9 @@ vec2 microNormalDelta(vec2 p, float t, float depthMask) {
 // SHORE
 // ----------------------------------------------------
 //
-// Процедурный силуэт берега: две горные массы (левая и правая),
-// долина в центре, статичный (нет зависимости от времени).
+// Процедурный силуэт берега.
 //
-// shoreProfile(x) → UV-координата y вершины силуэта при данном x.
-// Значение > horizon → горный пиксель, если uv.y < profile.
-//
-// Архитектура:
-//   1. Огибающая (envelope): два Gaussian-подобных масса по краям,
-//      плавно обнуляется в центре → долина у горизонта.
-//   2. fBM (4 октавы, seed=17.3) — скальная зубчатость.
-//      Используется тот же vnoise, но с отдельным 2D-seed-сдвигом
-//      → независим от облачного шума.
-//   3. Средние хребты: второй слой fBM на меньшей частоте даёт
-//      вторичные гребни внутри масс.
-//
-// Ref: IQ "Terrain" — envelope * fbm pattern; "Painting a Landscape
-//      with Maths" https://iquilezles.org/articles/terrainmarching/
+// Ref: IQ "Terrain" — envelope * fbm pattern; "Painting a Landscape with Maths" https://iquilezles.org/articles/terrainmarching/
 // Ref: GPU Gems 3 ch.1 "Generating Complex Procedural Terrains"
 
 float shoreFbm(float x, float seedY) {
@@ -128,14 +114,6 @@ float shoreFbm(float x, float seedY) {
 // ----------------------------------------------------
 // VEGETATION SILHOUETTE SYSTEM
 // ----------------------------------------------------
-//
-// Архитектура (4 слоя, back→front):
-//   baselineSilhouette — НЕПРЕРЫВНАЯ fBM-лента вдоль всего горизонта.
-//                        Закрывает берег полностью, без просветов.
-//
-// vegCluster — карта плотности с floor 0.35:
-//   нет абсолютно пустых зон, только разница «редкий/плотный лес».
-//   Плотные кластеры → деревья выше (ch ∝ cl) → перспективная иллюзия.
 //
 // Ref: IQ "Painting a Landscape with Maths"
 //      https://iquilezles.org/articles/terrainmarching/
@@ -246,9 +224,9 @@ void main()
     vec2 sunPos; vec3 sunCol;
     sun(phase, sunPos, sunCol);
 
-    // ════════════════════════════════════════════════
+    // ----------------------------------------------------
     // SKY
-    // ════════════════════════════════════════════════
+    // ----------------------------------------------------
     if (uv.y >= horizon)
     {
 #ifdef DEBUG_NORMALS
@@ -289,10 +267,9 @@ void main()
         float skyFog = smoothstep(horizon + 0.018, horizon, uv.y) * 0.55;
         col = mix(col, horizonSky, skyFog);
 
-        // ── РАСТИТЕЛЬНОСТЬ БЕРЕГА ────────────────────────────────────────
-        // Рендер 4 слоёв back→front: baseline → куст → тростник → дерево.
-        // baselineSilhouette обеспечивает сплошную тёмную ленту по всему
-        // горизонту. Деревья и кусты выступают над ней как отдельные кроны.
+        // РАСТИТЕЛЬНОСТЬ БЕРЕГА
+        //
+        // baselineSilhouette обеспечивает сплошную тёмную ленту по всему горизонту.
         //
         // Rim-light: единый для топ-кромки всего силуэта (vegTop).
         //   exp(-Δy*k) → узкая подсветка, k=88 → ~0.01 UV ширина.
@@ -300,7 +277,6 @@ void main()
         //
         // Ref: IQ "Outdoors Lighting" — rim-light на силуэтах
         //      https://iquilezles.org/articles/outdoorslighting/
-
 
         // Сильное ограничение по вертикали: считаем силуэт только
         // в узкой полосе вокруг горизонта, остальное не трогаем.
@@ -311,7 +287,7 @@ void main()
             return;
         }
 
-        // ── ДАЛЬНИЙ БЕРЕГ (МЯГКИЙ СИЛУЭТ) ───────────────────────────────
+        // ДАЛЬНИЙ БЕРЕГ (МЯГКИЙ СИЛУЭТ)
         {
             float base = baselineSilhouette(uv.x);
 
@@ -337,9 +313,9 @@ void main()
         }
 
     }
-    // ════════════════════════════════════════════════
+    // ----------------------------------------------------
     // WATER
-    // ════════════════════════════════════════════════
+    // ----------------------------------------------------
     else
     {
         float t     = u_time;
@@ -351,10 +327,10 @@ void main()
         float perspScale = 1.0 / (depth + 0.12);
         vec2  p = vec2(coord.x * perspScale, coord.y) * 2.2;
 
-        // ── НОРМАЛЬ ВОЛН ─────────────────────────────────────────────────
+        // НОРМАЛЬ ВОЛН
         vec3 n = waveNormal(p, t, largeWaveMask, mediumWaveMask, rippleWaveMask);
 
-        // ── ИНТЕРАКТИВНАЯ РЯБЬ ───────────────────────────────────────────
+        // ИНТЕРАКТИВНАЯ РЯБЬ
         {
             vec2  rUV = vec2(uv.x, 1.0 - uv.y*2.0);
             float rt  = u_rippleTexel;
@@ -371,7 +347,7 @@ void main()
         return;
 #endif
 
-        // ── MICRO NORMAL NOISE ───────────────────────────────────────────
+        // MICRO NORMAL NOISE
         {
             vec2 mn = microNormalDelta(p, t, microNoiseMask);
             n = normalize(n + vec3(mn.x, 0.0, mn.y) * 0.28);
@@ -379,22 +355,22 @@ void main()
 
         float rippleStrength = 1.0 - n.y;
 
-        // ── FRESNEL ─────────────────────────────────────────────────────
+        // FRESNEL
         float horizonDist = (horizon - uv.y) / horizon;
         vec3  viewDir     = normalize(vec3(coord.x*0.1, 0.02+horizonDist*0.26, 1.0));
         float cosTheta    = clamp(dot(viewDir,n), 0.0, 1.0);
         float fresnel     = 0.02 + 0.98*pow(1.0-cosTheta, 5.0);
 
-        // ── ОТРАЖЕНИЕ НЕБА + БЕРЕГА ──────────────────────────────────────
+        // ОТРАЖЕНИЕ НЕБА + БЕРЕГА
         // Отражённый UV: зеркало горизонта + дисторсия нормалью.
-        // После вычисления skyColor проверяем: попадает ли отражение в гору?
-        // Если да — заменяем на тёмный цвет горного отражения.
+        // После вычисления skyColor проверяем: попадает ли отражение в берег?
+        // Если да — заменяем на тёмный цвет отражения берега.
         //
-        // Горное отражение:
-        //   - само по себе тёмное, чуть темнее горы (вода поглощает)
+        // Отражение берега:
+        //   - само по себе тёмное, чуть темнее берега (вода поглощает)
         //   - дистортируется волнами автоматически (через n.xz смещение)
         //   - гладко бленд через fresnel (крутой угол → больше отражения)
-        // Ref: planar reflection mountain masking — аналог skyRefl, но для силуэта
+        // Ref: planar reflection masking — аналог skyRefl, но для силуэта
         float reflStrength = 0.015 + 0.07*depth;
         vec2  refl = vec2(uv.x, 2.0*horizon-uv.y) + n.xz*reflStrength;
         refl.y     = clamp(refl.y, horizon, 1.0);
@@ -421,7 +397,7 @@ void main()
         return;
 #endif
 
-        // ── СОЛНЕЧНАЯ ДОРОЖКА ────────────────────────────────────────────
+        // СОЛНЕЧНАЯ ДОРОЖКА
         vec2  sunRefl   = vec2(sunPos.x, 2.0*horizon-sunPos.y);
         float pathX     = abs(uv.x - sunPos.x);
         float pathY     = clamp(horizon-uv.y, 0.0, horizon);
@@ -436,11 +412,11 @@ void main()
         float r2    = toSun.x*toSun.x + negToSunY*negToSunY*0.12;
         vec3  sunLight = sunCol*(exp(-r2*45.0)*4.5 + exp(-r2*18.0)*0.7 + sunPath);
 
-        // ── ЦВЕТ ВОДЫ ────────────────────────────────────────────────────
+        // ЦВЕТ ВОДЫ
         vec3 waterDeep = mix(vec3(0.03,0.10,0.16), skyRefl*0.6, 0.3);
         vec3 waterCol  = mix(waterDeep, skyRefl+sunLight, fresnel*(0.65+0.35*depth));
 
-        // ── СПЕКУЛЯР + ГЛИНТЫ ────────────────────────────────────────────
+        // СПЕКУЛЯР + ГЛИНТЫ
         vec2 sunDir2D = normalize(sunPos - vec2(uv.x,horizon));
         vec3 lightDir = normalize(vec3(sunDir2D.x, 0.6, sunDir2D.y));
         vec3 halfDir  = normalize(lightDir + viewDir);
@@ -453,7 +429,7 @@ void main()
 
         col = mix(waterCol, horizonSky, smoothstep(0.07,0.0,depth)*0.8);
 
-        // ── ОТРАЖЕНИЕ НАЗВАНИЯ ───────────────────────────────────────────
+        // ОТРАЖЕНИЕ НАЗВАНИЯ
         vec2  textRefl = vec2(uv.x, 1.0-uv.y) + n.xz*(0.018+0.030*rippleStrength);
         float waterA   = sampleTextAlpha(textRefl)
                        * fresnel

@@ -12,6 +12,24 @@ You are an AI pair-programmer working in a WebGL2 creative-coding project built 
 - Shaders must be GLSL 300 es, with `#version 300 es`, `in/out` qualifiers, and correct precision for fragment shaders.
 - The frontend stack (Svelte + TypeScript + Vite) is fixed and should not be replaced.
 
+## 1.1. Reference base
+
+Prefer these sources when making implementation decisions, writing explanations, or justifying tradeoffs:
+
+- Svelte:
+  - `https://svelte.dev/docs/llms` and the linked `llms-full.txt` / `llms-medium.txt` files as the first stop for up-to-date Svelte and SvelteKit reference material.
+  - `https://svelte.dev/docs/svelte/best-practices` for component structure, reactivity, events, and general Svelte style decisions.
+- WebGL / shaders:
+  - `https://mini.gmshaders.com/` for practical shader tips, common mistakes, small techniques, and optimization instincts.
+  - `https://thebookofshaders.com/` for foundational GLSL, shaping, noise, patterns, simulation, and lighting concepts.
+  - `https://iquilezles.org/articles/` for deeper articles on noise, fBM, domain warping, SDFs, terrain rendering, filtering, and procedural math.
+
+How to use them:
+
+- For Svelte work, prefer official Svelte docs over generic framework advice.
+- For shader and procedural graphics work, use GM Shaders for concise heuristics, The Book of Shaders for fundamentals, and Inigo Quilez articles for deeper math/technique references.
+- Reference these sources to support decisions, but do not cargo-cult patterns that add abstraction without reducing current code complexity.
+
 ## 2. Target architecture
 
 Model the project as a small rendering engine with this structure:
@@ -41,6 +59,16 @@ src/lib/
 - `render/` defines the high-level orchestration (`Renderer`, `RenderPass` base).
 - `passes/` contains concrete render passes (ripple simulation, main landscape shading, instanced vegetation).
 - `scene/` wires everything together and handles input (pointer interaction for ripples, scene parameters).
+
+Architectural heuristics:
+
+- Keep `LandscapeViewport` as a thin host: canvas mounting, scene bootstrapping, and dev-only debug UI only.
+- Keep `Renderer` focused on runtime lifecycle, not scene-specific rendering decisions.
+- Keep `LandscapeScene` as a coordinator for input, frame state, and pass ordering, not as a container for GPU asset creation.
+- Keep GPU asset creation/loading/disposal in a dedicated resource layer when that keeps the scene thinner.
+- Prefer one pass per role: simulation, landscape shading, vegetation, and post-processing should stay explicitly separated.
+- Preserve the invariant that ripple perturbs water normals, never direct water color.
+- Add new abstractions only when they simplify the current code, not as speculative architecture.
 
 ## 3. Render pipeline
 
