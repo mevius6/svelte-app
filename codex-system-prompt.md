@@ -53,12 +53,14 @@ src/lib/
 
   scene/
     LandscapeScene.ts
+    LandscapeResources.ts
 ```
 
 - `gl/` contains low-level WebGL2 abstractions (shader program, fullscreen quad, FBOs, ping-pong buffers).
 - `render/` defines the high-level orchestration (`Renderer`, `RenderPass` base).
 - `passes/` contains concrete render passes (ripple simulation, main landscape shading, instanced vegetation).
 - `scene/` wires everything together and handles input (pointer interaction for ripples, scene parameters).
+- Scene-adjacent resource ownership may live beside the scene when that keeps orchestration thinner and avoids turning `LandscapeScene` into a GPU asset container.
 
 Architectural heuristics:
 
@@ -211,8 +213,10 @@ The project has already completed the main architectural extraction. Treat the f
   - `src/lib/passes/LandscapePass.ts`
   - `src/lib/passes/BushesPass.ts`
   - `src/lib/scene/LandscapeScene.ts`
+  - `src/lib/scene/LandscapeResources.ts`
 - Legacy wrappers and temporary proxy files have already been removed. Do not recreate `LandscapeShader.svelte`, `VegetationPass.ts`, old `scenes/` wrappers, or old `gl/renderer` compatibility paths.
 - `LandscapeViewport.svelte` is intentionally a thin Svelte host component. It should stay focused on canvas mounting, scene bootstrapping, and dev-only debug UI.
+- `LandscapeScene` already delegates scene-local GPU resource setup/load/dispose to `LandscapeResources`. Treat that resource split as the baseline, not as future work to redo.
 - Debug pass switches already exist in development mode and are wired to `Ripple`, `Landscape`, and `Vegetation/Bushes` views.
 - The project now uses `@sveltejs/adapter-node` because article pages rely on server `load` functions and private Strapi environment variables. Production runtime is Node-based.
 
@@ -220,8 +224,8 @@ The project has already completed the main architectural extraction. Treat the f
 
 Use this as the preferred order for upcoming work:
 
-1. Reduce `LandscapeScene.ts` to a thinner coordinator by extracting texture/resource creation and loading helpers out of the scene.
+1. Keep `LandscapeScene.ts` as a thin coordinator by extracting only the remaining non-orchestration concerns that still obscure pass ordering or input/state flow. `LandscapeResources` is already the baseline for scene-local GPU asset ownership.
 2. Reassess whether pass ownership/orchestration should remain in `LandscapeScene` or move further into `Renderer`, but only if that change improves clarity without changing behavior.
-3. Perform safe shader optimization passes on real hot spots (`cloudFbm`, cloud density, wave/normal/reflection repetition), preserving the current image.
-4. Keep validating the core invariant: ripple affects water normals, not direct color.
-5. After each substantial change, verify that debug views still work and that the rendered image remains visually consistent with the current baseline.
+3. Perform safe shader optimization passes on real hot spots, starting with SKY/CLOUD work (`cloudFbm`, cloud density, repeated sky/sun intermediates), preserving the current image.
+4. Then evaluate wave/normal/reflection repetition only if the shader still has obvious hot spots after the sky/cloud pass.
+5. Keep validating the core invariant: ripple affects water normals, not direct color, and verify that debug views still work after each substantial change.

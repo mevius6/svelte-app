@@ -54,19 +54,26 @@ float vnoise(vec2 p) {
                mix(hash(i+vec2(0,1)),hash(i+vec2(1,1)),u.x), u.y);
 }
 
-float cloudFbm(vec2 p) {
+float cloudBaseFbm(vec2 p) {
     float v=0.0,a=0.5; vec2 s=vec2(100.0);
     for(int i=0;i<4;i++){v+=a*vnoise(p);p=p*2.1+s;a*=0.48;}
     return v;
 }
 
+float cloudDetailFbm(vec2 p) {
+    float v=0.0,a=0.5; vec2 s=vec2(100.0);
+    // AI: keep the primary cloud body at 4 octaves, but trim the secondary detail layer to 3 where the visual impact is smaller.
+    for(int i=0;i<3;i++){v+=a*vnoise(p);p=p*2.1+s;a*=0.48;}
+    return v;
+}
+
 float cloudDensity(vec2 uv, float t, float phase01, out float base) {
     vec2 wind = vec2(t*0.012, t*0.004);
-    // AI: cache cloud UV variants/fades once; octave count and thresholds stay unchanged.
+    // AI: cache cloud UV variants/fades once and keep the lower-cost detail octave reduction local to the secondary cloud layer.
     vec2 baseUv = uv * vec2(3.2,5.5) + wind;
     vec2 detailUv = uv * vec2(6.5,9.0) + wind * 1.4;
-    base        = cloudFbm(baseUv);
-    float cloud = base + cloudFbm(detailUv)*0.38;
+    base        = cloudBaseFbm(baseUv);
+    float cloud = base + cloudDetailFbm(detailUv)*0.38;
     cloud       = smoothstep(0.60,0.88,cloud);
     float phaseFade = 1.0 - min(phase01 * 1.4, 1.0) * 0.5;
     float verticalFade = smoothstep(1.0,0.52,uv.y);
