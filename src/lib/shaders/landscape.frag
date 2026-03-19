@@ -3,6 +3,7 @@ precision highp float;
 precision highp int;
 
 uniform vec2  u_resolution;
+uniform vec2  u_sceneScale;
 uniform float u_time;
 uniform float u_scroll;
 
@@ -205,6 +206,16 @@ float sampleTextAlpha(vec2 worldUV) {
     return texture(u_textTex, clamp(uv2,0.0,1.0)).a * inB;
 }
 
+vec2 sceneUVFromScreen(vec2 screenUV) {
+    // Height-normalized scene UV:
+    // X follows aspect, Y matches screen UV, which keeps the horizon and water split stable.
+    return (screenUV - 0.5) * u_sceneScale + 0.5;
+}
+
+vec2 sceneCoordFromUV(vec2 sceneUV) {
+    return sceneUV * 2.0 - 1.0;
+}
+
 // ----------------------------------------------------
 // MAIN
 // ----------------------------------------------------
@@ -213,8 +224,9 @@ out vec4 fragColor;
 
 void main()
 {
-    vec2  uv    = gl_FragCoord.xy / u_resolution.xy;
-    vec2  coord = (gl_FragCoord.xy * 2.0 - u_resolution.xy) / u_resolution.y;
+    vec2  screenUV = gl_FragCoord.xy / u_resolution.xy;
+    vec2  uv    = sceneUVFromScreen(screenUV);
+    vec2  coord = sceneCoordFromUV(uv);
     const float horizon = 0.5;
     // AI: clamp the scene phase once up front so helper calls can reuse the same normalized value.
     float phase = clamp(u_scroll, 0.0, 1.0);
@@ -222,7 +234,7 @@ void main()
     vec3 horizonSky = skyColor(horizon, phase);
 
 #ifdef DEBUG_RIPPLE
-    float debugHeight = texture(u_rippleTex, uv).r;
+    float debugHeight = texture(u_rippleTex, screenUV).r;
     fragColor = vec4(vec3(debugHeight * 0.5 + 0.5), 1.0);
     return;
 #endif
@@ -339,7 +351,7 @@ void main()
 
         // ИНТЕРАКТИВНАЯ РЯБЬ
         {
-            vec2  rUV = vec2(uv.x, 1.0 - uv.y*2.0);
+            vec2  rUV = vec2(screenUV.x, 1.0 - screenUV.y*2.0);
             float rt  = u_rippleTexel;
             float rxP = texture(u_rippleTex, rUV+vec2(rt,0.0)).r;
             float rxN = texture(u_rippleTex, rUV-vec2(rt,0.0)).r;

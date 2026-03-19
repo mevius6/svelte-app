@@ -4,23 +4,49 @@ type TextTexture = {
   h: number
 }
 
+export type FoliageAtlasSourceSet = {
+  albedo: string
+  alpha: string
+  normal: string
+  roughness: string
+  translucency: string
+}
+
+export type FoliageAtlasTextureSet = {
+  albedo: WebGLTexture | null
+  alpha: WebGLTexture | null
+  normal: WebGLTexture | null
+  roughness: WebGLTexture | null
+  translucency: WebGLTexture | null
+}
+
 type LoadLandscapeResourcesOptions = {
   projectName: string
-  atlasSrc: string
+  atlasSources: FoliageAtlasSourceSet
   needsRippleFallback: boolean
+}
+
+function createEmptyFoliageAtlasTextures(): FoliageAtlasTextureSet {
+  return {
+    albedo: null,
+    alpha: null,
+    normal: null,
+    roughness: null,
+    translucency: null,
+  }
 }
 
 export class LandscapeResources {
 
   private textTextureRef: WebGLTexture | null = null
   private textTextureSizeRef = { w: 1, h: 1 }
-  private foliageAtlasRef: WebGLTexture | null = null
+  private foliageAtlasRef: FoliageAtlasTextureSet = createEmptyFoliageAtlasTextures()
   private rippleFallbackTextureRef: WebGLTexture | null = null
 
   constructor(private gl: WebGL2RenderingContext) {}
 
   async load(options: LoadLandscapeResourcesOptions) {
-    const { projectName, atlasSrc, needsRippleFallback } = options
+    const { projectName, atlasSources, needsRippleFallback } = options
 
     // AI: keep scene orchestration lean by centralizing landscape resource creation and ownership here.
     const textResult = this.createTextTexture(projectName)
@@ -30,7 +56,8 @@ export class LandscapeResources {
 
     this.textTextureRef = textResult.texture
     this.textTextureSizeRef = textResult
-    this.foliageAtlasRef = await this.loadTexture(atlasSrc)
+    // AI: the new grass atlas ships as a small PBR bundle, so keep the bundle load owned here instead of pushing that into the scene.
+    this.foliageAtlasRef = await this.loadFoliageAtlas(atlasSources)
 
     if (needsRippleFallback) {
       this.rippleFallbackTextureRef = this.createDummyRippleTexture()
@@ -59,10 +86,12 @@ export class LandscapeResources {
       this.textTextureRef = null
     }
 
-    if (this.foliageAtlasRef) {
-      this.gl.deleteTexture(this.foliageAtlasRef)
-      this.foliageAtlasRef = null
-    }
+    this.deleteTexture(this.foliageAtlasRef.albedo)
+    this.deleteTexture(this.foliageAtlasRef.alpha)
+    this.deleteTexture(this.foliageAtlasRef.normal)
+    this.deleteTexture(this.foliageAtlasRef.roughness)
+    this.deleteTexture(this.foliageAtlasRef.translucency)
+    this.foliageAtlasRef = createEmptyFoliageAtlasTextures()
 
     if (this.rippleFallbackTextureRef) {
       this.gl.deleteTexture(this.rippleFallbackTextureRef)
@@ -135,6 +164,24 @@ export class LandscapeResources {
     return { texture, w: off.width, h: off.height }
   }
 
+  private async loadFoliageAtlas(sources: FoliageAtlasSourceSet): Promise<FoliageAtlasTextureSet> {
+    const [albedo, alpha, normal, roughness, translucency] = await Promise.all([
+      this.loadTexture(sources.albedo),
+      this.loadTexture(sources.alpha),
+      this.loadTexture(sources.normal),
+      this.loadTexture(sources.roughness),
+      this.loadTexture(sources.translucency),
+    ])
+
+    return {
+      albedo,
+      alpha,
+      normal,
+      roughness,
+      translucency,
+    }
+  }
+
   private loadTexture(url: string): Promise<WebGLTexture | null> {
     return new Promise((resolve) => {
       const img = new Image()
@@ -186,6 +233,14 @@ export class LandscapeResources {
     this.gl.bindTexture(this.gl.TEXTURE_2D, null)
 
     return texture
+  }
+
+  private deleteTexture(texture: WebGLTexture | null) {
+    if (!texture) {
+      return
+    }
+
+    this.gl.deleteTexture(texture)
   }
 
 }

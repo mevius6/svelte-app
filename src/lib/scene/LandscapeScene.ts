@@ -1,10 +1,17 @@
 import { RipplePass } from "../passes/RipplePass"
 import { LandscapePass, type LandscapeDebugMode } from "../passes/LandscapePass"
 import { BushesPass } from "../passes/BushesPass"
-import { LandscapeResources } from "./LandscapeResources"
+import { LandscapeResources, type FoliageAtlasSourceSet } from "./LandscapeResources"
+import { computeSceneFrame } from "./sceneFraming"
 import type { Scene } from "./Scene"
 
-const DEFAULT_FOLIAGE_ATLAS_SRC = "/RobiniaViscosa_2_basecolor-1K.png"
+const DEFAULT_FOLIAGE_ATLAS_SOURCES: FoliageAtlasSourceSet = {
+  albedo: "/grass-atlas-web/TCom_Grass12_512_albedo.png",
+  alpha: "/grass-atlas-web/TCom_Grass12_512_alpha.png",
+  normal: "/grass-atlas-web/TCom_Grass12_512_normal.png",
+  roughness: "/grass-atlas-web/TCom_Grass12_512_roughness.png",
+  translucency: "/grass-atlas-web/TCom_Grass12_512_translucency.png",
+}
 const DROP_THROTTLE_MS = 45
 const VEGETATION_DEBUG_CLEAR: [number, number, number, number] = [0.03, 0.04, 0.06, 1.0]
 
@@ -19,7 +26,7 @@ export class LandscapeScene implements Scene {
 
   private gl: WebGL2RenderingContext
   private projectName: string
-  private atlasSrc: string
+  private atlasSources: FoliageAtlasSourceSet
 
   private ripple: RipplePass
   private landscape: LandscapePass
@@ -67,11 +74,11 @@ export class LandscapeScene implements Scene {
   constructor(
     gl: WebGL2RenderingContext,
     projectName: string,
-    atlasSrc = DEFAULT_FOLIAGE_ATLAS_SRC
+    atlasSources = DEFAULT_FOLIAGE_ATLAS_SOURCES
   ) {
     this.gl = gl
     this.projectName = projectName
-    this.atlasSrc = atlasSrc
+    this.atlasSources = atlasSources
 
     this.ripple = new RipplePass(gl)
     this.landscape = new LandscapePass(gl)
@@ -85,7 +92,7 @@ export class LandscapeScene implements Scene {
     // AI: keep LandscapeScene focused on input + pass orchestration by delegating GPU asset setup to LandscapeResources.
     await this.resources.load({
       projectName: this.projectName,
-      atlasSrc: this.atlasSrc,
+      atlasSources: this.atlasSources,
       needsRippleFallback: !this.ripple.enabled,
     })
 
@@ -125,16 +132,20 @@ export class LandscapeScene implements Scene {
     }
 
     const rippleTex = this.ripple.render(time, null) ?? this.resources.rippleFallbackTexture
-    const aspect = this.width / this.height
+    const sceneFrame = computeSceneFrame(this.width, this.height)
     const hw = 0.22
     const textTexSize = this.resources.textTextureSize
-    const hh = hw * aspect * (textTexSize.h / textTexSize.w)
+    const hh = hw * (textTexSize.h / textTexSize.w)
 
     this.landscape.setFrameState({
       scroll: this.scrollNorm,
       textTexture,
       textRect: { x: 0.5, y: 0.67, w: hw, h: hh },
       rippleTexelSize: this.ripple.texelSize,
+      sceneScale: {
+        x: sceneFrame.scaleX,
+        y: sceneFrame.scaleY,
+      },
     })
 
     if (this.passView === "ripple") {
@@ -148,7 +159,12 @@ export class LandscapeScene implements Scene {
       this.gl.clear(this.gl.COLOR_BUFFER_BIT)
       this.bushes.setFrameState({
         horizon: 0.5,
-        atlasTexture: this.resources.foliageAtlas,
+        phase: this.scrollNorm,
+        atlasTextures: this.resources.foliageAtlas,
+        sceneScale: {
+          x: sceneFrame.scaleX,
+          y: sceneFrame.scaleY,
+        },
       })
       this.bushes.render(time, null)
       return
@@ -161,7 +177,12 @@ export class LandscapeScene implements Scene {
     if (this.passView === "final") {
       this.bushes.setFrameState({
         horizon: 0.5,
-        atlasTexture: this.resources.foliageAtlas,
+        phase: this.scrollNorm,
+        atlasTextures: this.resources.foliageAtlas,
+        sceneScale: {
+          x: sceneFrame.scaleX,
+          y: sceneFrame.scaleY,
+        },
       })
       this.bushes.render(time, null)
     }

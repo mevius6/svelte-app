@@ -4,6 +4,7 @@
 	"version": "0.0.1",
 	"type": "module",
 	"scripts": {
+		"atlas:convert": "sh scripts/convert-grass-atlas.sh",
 		"dev": "vite dev --host 127.0.0.1 --port 4173 --strictPort",
 		"build": "vite build",
 		"start": "node build",

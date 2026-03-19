@@ -18,6 +18,10 @@ type LandscapeFrameState = {
   textTexture: WebGLTexture
   textRect: TextRect
   rippleTexelSize: number
+  sceneScale: {
+    x: number
+    y: number
+  }
 }
 
 function injectShaderDefines(source: string, defines: string[]) {
@@ -45,6 +49,7 @@ export class LandscapePass extends RenderPass {
   private textTexture: WebGLTexture | null = null
   private textRect: TextRect = { x: 0, y: 0, w: 0, h: 0 }
   private rippleTexelSize = 0
+  private sceneScale = { x: 1, y: 1 }
 
   constructor(gl: WebGL2RenderingContext) {
     super(gl)
@@ -57,6 +62,7 @@ export class LandscapePass extends RenderPass {
     this.textTexture = state.textTexture
     this.textRect = state.textRect
     this.rippleTexelSize = state.rippleTexelSize
+    this.sceneScale = state.sceneScale
   }
 
   setDebugMode(mode: LandscapeDebugMode) {
@@ -86,6 +92,7 @@ export class LandscapePass extends RenderPass {
     this.program.setFloat("u_time", time)
     this.program.setFloat("u_scroll", this.scroll)
     this.program.setVec2("u_resolution", this.width, this.height)
+    this.program.setVec2("u_sceneScale", this.sceneScale.x, this.sceneScale.y)
     this.program.setVec4(
       "u_textRect",
       this.textRect.x,
