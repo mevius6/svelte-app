@@ -68,9 +68,11 @@ Architectural heuristics:
 - Keep `Renderer` focused on runtime lifecycle, not scene-specific rendering decisions.
 - Keep `LandscapeScene` as a coordinator for input, frame state, and pass ordering, not as a container for GPU asset creation.
 - Keep GPU asset creation/loading/disposal in a dedicated resource layer when that keeps the scene thinner.
+- Keep aspect-ratio / scene framing logic shared and explicit; prefer a single scene-space framing helper over ad hoc per-pass aspect fixes.
 - Prefer one pass per role: simulation, landscape shading, vegetation, and post-processing should stay explicitly separated.
 - Preserve the invariant that ripple perturbs water normals, never direct water color.
 - Add new abstractions only when they simplify the current code, not as speculative architecture.
+- When a task materially changes the runtime baseline (pipeline ownership, asset model, framing, shader assumptions, debug workflow), update `README.md` and this file in the same iteration.
 
 ## 3. Render pipeline
 
@@ -217,6 +219,9 @@ The project has already completed the main architectural extraction. Treat the f
 - Legacy wrappers and temporary proxy files have already been removed. Do not recreate `LandscapeShader.svelte`, `VegetationPass.ts`, old `scenes/` wrappers, or old `gl/renderer` compatibility paths.
 - `LandscapeViewport.svelte` is intentionally a thin Svelte host component. It should stay focused on canvas mounting, scene bootstrapping, and dev-only debug UI.
 - `LandscapeScene` already delegates scene-local GPU resource setup/load/dispose to `LandscapeResources`. Treat that resource split as the baseline, not as future work to redo.
+- The vegetation baseline is now a small grass PBR atlas bundle (`albedo`, `alpha`, `normal`, `roughness`, `translucency`) loaded by `LandscapeResources`, not a single foliage color atlas.
+- `BushesPass` owns the vegetation atlas region definitions and instance mapping. Keep atlas layout assumptions explicit on the CPU side instead of hardcoding sprite partitions in GLSL.
+- Shared resize/framing math now lives in `src/lib/scene/sceneFraming.ts` and uses height-normalized scene space. Treat that as the baseline for future aspect-ratio fixes in both landscape and vegetation paths.
 - Debug pass switches already exist in development mode and are wired to `Ripple`, `Landscape`, and `Vegetation/Bushes` views.
 - The project now uses `@sveltejs/adapter-node` because article pages rely on server `load` functions and private Strapi environment variables. Production runtime is Node-based.
 
@@ -225,7 +230,8 @@ The project has already completed the main architectural extraction. Treat the f
 Use this as the preferred order for upcoming work:
 
 1. Keep `LandscapeScene.ts` as a thin coordinator by extracting only the remaining non-orchestration concerns that still obscure pass ordering or input/state flow. `LandscapeResources` is already the baseline for scene-local GPU asset ownership.
-2. Reassess whether pass ownership/orchestration should remain in `LandscapeScene` or move further into `Renderer`, but only if that change improves clarity without changing behavior.
-3. Perform safe shader optimization passes on real hot spots, starting with SKY/CLOUD work (`cloudFbm`, cloud density, repeated sky/sun intermediates), preserving the current image.
-4. Then evaluate wave/normal/reflection repetition only if the shader still has obvious hot spots after the sky/cloud pass.
-5. Keep validating the core invariant: ripple affects water normals, not direct color, and verify that debug views still work after each substantial change.
+2. Keep `README.md` and this instruction file in sync with meaningful runtime baseline changes, especially when atlas ownership, framing math, pass roles, or debug workflows change.
+3. Reassess whether pass ownership/orchestration should remain in `LandscapeScene` or move further into `Renderer`, but only if that change improves clarity without changing behavior.
+4. Perform safe shader optimization passes on real hot spots, starting with SKY/CLOUD work (`cloudFbm`, cloud density, repeated sky/sun intermediates), preserving the current image.
+5. Then evaluate wave/normal/reflection repetition only if the shader still has obvious hot spots after the sky/cloud pass.
+6. Keep validating the core invariant: ripple affects water normals, not direct color, and verify that debug views still work after each substantial change.
