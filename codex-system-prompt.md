@@ -223,7 +223,7 @@ The project has already completed the main architectural extraction. Treat the f
 - `BushesPass` owns the vegetation atlas region definitions and instance mapping. Keep atlas layout assumptions explicit on the CPU side instead of hardcoding sprite partitions in GLSL.
 - Shared resize/framing math now lives in `src/lib/scene/sceneFraming.ts` and uses height-normalized scene space. Treat that as the baseline for future aspect-ratio fixes in both landscape and vegetation paths.
 - Debug pass switches already exist in development mode and are wired to `Ripple`, `Landscape`, and `Vegetation/Bushes` views.
-- The project now uses `@sveltejs/adapter-node` because article pages rely on server `load` functions and private Strapi environment variables. Production runtime is Node-based.
+- The project now uses `@sveltejs/adapter-vercel` so Vercel builds the correct platform output. Article pages still rely on server `load` functions and private Strapi environment variables.
 
 ## 11. Next iterations
 

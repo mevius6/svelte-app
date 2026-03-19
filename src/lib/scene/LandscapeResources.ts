@@ -109,7 +109,7 @@ export class LandscapeResources {
     }
 
     const fontSize = 96
-    const fontStr = `300 ${fontSize}px "Georgia", "Times New Roman", serif`
+    const fontStr = `800 ${fontSize}px "roslindale", "Times New Roman", serif`
     const display = text.toUpperCase()
 
     if ("letterSpacing" in ctx) {

@@ -7,7 +7,7 @@
     type SceneDebugState,
   } from "$lib/scene/LandscapeScene"
 
-  export let projectName = "dummy"
+  export let projectName = "Чистые пруды"
 
   const isDev = import.meta.env.DEV
 

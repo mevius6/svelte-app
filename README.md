@@ -68,7 +68,7 @@ Post-processing в активный pipeline пока не подключён.
 - Общая framing-модель height-normalized: при resize меняется горизонтальный охват сцены, а не вертикальные пропорции композиции.
 - Эту framing-модель считают в `src/lib/scene/sceneFraming.ts` и прокидывают в `LandscapePass` и `BushesPass` как shared frame state.
 
-Deployment/runtime: проект собирается через `@sveltejs/adapter-node`, потому что статьи загружаются в server `load` и используют private env для Strapi. Production-сборка запускается командой `npm run start`.
+Deployment/runtime: проект собирается через `@sveltejs/adapter-vercel`. Server `load` и private env для Strapi остаются валидными на Vercel, а production-артефакт больше не должен разворачиваться как статическая папка с `build/index.js`.
 
 ## Asset workflow
 

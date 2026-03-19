@@ -3,6 +3,7 @@ node_modules/
 
 # SvelteKit / Vite
 .svelte-kit/
+.vercel/
 build/
 package/
 vite.config.js.timestamp-*

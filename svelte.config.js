@@ -1,9 +1,9 @@
-import adapter from '@sveltejs/adapter-node';
+import adapter from '@sveltejs/adapter-vercel';
 
 /** @type {import('@sveltejs/kit').Config} */
 const config = {
 	kit: {
-		// AI: use the explicit Node adapter because the app relies on server loads and dynamic private env for Strapi.
+		// Use the Vercel adapter so the platform runs the app instead of serving the Node entry file as static output.
 		adapter: adapter()
 	}
 };
