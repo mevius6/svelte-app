@@ -21,6 +21,8 @@ Prefer these sources when making implementation decisions, writing explanations,
   - `https://svelte.dev/docs/svelte/best-practices` for component structure, reactivity, events, and general Svelte style decisions.
 - WebGL / shaders:
   - `https://mini.gmshaders.com/` for practical shader tips, common mistakes, small techniques, and optimization instincts.
+  - `https://mini.gmshaders.com/p/vector-spaces` for object/world/view/projection mental models and debugging space-mismatch issues.
+  - `https://mini.gmshaders.com/p/guest-bart` for world-space billboarding / sprite-card transform order and center-anchored quad placement.
   - `https://thebookofshaders.com/` for foundational GLSL, shaping, noise, patterns, simulation, and lighting concepts.
   - `https://iquilezles.org/articles/` for deeper articles on noise, fBM, domain warping, SDFs, terrain rendering, filtering, and procedural math.
   - `https://blog.pkh.me/index.html` for compact graphics notes on SDFs, ray marching, filtering, color, and shader math.
@@ -31,6 +33,8 @@ How to use them:
 
 - For Svelte work, prefer official Svelte docs over generic framework advice.
 - For shader and procedural graphics work, use GM Shaders for concise heuristics, The Book of Shaders for fundamentals, Inigo Quilez articles for deeper math/technique references, PKH Notebook for compact deep dives on shader math/SDF topics, and Maxime Heckel for creative-coding presentation patterns and visual framing ideas.
+- When debugging "this feels like an overlay" problems, treat coordinate-space mismatch as a first-class suspect and use `Vector Spaces` as the first reference before blaming the atlas, art, or lighting.
+- For billboard/card vegetation, prefer the transform order described in `Guest: Bart`: keep a stable center/root in world space, rotate/expand the quad around that local center, then project with the camera; avoid horizon-only placement as anything more than a temporary scaffold.
 - Use Graphics Programming Weekly as a discovery layer for additional high-signal graphics references, but still prefer primary technical sources when applying a technique.
 - Reference these sources to support decisions, but do not cargo-cult patterns that add abstraction without reducing current code complexity.
 
@@ -57,6 +61,7 @@ src/lib/
 
   scene/
     LandscapeScene.ts
+    sceneCamera.ts
     LandscapeResources.ts
 ```
 
@@ -73,6 +78,8 @@ Architectural heuristics:
 - Keep `LandscapeScene` as a coordinator for input, frame state, and pass ordering, not as a container for GPU asset creation.
 - Keep GPU asset creation/loading/disposal in a dedicated resource layer when that keeps the scene thinner.
 - Keep aspect-ratio / scene framing logic shared and explicit; prefer a single scene-space framing helper over ad hoc per-pass aspect fixes.
+- Treat current visual flatness as a camera/world-space problem first, not as immediate justification for migrating to a heavy 3D engine.
+- Prefer a hybrid migration path: fullscreen pass + orbital/world-space camera first, then selective SDF / volumetrics / hero geometry only where that materially improves storytelling.
 - Prefer one pass per role: simulation, landscape shading, vegetation, and post-processing should stay explicitly separated.
 - Preserve the invariant that ripple perturbs water normals, never direct water color.
 - Add new abstractions only when they simplify the current code, not as speculative architecture.
@@ -87,6 +94,20 @@ Assume this intended pipeline and keep it intact:
 3. `BushesPass` — instanced vegetation cards rendered over the landscape.
 
 If you introduce a post-processing pass, place it after these passes.
+
+## 3.1. Camera-Space Migration Strategy
+
+Use this as the preferred depth/immersion strategy for the project:
+
+- Keep the current WebGL2 + custom-pass architecture; do not jump to three.js/Babylon or a full scene-graph rewrite just to gain depth.
+- First introduce an orbital camera model and world-space ray reconstruction inside `LandscapePass`.
+- Then move water and shoreline logic from pure screen-space composition to world-space intersections (water plane, shoreline plane/heightfield, reflection rays).
+- Keep `RipplePass` as a separate simulation pass, but remap input and texture sampling into world-water coordinates.
+- After water/shoreline are stable, calibrate the scene to pond-scale rather than open-water scale when the project reference calls for a compact urban pond.
+- Migrate vegetation from horizon-locked overlay logic into world-space shoreline placement before treating atlas cards as a failed technique.
+- For vegetation migration, keep `BushesPass` as a separate pass, but store instance roots in shoreline/world space and project them through the same camera model as `LandscapePass`.
+- Move title/text from 2D overlay treatment toward world-anchored SDF/MSDF rendering before considering full 3D text extrusion.
+- Use SDF selectively for hero objects, volumetrics, reveal masks, and story hotspots; avoid turning the entire scene into an SDF world unless it clearly reduces complexity and improves the result.
 
 ## 4. Shader architecture and ripple integration
 
@@ -226,6 +247,10 @@ The project has already completed the main architectural extraction. Treat the f
 - The vegetation baseline is now a small grass PBR atlas bundle (`albedo`, `alpha`, `normal`, `roughness`, `translucency`) loaded by `LandscapeResources`, not a single foliage color atlas.
 - `BushesPass` owns the vegetation atlas region definitions and instance mapping. Keep atlas layout assumptions explicit on the CPU side instead of hardcoding sprite partitions in GLSL.
 - Shared resize/framing math now lives in `src/lib/scene/sceneFraming.ts` and uses height-normalized scene space. Treat that as the baseline for future aspect-ratio fixes in both landscape and vegetation paths.
+- `src/lib/scene/sceneCamera.ts` is the place to grow orbital camera state, screen-to-world ray helpers, water-plane hit testing, and the migration away from purely screen-space landscape composition.
+- The landscape baseline now reads as a compact pond rather than open water: opposite-bank termination and pond-scale framing are intentional parts of the current scene direction.
+- `BushesPass` has started Phase 1.6 migration: card roots now belong in shoreline/world space and should project through the same orbital camera model as `LandscapePass`.
+- The current vegetation output is still an evaluation scaffold. If cards feel detached from the bank during scroll/camera motion, first treat that as an anchoring/projection/integration bug, not as proof that atlas-card vegetation is invalid.
 - Debug pass switches already exist in development mode and are wired to `Ripple`, `Landscape`, and `Vegetation/Bushes` views.
 - The project now uses `@sveltejs/adapter-vercel` so Vercel builds the correct platform output. Article pages still rely on server `load` functions and private Strapi environment variables.
 
@@ -234,8 +259,13 @@ The project has already completed the main architectural extraction. Treat the f
 Use this as the preferred order for upcoming work:
 
 1. Keep `LandscapeScene.ts` as a thin coordinator by extracting only the remaining non-orchestration concerns that still obscure pass ordering or input/state flow. `LandscapeResources` is already the baseline for scene-local GPU asset ownership.
-2. Keep `README.md` and this instruction file in sync with meaningful runtime baseline changes, especially when atlas ownership, framing math, pass roles, or debug workflows change.
-3. Reassess whether pass ownership/orchestration should remain in `LandscapeScene` or move further into `Renderer`, but only if that change improves clarity without changing behavior.
-4. Perform safe shader optimization passes on real hot spots, starting with SKY/CLOUD work (`cloudFbm`, cloud density, repeated sky/sun intermediates), preserving the current image.
-5. Then evaluate wave/normal/reflection repetition only if the shader still has obvious hot spots after the sky/cloud pass.
+2. Use the current migration order for scene depth:
+   - Phase 1: orbital camera + world-ray reconstruction in `LandscapePass`
+   - Phase 1.5: pond-scale calibration + finite opposite-bank read
+   - Phase 1.6: vegetation world-space migration (shoreline-rooted cards, camera-projected placement, no final dependence on a shared `u_horizon`)
+   - Phase 2: world-anchored title/SDF text
+   - Phase 3: selective SDF / volumetrics / hero-object depth work
+3. Keep `README.md` and this instruction file in sync with meaningful runtime baseline changes, especially when camera model, atlas ownership, framing math, pass roles, or debug workflows change.
+4. Reassess whether pass ownership/orchestration should remain in `LandscapeScene` or move further into `Renderer`, but only if that change improves clarity without changing behavior.
+5. Perform safe shader optimization passes on real hot spots only after the camera/world-space migration has stabilized enough that we are not optimizing code that is about to be replaced.
 6. Keep validating the core invariant: ripple affects water normals, not direct color, and verify that debug views still work after each substantial change.

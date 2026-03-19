@@ -25,6 +25,11 @@ export class Program {
     if (l !== null) this.gl.uniform2f(l, x, y)
   }
 
+  setVec3(name: string, x: number, y: number, z: number) {
+    const l = this.loc(name)
+    if (l !== null) this.gl.uniform3f(l, x, y, z)
+  }
+
   setVec4(name: string, x: number, y: number, z: number, w: number) {
     const l = this.loc(name)
     if (l !== null) this.gl.uniform4f(l, x, y, z, w)

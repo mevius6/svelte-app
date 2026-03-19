@@ -12,6 +12,14 @@ uniform vec4      u_textRect;
 
 uniform sampler2D u_rippleTex;
 uniform float     u_rippleTexel;
+uniform vec3      u_cameraPos;
+uniform vec3      u_cameraRight;
+uniform vec3      u_cameraUp;
+uniform vec3      u_cameraForward;
+uniform float     u_cameraTanHalfFovY;
+uniform vec4      u_rippleWorldRect;
+uniform float     u_waterLevel;
+uniform float     u_shorePlaneZ;
 
 #define PI 3.14159265359
 
@@ -32,11 +40,20 @@ vec3 tonemap(vec3 x)
     return pow(clamp((x*(a*x+b))/(x*(c*x+d)+e),0.0,1.0), vec3(1.0/2.2));
 }
 
-void sun(in float phase01, out vec2 pos, out vec3 col)
+vec3 sunColor(float phase01)
 {
-    float sunY = mix(0.52, 0.68, sin(phase01*PI));
-    pos = vec2(mix(0.25,0.75,phase01), sunY);
-    col = mix(vec3(1.0,0.7,0.45), vec3(1.0,0.55,0.25), phase01);
+    return mix(vec3(1.0,0.7,0.45), vec3(1.0,0.55,0.25), phase01);
+}
+
+vec3 sunDirection(float phase01)
+{
+    float azimuth = mix(-0.78, 0.78, phase01);
+    float elevation = mix(0.08, 0.34, sin(phase01 * PI));
+    return normalize(vec3(
+        sin(azimuth) * cos(elevation),
+        sin(elevation),
+        -cos(azimuth) * cos(elevation)
+    ));
 }
 
 // ----------------------------------------------------
@@ -154,12 +171,12 @@ const vec2 DIR_M1=vec2( 0.5145, 0.8575), DIR_M2=vec2(-0.9285, 0.3714), DIR_M3=ve
 const vec2 DIR_R1=vec2( 0.8000, 0.6000), DIR_R2=vec2(-0.2873, 0.9578), DIR_R3=vec2( 0.1961,-0.9806), DIR_R4=vec2(-0.9479, 0.3159);
 
 float largeWaves(vec2 p,float t,float depthMask){
-    return(wave(p,DIR_L1,1.2,0.25,t)*0.035+wave(p,DIR_L2,1.0,0.20,t)*0.025)*depthMask;}
+    return(wave(p,DIR_L1,1.2,0.25,t)*0.022+wave(p,DIR_L2,1.0,0.20,t)*0.016)*depthMask;}
 float mediumWaves(vec2 p,float t,float depthMask){
-    return(wave(p,DIR_M1,3.0,0.55,t)*0.06+wave(p,DIR_M2,3.8,0.50,t)*0.05+wave(p,DIR_M3,2.6,0.42,t)*0.04)*depthMask;}
+    return(wave(p,DIR_M1,3.0,0.55,t)*0.040+wave(p,DIR_M2,3.8,0.50,t)*0.032+wave(p,DIR_M3,2.6,0.42,t)*0.025)*depthMask;}
 float ripples(vec2 p,float t,float depthMask){
-    return(wave(p,DIR_R1,10.0,1.10,t)*0.025+wave(p,DIR_R2,14.0,1.30,t)*0.020
-          +wave(p,DIR_R3,18.0,1.60,t)*0.015+wave(p,DIR_R4,11.5,0.95,t)*0.018)*depthMask;}
+    return(wave(p,DIR_R1,10.0,1.10,t)*0.018+wave(p,DIR_R2,14.0,1.30,t)*0.015
+          +wave(p,DIR_R3,18.0,1.60,t)*0.011+wave(p,DIR_R4,11.5,0.95,t)*0.013)*depthMask;}
 
 float waveFieldWithMasks(
     vec2 p,
@@ -168,8 +185,8 @@ float waveFieldWithMasks(
     float mediumMask,
     float rippleMask
 ) {
-    vec2 warp=vec2(sin(p.x*0.7+t*0.15)*0.18+sin(p.y*0.5+t*0.11)*0.12,
-                   sin(p.y*0.6+t*0.13)*0.18+sin(p.x*0.4+t*0.09)*0.12);
+    vec2 warp=vec2(sin(p.x*0.7+t*0.15)*0.12+sin(p.y*0.5+t*0.11)*0.08,
+                   sin(p.y*0.6+t*0.13)*0.12+sin(p.x*0.4+t*0.09)*0.08);
     vec2 pw=p+warp;
     // AI: reuse precomputed depth masks from the caller; the layered wave blend is otherwise identical.
     return largeWaves(pw,t,largeMask)+mediumWaves(pw,t,mediumMask)+ripples(pw*1.8,t,rippleMask)*0.8;
@@ -206,6 +223,93 @@ float sampleTextAlpha(vec2 worldUV) {
     return texture(u_textTex, clamp(uv2,0.0,1.0)).a * inB;
 }
 
+float saturate(float v) {
+    return clamp(v, 0.0, 1.0);
+}
+
+vec3 makeCameraRay(vec2 screenUV) {
+    vec2 ndc = screenUV * 2.0 - 1.0;
+    float aspect = u_resolution.x / max(u_resolution.y, 1.0);
+
+    return normalize(
+        u_cameraForward
+      + u_cameraRight * ndc.x * aspect * u_cameraTanHalfFovY
+      + u_cameraUp * ndc.y * u_cameraTanHalfFovY
+    );
+}
+
+vec2 skyUvFromDirection(vec3 dir) {
+    float y = saturate(dir.y * 0.5 + 0.5);
+    vec2 dome = dir.xz / max(dir.y + 0.38, 0.16);
+    return vec2(dome.x * 0.18 + 0.5, y);
+}
+
+vec3 shadeSkyDirection(vec3 dir, float phase01, vec3 sunCol, vec3 sunDir) {
+    vec2 skyUv = skyUvFromDirection(dir);
+    float skyY = skyUv.y;
+    vec3 sky = skyColor(skyY, phase01);
+
+    float sunAmount = max(dot(dir, sunDir), 0.0);
+    float sunCore = pow(sunAmount, 1024.0);
+    float sunGlow = pow(sunAmount, 64.0);
+    float sunWash = pow(sunAmount, 14.0);
+    vec3 sunLight = sunCol * (sunCore * 4.0 + sunGlow * 0.85 + sunWash * 0.22);
+
+    float cloudBase;
+    float density = cloudDensity(skyUv, u_time, phase01, cloudBase);
+    float cloudBaseLight = smoothstep(0.52, 0.58, cloudBase);
+    float sunLitCloud = sunWash * 0.15;
+    vec3 warmCloudLight = sunCol * 1.3 + vec3(0.25);
+    vec3 cloudLight = mix(vec3(1.0, 1.0, 1.05), warmCloudLight, sunWash);
+    cloudLight *= mix(0.72, 1.0, cloudBaseLight);
+
+    return mix(sky + sunLight, cloudLight + sunLight * sunLitCloud, density);
+}
+
+bool insideUnitSquare(vec2 uv) {
+    return all(greaterThanEqual(uv, vec2(0.0))) &&
+           all(lessThanEqual(uv, vec2(1.0)));
+}
+
+vec2 waterWorldToRippleUV(vec3 worldPos) {
+    return (worldPos.xz - u_rippleWorldRect.xy) / u_rippleWorldRect.zw;
+}
+
+bool intersectWater(vec3 ro, vec3 rd, out float t, out vec3 pos) {
+    if (rd.y >= -0.0001) {
+        return false;
+    }
+
+    t = (u_waterLevel - ro.y) / rd.y;
+    if (t <= 0.0) {
+        return false;
+    }
+
+    pos = ro + rd * t;
+    return true;
+}
+
+float shorelineHeightAt(float worldX) {
+    float x01 = clamp(worldX * 0.16 + 0.5, 0.0, 1.0);
+    return u_waterLevel + max((baselineSilhouette(x01) - 0.513) * 1.45, 0.0);
+}
+
+bool intersectShore(vec3 ro, vec3 rd, out float t, out vec3 pos, out float height) {
+    if (abs(rd.z) <= 0.0001) {
+        return false;
+    }
+
+    t = (u_shorePlaneZ - ro.z) / rd.z;
+    if (t <= 0.0) {
+        return false;
+    }
+
+    pos = ro + rd * t;
+    height = shorelineHeightAt(pos.x);
+    // AI: Phase 1.5 treats the opposite bank as a real low embankment that terminates the pond, not only as a top-edge silhouette over infinite water.
+    return pos.y >= u_waterLevel - 0.008 && pos.y <= height + 0.008;
+}
+
 vec2 sceneUVFromScreen(vec2 screenUV) {
     // Height-normalized scene UV:
     // X follows aspect, Y matches screen UV, which keeps the horizon and water split stable.
@@ -224,238 +328,198 @@ out vec4 fragColor;
 
 void main()
 {
-    vec2  screenUV = gl_FragCoord.xy / u_resolution.xy;
-    vec2  uv    = sceneUVFromScreen(screenUV);
-    vec2  coord = sceneCoordFromUV(uv);
-    const float horizon = 0.5;
-    // AI: clamp the scene phase once up front so helper calls can reuse the same normalized value.
+    vec2 screenUV = gl_FragCoord.xy / u_resolution.xy;
+    vec3 ro = u_cameraPos;
+    vec3 rd = makeCameraRay(screenUV);
+    // AI: Phase 1 keeps the fullscreen pass, but moves the landscape into orbital camera/world-ray space so depth no longer depends only on a screen-space horizon split.
     float phase = clamp(u_scroll, 0.0, 1.0);
-    // AI: horizon sky color is used in both sky fog and water blend, so cache it once per fragment.
-    vec3 horizonSky = skyColor(horizon, phase);
+    vec3 sunCol = sunColor(phase);
+    vec3 sunDir = sunDirection(phase);
+    vec3 horizonSky = skyColor(0.5, phase);
+    float tWater;
+    vec3 waterPos;
+    bool hasWater = intersectWater(ro, rd, tWater, waterPos);
+    float tShore;
+    vec3 shorePos;
+    float shoreHeight;
+    bool hasShore = intersectShore(ro, rd, tShore, shorePos, shoreHeight);
+    bool waterWithinPond = hasWater && waterPos.z > u_shorePlaneZ;
+    bool shoreOccludes = hasShore && (!waterWithinPond || !hasWater || tShore < tWater);
 
 #ifdef DEBUG_RIPPLE
-    float debugHeight = texture(u_rippleTex, screenUV).r;
+    float debugHeight = 0.0;
+    if (waterWithinPond) {
+        vec2 rippleDebugUv = waterWorldToRippleUV(waterPos);
+        if (insideUnitSquare(rippleDebugUv)) {
+            debugHeight = texture(u_rippleTex, rippleDebugUv).r;
+        }
+    }
     fragColor = vec4(vec3(debugHeight * 0.5 + 0.5), 1.0);
     return;
 #endif
 
-    vec3 col;
-    vec2 sunPos; vec3 sunCol;
-    sun(phase, sunPos, sunCol);
-
-    // ----------------------------------------------------
-    // SKY
-    // ----------------------------------------------------
-    if (uv.y >= horizon)
+    if (shoreOccludes)
     {
 #ifdef DEBUG_NORMALS
         fragColor = vec4(0.0, 0.0, 0.0, 1.0);
         return;
 #endif
 
+        vec3 skyCol = shadeSkyDirection(rd, phase, sunCol, sunDir);
+
 #ifdef DEBUG_REFLECTION
-        fragColor = vec4(tonemap(skyColor(uv.y, phase)), 1.0);
+        fragColor = vec4(tonemap(skyCol), 1.0);
         return;
 #endif
 
-        vec3 sky = skyColor(uv.y, phase);
+        float hNorm = saturate((shorePos.y - u_waterLevel) / max(shoreHeight - u_waterLevel, 0.001));
+        float bankNoise = shoreFbm(shorePos.x * 1.35 + 17.0, 61.7);
+        float topEdge = exp(-abs(shoreHeight - shorePos.y) * 130.0);
+        float waterline = exp(-abs(shorePos.y - u_waterLevel) * 150.0);
+        float sunFacing = saturate(dot(normalize(vec3(0.0, 0.32, 1.0)), sunDir) * 0.5 + 0.5);
+        float crestMask = smoothstep(0.58, 0.94, hNorm);
+        vec3 bankShadow = mix(vec3(0.060, 0.050, 0.052), vec3(0.070, 0.048, 0.046), phase);
+        vec3 bankLight = mix(vec3(0.122, 0.112, 0.092), vec3(0.140, 0.104, 0.070), phase);
+        vec3 bankGrass = mix(vec3(0.090, 0.102, 0.070), vec3(0.112, 0.096, 0.062), phase);
+        vec3 shoreCol = mix(bankShadow, bankLight, pow(hNorm, 0.72));
+        shoreCol *= mix(0.86, 1.06, sunFacing * 0.34 + hNorm * 0.22);
+        shoreCol *= mix(0.94, 1.06, bankNoise);
+        shoreCol = mix(shoreCol, bankGrass + skyCol * 0.10, crestMask * (0.28 + bankNoise * 0.18));
+        shoreCol = mix(shoreCol, skyCol * 0.66 + vec3(0.032, 0.028, 0.032), crestMask * 0.10);
+        shoreCol += (sunCol * 0.09 + skyCol * 0.08) * topEdge;
+        shoreCol -= waterline * vec3(0.008, 0.006, 0.008);
 
-        // AI: cache repeated sun/cloud intermediates locally; this keeps the same sky lighting response with fewer duplicate ops.
-        float d            = length(uv - sunPos);
-        float sunGlowTight = exp(-d * 20.0);
-        float sunGlowWide  = exp(-d * 6.0);
-        float sunInfluence = exp(-d * 4.5);
-        vec3  sunLight     = sunCol * (sunGlowTight * 3.0 + sunGlowWide * 0.5);
-
-        float cloudBase;
-        float density          = cloudDensity(uv, u_time, phase, cloudBase);
-        float cloudBaseLight   = smoothstep(0.52,0.58,cloudBase);
-        float sunLitCloud      = sunInfluence * 0.15;
-        vec3  warmCloudLight   = sunCol * 1.3 + vec3(0.25);
-        vec3  cloudLight       = mix(vec3(1.0,1.0,1.05), warmCloudLight, sunInfluence);
-        cloudLight            *= mix(0.72, 1.0, cloudBaseLight);
-
-        col = mix(sky + sunLight, cloudLight + sunLight * sunLitCloud, density);
-
-        // Название в небе
-        vec3 titleWarm = sunCol * 1.25 + vec3(0.20,0.22,0.28);
-        vec3 titleCol = mix(vec3(1.00,0.97,0.91), titleWarm, sunInfluence * 0.55);
-        col = mix(col, titleCol, sampleTextAlpha(uv) * 0.90);
-
-        // Сглаживание горизонта
-        float skyFog = smoothstep(horizon + 0.018, horizon, uv.y) * 0.55;
-        col = mix(col, horizonSky, skyFog);
-
-        // РАСТИТЕЛЬНОСТЬ БЕРЕГА
-        //
-        // baselineSilhouette обеспечивает сплошную тёмную ленту по всему горизонту.
-        //
-        // Rim-light: единый для топ-кромки всего силуэта (vegTop).
-        //   exp(-Δy*k) → узкая подсветка, k=88 → ~0.01 UV ширина.
-        //   Имитирует солнечный контур кроны у рассвета/заката.
-        //
-        // Ref: IQ "Outdoors Lighting" — rim-light на силуэтах
-        //      https://iquilezles.org/articles/outdoorslighting/
-
-        // Сильное ограничение по вертикали: считаем силуэт только
-        // в узкой полосе вокруг горизонта, остальное не трогаем.
-        float vegBandMin = horizon - 0.02;
-        float vegBandMax = horizon + 0.16;
-        if (uv.y < vegBandMin || uv.y > vegBandMax) {
-            fragColor = vec4(tonemap(col), 1.0);
-            return;
-        }
-
-        // ДАЛЬНИЙ БЕРЕГ (МЯГКИЙ СИЛУЭТ)
-        {
-            float base = baselineSilhouette(uv.x);
-
-            // тонкая тёмная полоса по всему горизонту
-            float iBase = smoothstep(base + 0.0020, base - 0.0020, uv.y);
-
-            if (iBase > 0.001) {
-                vec3 baseC = mix(vec3(0.022, 0.028, 0.058),
-                                 vec3(0.032, 0.016, 0.030), phase);
-
-                vec3 vc = mix(col, baseC, iBase);
-
-                // лёгкий rim-light по верхней кромке base
-                vec3  rimC    = sunCol * 0.40 + skyColor(base, phase) * 0.25;
-                float rimBase = exp(-max(base - uv.y, 0.0) * 72.0) * iBase;
-                vc += rimC * rimBase * 0.35;
-
-                col = vc;
-            }
-
-            fragColor = vec4(tonemap(col), 1.0);
-            return;
-        }
-
+        fragColor = vec4(tonemap(shoreCol), 1.0);
+        return;
     }
+
+    if (!waterWithinPond)
+    {
+#ifdef DEBUG_NORMALS
+        fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+        return;
+#endif
+
+        vec3 skyCol = shadeSkyDirection(rd, phase, sunCol, sunDir);
+
+#ifdef DEBUG_REFLECTION
+        fragColor = vec4(tonemap(skyCol), 1.0);
+        return;
+#endif
+
+        vec3 titleWarm = sunCol * 1.25 + vec3(0.20, 0.22, 0.28);
+        vec3 titleCol = mix(vec3(1.00, 0.97, 0.91), titleWarm, pow(max(dot(rd, sunDir), 0.0), 6.0) * 0.55);
+        skyCol = mix(skyCol, titleCol, sampleTextAlpha(screenUV) * 0.90);
+
+        fragColor = vec4(tonemap(skyCol), 1.0);
+        return;
+    }
+
     // ----------------------------------------------------
     // WATER
     // ----------------------------------------------------
-    else
+    float t = u_time;
+    // AI: derive water detail from actual camera distance + grazing angle; reusing shore/ripple-rect Z here flattens the whole far field into a fake pastel wall.
+    float viewDistance = tWater;
+    float farField = smoothstep(7.0, 26.0, viewDistance);
+    float horizonGrazing = 1.0 - smoothstep(0.006, 0.05, abs(rd.y));
+    float horizonMist = farField * horizonGrazing;
+    float nearField = 1.0 - farField;
+    float largeWaveMask  = mix(1.0, 0.68, farField);
+    float mediumWaveMask = mix(1.0, 0.44, farField);
+    float rippleWaveMask = mix(1.0, 0.18, farField);
+    float microNoiseMask = mix(1.0, 0.22, farField);
+    vec2 p = waterPos.xz * 1.1;
+
+    // НОРМАЛЬ ВОЛН
+    vec3 n = waveNormal(p, t, largeWaveMask, mediumWaveMask, rippleWaveMask);
+
+    // ИНТЕРАКТИВНАЯ РЯБЬ
     {
-        float t     = u_time;
-        float depth = clamp(1.0 - uv.y/horizon, 0.0, 1.0);
-        float largeWaveMask  = smoothstep(0.05,0.7,depth);
-        float mediumWaveMask = smoothstep(0.0,0.9,depth);
-        float rippleWaveMask = smoothstep(0.15,1.0,clamp(depth*1.5,0.0,1.0));
-        float microNoiseMask = smoothstep(0.0,0.35,depth);
-        float perspScale = 1.0 / (depth + 0.12);
-        vec2  p = vec2(coord.x * perspScale, coord.y) * 2.2;
-
-        // НОРМАЛЬ ВОЛН
-        vec3 n = waveNormal(p, t, largeWaveMask, mediumWaveMask, rippleWaveMask);
-
-        // ИНТЕРАКТИВНАЯ РЯБЬ
-        {
-            vec2  rUV = vec2(screenUV.x, 1.0 - screenUV.y*2.0);
+        vec2 rUV = waterWorldToRippleUV(waterPos);
+        if (insideUnitSquare(rUV)) {
             float rt  = u_rippleTexel;
-            float rxP = texture(u_rippleTex, rUV+vec2(rt,0.0)).r;
-            float rxN = texture(u_rippleTex, rUV-vec2(rt,0.0)).r;
-            float ryP = texture(u_rippleTex, rUV+vec2(0.0,rt)).r;
-            float ryN = texture(u_rippleTex, rUV-vec2(0.0,rt)).r;
-            // AI: keep ripple perturbation in ripple-texture space; no extra perspective scaling at this stage.
-            n = normalize(n + vec3(-(rxP-rxN)*5.0, 0.0, -(ryP-ryN)*5.0));
+            float rxP = texture(u_rippleTex, clamp(rUV + vec2(rt, 0.0), 0.0, 1.0)).r;
+            float rxN = texture(u_rippleTex, clamp(rUV - vec2(rt, 0.0), 0.0, 1.0)).r;
+            float ryP = texture(u_rippleTex, clamp(rUV + vec2(0.0, rt), 0.0, 1.0)).r;
+            float ryN = texture(u_rippleTex, clamp(rUV - vec2(0.0, rt), 0.0, 1.0)).r;
+            vec2 rippleGrad = vec2(rxP - rxN, ryP - ryN);
+            vec2 rippleEdge = min(rUV, 1.0 - rUV);
+            float rippleFade = smoothstep(0.0, 0.065, min(rippleEdge.x, rippleEdge.y));
+            // AI: keep ripple perturbation in ripple-texture space, but soften the world-space coupling so interaction reads as water relief instead of crater-like reflection breaks.
+            n = normalize(n + vec3(-rippleGrad.x * 2.2, 0.0, -rippleGrad.y * 2.2) * rippleFade);
         }
+    }
 
 #ifdef DEBUG_NORMALS
-        fragColor = vec4(n * 0.5 + 0.5, 1.0);
-        return;
+    fragColor = vec4(n * 0.5 + 0.5, 1.0);
+    return;
 #endif
 
-        // MICRO NORMAL NOISE
-        {
-            vec2 mn = microNormalDelta(p, t, microNoiseMask);
-            n = normalize(n + vec3(mn.x, 0.0, mn.y) * 0.28);
+    // MICRO NORMAL NOISE
+    {
+        vec2 mn = microNormalDelta(p, t, microNoiseMask);
+        n = normalize(n + vec3(mn.x, 0.0, mn.y) * 0.28);
+    }
+
+    float rippleStrength = 1.0 - n.y;
+    vec3 viewDir = normalize(ro - waterPos);
+
+    // FRESNEL
+    float cosTheta = clamp(dot(viewDir,n), 0.0, 1.0);
+    float fresnel = 0.02 + 0.98 * pow(1.0 - cosTheta, 5.0);
+
+    // ОТРАЖЕНИЕ НЕБА + БЕРЕГА
+    vec3 reflDir = normalize(reflect(-viewDir, n));
+    reflDir.y = max(reflDir.y, 0.001);
+    vec3 skyRefl = shadeSkyDirection(reflDir, phase, sunCol, sunDir);
+
+    {
+        vec2 reflSkyUv = skyUvFromDirection(reflDir);
+        float vegReflH = vegetationProfile(clamp(reflSkyUv.x, 0.0, 1.0));
+        float vegReflMask = smoothstep(vegReflH + 0.012, vegReflH - 0.012, reflSkyUv.y);
+        if (vegReflMask > 0.0) {
+            vec3 vReflBase = mix(vec3(0.022, 0.032, 0.062), vec3(0.030, 0.014, 0.030), phase);
+            float vWaterRim = exp(-abs(reflSkyUv.y - vegReflH) * 42.0) * 0.12;
+            vReflBase += sunCol * vWaterRim * 0.24;
+            skyRefl = mix(skyRefl, vReflBase, vegReflMask * (0.18 + 0.28 * nearField));
         }
-
-        float rippleStrength = 1.0 - n.y;
-
-        // FRESNEL
-        float horizonDist = (horizon - uv.y) / horizon;
-        vec3  viewDir     = normalize(vec3(coord.x*0.1, 0.02+horizonDist*0.26, 1.0));
-        float cosTheta    = clamp(dot(viewDir,n), 0.0, 1.0);
-        float fresnel     = 0.02 + 0.98*pow(1.0-cosTheta, 5.0);
-
-        // ОТРАЖЕНИЕ НЕБА + БЕРЕГА
-        // Отражённый UV: зеркало горизонта + дисторсия нормалью.
-        // После вычисления skyColor проверяем: попадает ли отражение в берег?
-        // Если да — заменяем на тёмный цвет отражения берега.
-        //
-        // Отражение берега:
-        //   - само по себе тёмное, чуть темнее берега (вода поглощает)
-        //   - дистортируется волнами автоматически (через n.xz смещение)
-        //   - гладко бленд через fresnel (крутой угол → больше отражения)
-        // Ref: planar reflection masking — аналог skyRefl, но для силуэта
-        float reflStrength = 0.015 + 0.07*depth;
-        vec2  refl = vec2(uv.x, 2.0*horizon-uv.y) + n.xz*reflStrength;
-        refl.y     = clamp(refl.y, horizon, 1.0);
-
-        vec3 skyRefl = skyColor(refl.y, phase)
-                     + exp(-abs(refl.y-horizon)*28.0)*0.35*sunCol;
-
-        // Отражение растительности в воде
-        // vegetationProfile включает baseline → reflection band гарантирован.
-        // vegReflH — max(baseline, trees, bushes, grass) в отражённой точке.
-        {
-            float vegReflH    = vegetationProfile(refl.x);
-            float vegReflMask = smoothstep(vegReflH + 0.0022, vegReflH - 0.0022, refl.y);
-            if (vegReflMask > 0.0) {
-                vec3 vReflBase = mix(vec3(0.022, 0.032, 0.062), vec3(0.030, 0.014, 0.030), phase);
-                float vWaterRim = exp(-abs(refl.y - vegReflH) * 60.0) * 0.18;
-                vReflBase += sunCol * vWaterRim * 0.30;
-                skyRefl = mix(skyRefl, vReflBase, vegReflMask * (0.65 + 0.35 * depth));
-            }
-        }
+    }
 
 #ifdef DEBUG_REFLECTION
-        fragColor = vec4(tonemap(skyRefl), 1.0);
-        return;
+    fragColor = vec4(tonemap(skyRefl), 1.0);
+    return;
 #endif
 
-        // СОЛНЕЧНАЯ ДОРОЖКА
-        vec2  sunRefl   = vec2(sunPos.x, 2.0*horizon-sunPos.y);
-        float pathX     = abs(uv.x - sunPos.x);
-        float pathY     = clamp(horizon-uv.y, 0.0, horizon);
-        float pathNorm  = pathY / horizon;
-        float pathWidth = 0.04 + 0.14*pathNorm;
-        float sunPath   = exp(-pathX*pathX/(pathWidth*pathWidth))
-                        * smoothstep(0.0,0.08,pathNorm)
-                        * (0.4+0.6*rippleStrength);
+    // СОЛНЕЧНАЯ ДОРОЖКА
+    float sunMirror = max(dot(reflDir, sunDir), 0.0);
+    vec3 sunLight = sunCol * (pow(sunMirror, 180.0) * 4.5 + pow(sunMirror, 42.0) * 0.7);
 
-        vec2  toSun = uv + n.xz*0.08 - sunRefl;
-        float negToSunY = max(-toSun.y, 0.0);
-        float r2    = toSun.x*toSun.x + negToSunY*negToSunY*0.12;
-        vec3  sunLight = sunCol*(exp(-r2*45.0)*4.5 + exp(-r2*18.0)*0.7 + sunPath);
+    // ЦВЕТ ВОДЫ
+    vec3 waterDeep = mix(vec3(0.03,0.10,0.16), skyRefl*0.6, 0.3);
+    vec3 waterCol  = mix(waterDeep, skyRefl + sunLight, fresnel);
 
-        // ЦВЕТ ВОДЫ
-        vec3 waterDeep = mix(vec3(0.03,0.10,0.16), skyRefl*0.6, 0.3);
-        vec3 waterCol  = mix(waterDeep, skyRefl+sunLight, fresnel*(0.65+0.35*depth));
+    // СПЕКУЛЯР + ГЛИНТЫ
+    vec3 halfDir  = normalize(sunDir + viewDir);
+    float glint = pow(max(dot(n,sunDir),0.0),80.0) * rippleStrength * mix(0.32, 1.0, nearField) * 3.5;
+    waterCol += glint*sunCol*1.2;
+    waterCol  = mix(waterCol, waterCol*vec3(0.88,0.93,1.05),
+                    rippleStrength * 0.28 * mix(0.26, 1.0, nearField));
+    waterCol += pow(max(dot(n,halfDir),0.0),52.0) * 0.9 * mix(0.46, 1.0, nearField) * (sunCol*1.5+vec3(0.1));
 
-        // СПЕКУЛЯР + ГЛИНТЫ
-        vec2 sunDir2D = normalize(sunPos - vec2(uv.x,horizon));
-        vec3 lightDir = normalize(vec3(sunDir2D.x, 0.6, sunDir2D.y));
-        vec3 halfDir  = normalize(lightDir + viewDir);
+    vec3 horizonLift = mix(horizonSky, skyRefl, 0.68);
+    vec3 col = mix(waterCol, horizonLift, horizonMist * 0.10);
 
-        float glint = pow(max(dot(n,lightDir),0.0),80.0)*rippleStrength*(0.3+0.7*depth)*3.5;
-        waterCol += glint*sunCol*1.2;
-        waterCol  = mix(waterCol, waterCol*vec3(0.88,0.93,1.05),
-                        rippleStrength*0.28*(0.2+0.8*depth));
-        waterCol += pow(max(dot(n,halfDir),0.0),52.0)*0.9*(0.4+0.6*depth)*(sunCol*1.5+vec3(0.1));
-
-        col = mix(waterCol, horizonSky, smoothstep(0.07,0.0,depth)*0.8);
-
-        // ОТРАЖЕНИЕ НАЗВАНИЯ
-        vec2  textRefl = vec2(uv.x, 1.0-uv.y) + n.xz*(0.018+0.030*rippleStrength);
-        float waterA   = sampleTextAlpha(textRefl)
-                       * fresnel
-                       * (0.55+0.45*(1.0-depth*0.60))
-                       * (0.50+0.50*rippleStrength);
-        col += (sunCol*1.6+vec3(0.12,0.15,0.22)) * waterA * 0.78;
-    }
+    // ОТРАЖЕНИЕ НАЗВАНИЯ
+    vec2 textRefl = vec2(
+        clamp(screenUV.x + n.x * 0.02, 0.0, 1.0),
+        clamp(1.0 - screenUV.y + n.z * 0.06, 0.0, 1.0)
+    );
+    float waterA = sampleTextAlpha(textRefl)
+                 * fresnel
+                 * (0.55 + 0.45 * nearField)
+                 * (0.50+0.50*rippleStrength);
+    col += (sunCol*1.6+vec3(0.12,0.15,0.22)) * waterA * 0.78;
 
     fragColor = vec4(tonemap(col), 1.0);
 }

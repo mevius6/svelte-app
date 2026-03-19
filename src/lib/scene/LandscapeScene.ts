@@ -2,6 +2,16 @@ import { RipplePass } from "../passes/RipplePass"
 import { LandscapePass, type LandscapeDebugMode } from "../passes/LandscapePass"
 import { BushesPass } from "../passes/BushesPass"
 import { LandscapeResources, type FoliageAtlasSourceSet } from "./LandscapeResources"
+import {
+  computeSceneCamera,
+  computeVegetationHorizon,
+  intersectRayWithWaterPlane,
+  RIPPLE_WORLD_RECT,
+  screenPointToWorldRay,
+  SHORELINE_WORLD_Z,
+  WATER_LEVEL,
+  waterWorldToRippleUV,
+} from "./sceneCamera"
 import { computeSceneFrame } from "./sceneFraming"
 import type { Scene } from "./Scene"
 
@@ -133,19 +143,25 @@ export class LandscapeScene implements Scene {
 
     const rippleTex = this.ripple.render(time, null) ?? this.resources.rippleFallbackTexture
     const sceneFrame = computeSceneFrame(this.width, this.height)
+    const camera = computeSceneCamera(this.scrollNorm, this.width, this.height)
+    const vegetationHorizon = computeVegetationHorizon(camera, this.width, this.height)
     const hw = 0.22
     const textTexSize = this.resources.textTextureSize
     const hh = hw * (textTexSize.h / textTexSize.w)
 
     this.landscape.setFrameState({
+      camera,
       scroll: this.scrollNorm,
       textTexture,
       textRect: { x: 0.5, y: 0.67, w: hw, h: hh },
       rippleTexelSize: this.ripple.texelSize,
+      rippleWorldRect: RIPPLE_WORLD_RECT,
       sceneScale: {
         x: sceneFrame.scaleX,
         y: sceneFrame.scaleY,
       },
+      shorePlaneZ: SHORELINE_WORLD_Z,
+      waterLevel: WATER_LEVEL,
     })
 
     if (this.passView === "ripple") {
@@ -158,7 +174,8 @@ export class LandscapeScene implements Scene {
       this.gl.clearColor(...VEGETATION_DEBUG_CLEAR)
       this.gl.clear(this.gl.COLOR_BUFFER_BIT)
       this.bushes.setFrameState({
-        horizon: 0.5,
+        camera,
+        horizon: vegetationHorizon,
         phase: this.scrollNorm,
         atlasTextures: this.resources.foliageAtlas,
         sceneScale: {
@@ -176,7 +193,8 @@ export class LandscapeScene implements Scene {
 
     if (this.passView === "final") {
       this.bushes.setFrameState({
-        horizon: 0.5,
+        camera,
+        horizon: vegetationHorizon,
         phase: this.scrollNorm,
         atlasTextures: this.resources.foliageAtlas,
         sceneScale: {
@@ -204,19 +222,23 @@ export class LandscapeScene implements Scene {
   }
 
   private pointerToRippleUV(clientX: number, clientY: number) {
-    const normX = clientX / window.innerWidth
-    const normY = clientY / window.innerHeight
-
-    if (normY < 0.5) {
+    const viewportWidth = window.innerWidth
+    const viewportHeight = window.innerHeight
+    const camera = computeSceneCamera(this.scrollNorm, viewportWidth, viewportHeight)
+    const direction = screenPointToWorldRay(
+      camera,
+      clientX,
+      clientY,
+      viewportWidth,
+      viewportHeight
+    )
+    const waterHit = intersectRayWithWaterPlane(camera.position, direction)
+    if (!waterHit) {
       return null
     }
 
-    const ry = (normY - 0.5) * 2.0
-
-    return {
-      x: Math.max(0.001, Math.min(0.999, normX)),
-      y: Math.max(0.001, Math.min(0.999, ry)),
-    }
+    // AI: Phase 1 upgrades ripple input to the same world-water mapping used by the landscape shader, so interaction no longer depends on the screen's lower half.
+    return waterWorldToRippleUV(waterHit)
   }
 
 }

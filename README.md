@@ -4,13 +4,14 @@
 
 Текущий WebGL runtime собран как небольшой рендер-движок поверх Svelte:
 
-`+page.svelte` -> `LandscapeViewport.svelte` -> `Renderer` -> `LandscapeScene` -> `LandscapeResources` + passes
+`+page.svelte` -> `LandscapeViewport.svelte` -> `Renderer` -> `LandscapeScene` -> `sceneCamera` + `LandscapeResources` + passes
 
 По слоям это устроено так:
 
 - host/UI layer: `src/lib/components/LandscapeViewport.svelte` — тонкий Svelte-shell конкретной сцены; создаёт `canvas`, монтирует `Renderer`, показывает dev-only debug panel.
 - runtime layer: `src/lib/render/Renderer.ts` — владеет WebGL2 context lifecycle, `requestAnimationFrame`, resize по DPR и вызовом активной сцены.
 - scene/orchestration layer: `src/lib/scene/LandscapeScene.ts` — связывает input, scroll/debug state и порядок проходов; координирует кадр, но не должен разрастаться в склад GPU-ресурсов.
+- camera layer: `src/lib/scene/sceneCamera.ts` — хранит orbital camera model, screen-to-world ray helpers, world-space water mapping и общий переход от плоского screen-space к camera-space rendering.
 - resource layer: `src/lib/scene/LandscapeResources.ts` — владеет загрузкой и жизненным циклом GPU-ресурсов сцены: title-texture, foliage PBR atlas bundle и fallback ripple texture.
 - framing layer: `src/lib/scene/sceneFraming.ts` — задаёт общую scene-space framing-модель, чтобы landscape и vegetation одинаково переживали resize.
 - pass layer: `src/lib/passes/RipplePass.ts`, `src/lib/passes/LandscapePass.ts`, `src/lib/passes/BushesPass.ts` — отдельные рендер-проходы симуляции, fullscreen shading и инстансной растительности.
@@ -29,9 +30,12 @@
 - `Renderer` отвечает за runtime lifecycle, а не за смысл конкретной сцены.
 - `LandscapeScene` координирует input, frame state и порядок проходов, но не должен разрастаться в контейнер GPU-ресурсов.
 - `LandscapeResources` владеет созданием, загрузкой и освобождением GPU-ресурсов сцены.
+- Для роста иммерсива двигаемся не в сторону полного engine-jump, а в сторону hybrid 2.5D: сначала camera-space/world-space foundation в fullscreen pass'ах, потом выборочный объём и SDF там, где это окупается.
 - Aspect-ratio/framing исправления делаем один раз в общей scene-space модели (`src/lib/scene/sceneFraming.ts`), а затем переиспользуем в `LandscapePass` и `BushesPass`.
 - Один pass — одна роль: simulation, landscape shading, vegetation и возможный post-process держим раздельно.
 - Ripple влияет на нормали воды, а не на цвет напрямую.
+- Сначала добавляем камеру, world rays, water-plane/shoreline intersections и world-anchored text, и только потом обсуждаем более тяжёлый 3D/SDF слой.
+- SDF используем выборочно: для hero-объектов, volumetrics, world-anchored title/signage и storytelling hotspots, а не как blanket replacement всего runtime.
 - Новые абстракции добавляем только там, где они уже уменьшают сложность текущего кода, а не впрок.
 - После заметных runtime baseline-изменений обновляем `README.md` и `codex-system-prompt.md` в той же итерации, чтобы следующая работа опиралась на актуальное состояние проекта.
 
@@ -42,6 +46,8 @@
 - Svelte docs for LLMs: `https://svelte.dev/docs/llms`
 - Svelte Best Practices: `https://svelte.dev/docs/svelte/best-practices`
 - GM Shaders Mini Tutorials: `https://mini.gmshaders.com/`
+- GM Shaders Mini: Vector Spaces: `https://mini.gmshaders.com/p/vector-spaces`
+- GM Shaders Guest: Bart: `https://mini.gmshaders.com/p/guest-bart`
 - The Book of Shaders: `https://thebookofshaders.com/`
 - Inigo Quilez Articles: `https://iquilezles.org/articles/`
 - PKH Notebook: `https://blog.pkh.me/index.html`
@@ -52,6 +58,8 @@
 
 - По Svelte сначала сверяемся с официальной документацией и best practices.
 - По GLSL, шумам, procedural math и shader-оптимизациям используем GM Shaders, The Book of Shaders и статьи Inigo Quilez как основную reference-базу.
+- Для вопросов про coordinate spaces, camera/view/projection math и “почему объект ведёт себя как overlay” сначала сверяемся с `GM Shaders Mini: Vector Spaces`.
+- Для world-space billboards / sprite cards / order-of-operations при развороте карточек в 3D сначала сверяемся с `GM Shaders Guest: Bart`; практическое правило — сначала локальный поворот/разворот карточки вокруг её центра, потом перевод в world-space, а не наоборот.
 - Для более глубоких заметок по signed distance functions, ray marching, filtering и shader math можно дополнительно опираться на PKH Notebook.
 - Для визуальных разборов creative coding, shader storytelling и выразительных frontend/WebGL-паттернов можно дополнительно смотреть статьи Maxime Heckel.
 - Для поиска сильных внешних ориентиров и свежих graphics links можно использовать Graphics Programming Weekly как curated discovery-источник.
@@ -65,6 +73,18 @@
 
 Post-processing в активный pipeline пока не подключён.
 
+## Текущий курс на глубину сцены
+
+- Главная визуальная проблема baseline — не отсутствие “настоящего 3D” само по себе, а то, что большая часть сцены долго жила в screen-space композиции.
+- Принятый курс: переводить `LandscapePass` в camera-space/world-space постепенно, сохраняя текущую pass-архитектуру.
+- Phase 1 baseline: orbital camera state, world-ray reconstruction, water-plane shading и shoreline hit-модель внутри `LandscapePass`.
+- Phase 1.5 baseline: pond-scale calibration — вода читается как городской пруд с конечным противоположным берегом, а не как бесконечная открытая акватория.
+- Phase 1.6 current target: перевести vegetation из horizon-locked overlay в world-space shoreline placement.
+- Для `BushesPass` это означает: инстансы хранят корень карточки в world-space вдоль bank/shoreline, затем проецируются той же камерой, что и landscape; единый `u_horizon` как финальная посадка кустов больше не считается достаточным baseline.
+- Atlas/billboard техника для дальней береговой растительности считается валидной; текущие артефакты читаются как проблема пространственной привязки, а не как доказательство, что cards/atlas не подходят.
+- После world-space миграции vegetation двигаем title из 2D overlay в world-anchored SDF/MSDF слой.
+- Только после этого оцениваем selective SDF для volumetrics, story reveals и hero-объектов; не делаем мгновенный переход на “полный 3D engine”.
+
 ## Текущий baseline для vegetation и framing
 
 - Вегетация больше не опирается на один color atlas. `LandscapeResources` загружает небольшой grass PBR bundle: `albedo`, `alpha`, `normal`, `roughness`, `translucency`.
@@ -73,6 +93,9 @@ Post-processing в активный pipeline пока не подключён.
 - Atlas mapping сделан через явные region rect'ы на CPU, а не через жёсткий layout hardcode в GLSL.
 - Общая framing-модель height-normalized: при resize меняется горизонтальный охват сцены, а не вертикальные пропорции композиции.
 - Эту framing-модель считают в `src/lib/scene/sceneFraming.ts` и прокидывают в `LandscapePass` и `BushesPass` как shared frame state.
+- Runtime уже перешёл к orbital camera/world-space foundation для воды и противоположного берега: landscape больше не должен опираться только на экранный split по `uv.y`.
+- `BushesPass` начал Phase 1.6 migration: roots карточек уже хранятся в world-space вдоль той же shoreline/bank-модели, что использует `LandscapePass`, и проецируются через ту же orbital camera.
+- Vegetation shading и atlas quality всё ещё считаются промежуточным scaffold; если визуал выбивается, сначала проверяем anchoring/projection/integration, а не отвергаем atlas cards как технику.
 
 Deployment/runtime: проект собирается через `@sveltejs/adapter-vercel`. Server `load` и private env для Strapi остаются валидными на Vercel, а production-артефакт больше не должен разворачиваться как статическая папка с `build/index.js`.
 
@@ -104,6 +127,7 @@ src/lib/
   scene/
     Scene.ts
     LandscapeScene.ts
+    sceneCamera.ts
     LandscapeResources.ts
     sceneFraming.ts
 

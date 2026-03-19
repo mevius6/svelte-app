@@ -66,24 +66,25 @@ void main() {
     float alphaSoft = smoothstep(0.02, 0.10, alpha);
 
     vec3 ambientSky = skyColor(u_horizon + v_height * 0.16, phase);
-    vec3 shoreColor = mix(vec3(0.085, 0.060, 0.040), vec3(0.055, 0.040, 0.060), phase);
-    vec3 ambient = mix(shoreColor * 1.15, ambientSky * vec3(0.58, 0.74, 0.54), 0.62);
-    vec3 direct  = sunCol * (0.12 + diffuse * 0.38);
-    vec3 trans   = translucency * (sunCol * 0.68 + vec3(0.08, 0.10, 0.06)) * backScatter * 0.34;
-    vec3 spec    = sunCol * specular * 0.10;
+    vec3 shoreColor = mix(vec3(0.090, 0.074, 0.050), vec3(0.066, 0.056, 0.054), phase);
+    vec3 ambient = mix(shoreColor * 1.05, ambientSky * vec3(0.64, 0.78, 0.62), 0.70);
+    vec3 direct  = sunCol * (0.10 + diffuse * 0.32);
+    vec3 trans   = translucency * (sunCol * 0.62 + vec3(0.08, 0.10, 0.06)) * backScatter * 0.26;
+    vec3 spec    = sunCol * specular * 0.07;
 
     // лёгкая вертикальная градиентная коррекция: темнее у земли
-    float shade = mix(0.62, 0.94, v_height);
+    float shade = mix(0.68, 0.96, v_height);
     vec3 col = albedo * (ambient + direct);
     col += trans + spec;
 
     vec3 tipHaze = mix(ambientSky, sunCol * 0.30 + ambientSky * 0.70, 0.35);
-    col = mix(col, shoreColor * 0.92, rootMask * 0.28);
-    col = mix(col, tipHaze, tipMask * 0.18);
+    col = mix(col, shoreColor * 0.94, rootMask * 0.22);
+    col = mix(col, tipHaze, tipMask * 0.24);
+    col = mix(col, ambientSky * vec3(0.76, 0.78, 0.72), 0.14 + tipMask * 0.08);
 
     float luma = dot(col, vec3(0.299, 0.587, 0.114));
-    col = mix(col, vec3(luma), 0.12 + tipMask * 0.10);
+    col = mix(col, vec3(luma), 0.08 + tipMask * 0.08);
     col *= shade;
 
-    fragColor = vec4(col, alpha * alphaSoft * (0.90 - tipMask * 0.08));
+    fragColor = vec4(col, alpha * alphaSoft * (0.76 - tipMask * 0.10));
 }

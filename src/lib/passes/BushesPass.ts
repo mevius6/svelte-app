@@ -3,8 +3,14 @@ import bushesVert from "../shaders/bushes.vert?raw"
 import bushesFrag from "../shaders/bushes.frag?raw"
 import { RenderPass } from "../render/RenderPass"
 import type { FoliageAtlasTextureSet } from "../scene/LandscapeResources"
+import {
+  RIPPLE_WORLD_RECT,
+  shorelineVegetationRootAtWorldX,
+  type SceneCameraState,
+} from "../scene/sceneCamera"
 
 type BushesFrameState = {
+  camera: SceneCameraState
   horizon: number
   phase: number
   atlasTextures: FoliageAtlasTextureSet
@@ -21,6 +27,10 @@ type BushAtlasRegion = {
 }
 
 const FOLIAGE_ATLAS_SIZE = 512
+
+function mix(a: number, b: number, t: number) {
+  return a + (b - a) * t
+}
 
 function atlasRegionFromPixels(
   id: string,
@@ -50,6 +60,13 @@ export class BushesPass extends RenderPass {
   private horizon = 0.5
   private phase = 0
   private sceneScale = { x: 1, y: 1 }
+  private camera: SceneCameraState = {
+    position: { x: 0, y: 0, z: 1 },
+    forward: { x: 0, y: 0, z: -1 },
+    right: { x: 1, y: 0, z: 0 },
+    up: { x: 0, y: 1, z: 0 },
+    fovY: Math.PI / 4,
+  }
   private atlasTextures: FoliageAtlasTextureSet = {
     albedo: null,
     alpha: null,
@@ -85,34 +102,40 @@ export class BushesPass extends RenderPass {
       2
     )
 
-    const BUSH_COUNT = 7
+    const BUSH_COUNT = 18
     const CARDS_PER_BUSH = 3
     this.instanceCount = BUSH_COUNT * CARDS_PER_BUSH
 
-    const instancePos   = new Float32Array(this.instanceCount * 2)
+    const instanceRoot  = new Float32Array(this.instanceCount * 3)
     const instanceScale = new Float32Array(this.instanceCount * 2)
     const instanceAtlas = new Float32Array(this.instanceCount * 4)
     const cardIndex     = new Float32Array(this.instanceCount)
     const instanceRand  = new Float32Array(this.instanceCount * 2)
+    const bankXMin = RIPPLE_WORLD_RECT.x + 0.18
+    const bankXMax = RIPPLE_WORLD_RECT.x + RIPPLE_WORLD_RECT.w - 0.18
 
     for (let b = 0; b < BUSH_COUNT; b++) {
       const laneT = b / (BUSH_COUNT - 1)
       const heroBias = 1.0 - Math.abs(laneT * 2.0 - 1.0)
-      const baseX = Math.min(
-        0.84,
-        Math.max(0.16, 0.18 + laneT * 0.64 + (Math.random() - 0.5) * 0.03)
+      const baseWorldX = Math.min(
+        bankXMax,
+        Math.max(bankXMin, mix(bankXMin, bankXMax, laneT) + (Math.random() - 0.5) * 0.12)
       )
+      const root = shorelineVegetationRootAtWorldX(baseWorldX)
+      root.y += (Math.random() - 0.5) * 0.004 - heroBias * 0.001
+      root.z += (Math.random() - 0.5) * 0.018
       const atlasRegion =
         FOLIAGE_ATLAS_REGIONS[Math.floor(Math.random() * FOLIAGE_ATLAS_REGIONS.length)] ??
         FOLIAGE_ATLAS_REGIONS[0]
       const atlasAspect = atlasRegion.uvSize[0] / atlasRegion.uvSize[1]
-      const baseH = 0.052 + heroBias * 0.024 + Math.random() * 0.028
-      const baseW = baseH * atlasAspect * (0.72 + Math.random() * 0.14)
+      const baseH = 0.026 + heroBias * 0.010 + Math.random() * 0.012
+      const baseW = baseH * atlasAspect * (0.62 + Math.random() * 0.12)
 
       for (let c = 0; c < CARDS_PER_BUSH; c++) {
         const i = b * CARDS_PER_BUSH + c
-        instancePos[i * 2 + 0]   = baseX + (Math.random() - 0.5) * 0.01
-        instancePos[i * 2 + 1]   = 0.0
+        instanceRoot[i * 3 + 0]  = root.x + (Math.random() - 0.5) * 0.05
+        instanceRoot[i * 3 + 1]  = root.y + (Math.random() - 0.5) * 0.002
+        instanceRoot[i * 3 + 2]  = root.z + (Math.random() - 0.5) * 0.008
         instanceScale[i * 2 + 0] = baseW * (0.9 + Math.random() * 0.2)
         instanceScale[i * 2 + 1] = baseH * (0.9 + Math.random() * 0.2)
         instanceAtlas[i * 4 + 0] = atlasRegion.uvMin[0]
@@ -125,7 +148,8 @@ export class BushesPass extends RenderPass {
       }
     }
 
-    this.makeBuffer(instancePos, 1, 2, 1)
+    // AI: store vegetation roots directly in world space so placement can follow the same shoreline/camera model as LandscapePass.
+    this.makeBuffer(instanceRoot, 1, 3, 1)
     this.makeBuffer(instanceScale, 2, 2, 1)
     // AI: pass explicit atlas rects per instance so the shader no longer hardcodes sprite layout assumptions.
     this.makeBuffer(instanceAtlas, 3, 4, 1)
@@ -159,6 +183,7 @@ export class BushesPass extends RenderPass {
   }
 
   setFrameState(state: BushesFrameState) {
+    this.camera = state.camera
     this.horizon = state.horizon
     this.phase = state.phase
     this.atlasTextures = state.atlasTextures
@@ -182,6 +207,31 @@ export class BushesPass extends RenderPass {
     gl.enable(gl.BLEND)
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
     this.program.use()
+    this.program.setVec3(
+      "u_cameraPos",
+      this.camera.position.x,
+      this.camera.position.y,
+      this.camera.position.z
+    )
+    this.program.setVec3(
+      "u_cameraRight",
+      this.camera.right.x,
+      this.camera.right.y,
+      this.camera.right.z
+    )
+    this.program.setVec3(
+      "u_cameraUp",
+      this.camera.up.x,
+      this.camera.up.y,
+      this.camera.up.z
+    )
+    this.program.setVec3(
+      "u_cameraForward",
+      this.camera.forward.x,
+      this.camera.forward.y,
+      this.camera.forward.z
+    )
+    this.program.setFloat("u_cameraTanHalfFovY", Math.tan(this.camera.fovY * 0.5))
     this.program.setFloat("u_horizon", this.horizon)
     this.program.setFloat("u_phase", this.phase)
     this.program.setVec2("u_resolution", this.width, this.height)
