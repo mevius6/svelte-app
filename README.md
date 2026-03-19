@@ -44,11 +44,17 @@
 - GM Shaders Mini Tutorials: `https://mini.gmshaders.com/`
 - The Book of Shaders: `https://thebookofshaders.com/`
 - Inigo Quilez Articles: `https://iquilezles.org/articles/`
+- PKH Notebook: `https://blog.pkh.me/index.html`
+- Maxime Heckel Articles: `https://blog.maximeheckel.com/#articles`
+- Graphics Programming Weekly: `https://www.jendrikillner.com/post/graphics-programming-weekly-issue-411/`
 
 Практическое правило:
 
 - По Svelte сначала сверяемся с официальной документацией и best practices.
 - По GLSL, шумам, procedural math и shader-оптимизациям используем GM Shaders, The Book of Shaders и статьи Inigo Quilez как основную reference-базу.
+- Для более глубоких заметок по signed distance functions, ray marching, filtering и shader math можно дополнительно опираться на PKH Notebook.
+- Для визуальных разборов creative coding, shader storytelling и выразительных frontend/WebGL-паттернов можно дополнительно смотреть статьи Maxime Heckel.
+- Для поиска сильных внешних ориентиров и свежих graphics links можно использовать Graphics Programming Weekly как curated discovery-источник.
 - Ссылки нужны как опора для решений, а не как повод тащить в проект лишнюю абстракцию.
 
 Активный render pipeline сейчас такой:

@@ -23,11 +23,15 @@ Prefer these sources when making implementation decisions, writing explanations,
   - `https://mini.gmshaders.com/` for practical shader tips, common mistakes, small techniques, and optimization instincts.
   - `https://thebookofshaders.com/` for foundational GLSL, shaping, noise, patterns, simulation, and lighting concepts.
   - `https://iquilezles.org/articles/` for deeper articles on noise, fBM, domain warping, SDFs, terrain rendering, filtering, and procedural math.
+  - `https://blog.pkh.me/index.html` for compact graphics notes on SDFs, ray marching, filtering, color, and shader math.
+  - `https://blog.maximeheckel.com/#articles` for creative-coding writeups, shader-driven visual storytelling, and expressive frontend/WebGL patterns.
+  - `https://www.jendrikillner.com/post/graphics-programming-weekly-issue-411/` as a curated graphics reference stream for discovering strong external articles and techniques.
 
 How to use them:
 
 - For Svelte work, prefer official Svelte docs over generic framework advice.
-- For shader and procedural graphics work, use GM Shaders for concise heuristics, The Book of Shaders for fundamentals, and Inigo Quilez articles for deeper math/technique references.
+- For shader and procedural graphics work, use GM Shaders for concise heuristics, The Book of Shaders for fundamentals, Inigo Quilez articles for deeper math/technique references, PKH Notebook for compact deep dives on shader math/SDF topics, and Maxime Heckel for creative-coding presentation patterns and visual framing ideas.
+- Use Graphics Programming Weekly as a discovery layer for additional high-signal graphics references, but still prefer primary technical sources when applying a technique.
 - Reference these sources to support decisions, but do not cargo-cult patterns that add abstraction without reducing current code complexity.
 
 ## 2. Target architecture
