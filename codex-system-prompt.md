@@ -22,9 +22,11 @@ Prefer these sources when making implementation decisions, writing explanations,
 - WebGL / shaders:
   - `https://mini.gmshaders.com/` for practical shader tips, common mistakes, small techniques, and optimization instincts.
   - `https://mini.gmshaders.com/p/vector-spaces` for object/world/view/projection mental models and debugging space-mismatch issues.
+  - `https://mini.gmshaders.com/p/sdf` for compact SDF mental models and practical signed-distance shaping patterns.
   - `https://mini.gmshaders.com/p/guest-bart` for world-space billboarding / sprite-card transform order and center-anchored quad placement.
   - `https://thebookofshaders.com/` for foundational GLSL, shaping, noise, patterns, simulation, and lighting concepts.
   - `https://iquilezles.org/articles/` for deeper articles on noise, fBM, domain warping, SDFs, terrain rendering, filtering, and procedural math.
+  - `https://iquilezles.org/articles/smin/` for smooth-min / smooth-union tradeoffs when blending shapes or distance fields.
   - `https://blog.pkh.me/index.html` for compact graphics notes on SDFs, ray marching, filtering, color, and shader math.
   - `https://blog.maximeheckel.com/#articles` for creative-coding writeups, shader-driven visual storytelling, and expressive frontend/WebGL patterns.
   - `https://www.jendrikillner.com/post/graphics-programming-weekly-issue-411/` as a curated graphics reference stream for discovering strong external articles and techniques.
@@ -35,6 +37,8 @@ How to use them:
 - For shader and procedural graphics work, use GM Shaders for concise heuristics, The Book of Shaders for fundamentals, Inigo Quilez articles for deeper math/technique references, PKH Notebook for compact deep dives on shader math/SDF topics, and Maxime Heckel for creative-coding presentation patterns and visual framing ideas.
 - When debugging "this feels like an overlay" problems, treat coordinate-space mismatch as a first-class suspect and use `Vector Spaces` as the first reference before blaming the atlas, art, or lighting.
 - For billboard/card vegetation, prefer the transform order described in `Guest: Bart`: keep a stable center/root in world space, rotate/expand the quad around that local center, then project with the camera; avoid horizon-only placement as anything more than a temporary scaffold.
+- For shoreline/water transitions, treat SDF + `smin` as a local shaping tool: useful for soft bank/water unions, shelf masks, and blend regions, but not by itself a justification for rewriting the whole runtime around SDFs.
+- Remember that `smin` changes the field in the blend region; keep smoothing radii small and use it deliberately where soft unions are visually useful and geometric exactness is less important.
 - Use Graphics Programming Weekly as a discovery layer for additional high-signal graphics references, but still prefer primary technical sources when applying a technique.
 - Reference these sources to support decisions, but do not cargo-cult patterns that add abstraction without reducing current code complexity.
 
@@ -106,6 +110,7 @@ Use this as the preferred depth/immersion strategy for the project:
 - After water/shoreline are stable, calibrate the scene to pond-scale rather than open-water scale when the project reference calls for a compact urban pond.
 - Migrate vegetation from horizon-locked overlay logic into world-space shoreline placement before treating atlas cards as a failed technique.
 - For vegetation migration, keep `BushesPass` as a separate pass, but store instance roots in shoreline/world space and project them through the same camera model as `LandscapePass`.
+- For later shoreline polish, prefer local SDF masking / smooth-union techniques for bank-to-water seating before reaching for heavier geometry or a full SDF-world rewrite.
 - Move title/text from 2D overlay treatment toward world-anchored SDF/MSDF rendering before considering full 3D text extrusion.
 - Use SDF selectively for hero objects, volumetrics, reveal masks, and story hotspots; avoid turning the entire scene into an SDF world unless it clearly reduces complexity and improves the result.
 

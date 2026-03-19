@@ -47,9 +47,11 @@
 - Svelte Best Practices: `https://svelte.dev/docs/svelte/best-practices`
 - GM Shaders Mini Tutorials: `https://mini.gmshaders.com/`
 - GM Shaders Mini: Vector Spaces: `https://mini.gmshaders.com/p/vector-spaces`
+- GM Shaders Mini: Signed Distance Fields: `https://mini.gmshaders.com/p/sdf`
 - GM Shaders Guest: Bart: `https://mini.gmshaders.com/p/guest-bart`
 - The Book of Shaders: `https://thebookofshaders.com/`
 - Inigo Quilez Articles: `https://iquilezles.org/articles/`
+- Inigo Quilez: Smooth Minimum / Smooth Union: `https://iquilezles.org/articles/smin/`
 - PKH Notebook: `https://blog.pkh.me/index.html`
 - Maxime Heckel Articles: `https://blog.maximeheckel.com/#articles`
 - Graphics Programming Weekly: `https://www.jendrikillner.com/post/graphics-programming-weekly-issue-411/`
@@ -59,7 +61,9 @@
 - По Svelte сначала сверяемся с официальной документацией и best practices.
 - По GLSL, шумам, procedural math и shader-оптимизациям используем GM Shaders, The Book of Shaders и статьи Inigo Quilez как основную reference-базу.
 - Для вопросов про coordinate spaces, camera/view/projection math и “почему объект ведёт себя как overlay” сначала сверяемся с `GM Shaders Mini: Vector Spaces`.
+- Для локальных переходов bank -> water, shoreline masks, мягких silhouette blends и shape composition полезно сначала сверяться с `GM Shaders Mini: Signed Distance Fields` и `iq: smin`.
 - Для world-space billboards / sprite cards / order-of-operations при развороте карточек в 3D сначала сверяемся с `GM Shaders Guest: Bart`; практическое правило — сначала локальный поворот/разворот карточки вокруг её центра, потом перевод в world-space, а не наоборот.
+- Практическое правило по SDF/smin: использовать их как локальный инструмент для мягкого сращивания береговой формы, shallow-water shelf, vegetation masks и reveal transitions, но не как оправдание мгновенно переводить весь runtime в SDF-мир.
 - Для более глубоких заметок по signed distance functions, ray marching, filtering и shader math можно дополнительно опираться на PKH Notebook.
 - Для визуальных разборов creative coding, shader storytelling и выразительных frontend/WebGL-паттернов можно дополнительно смотреть статьи Maxime Heckel.
 - Для поиска сильных внешних ориентиров и свежих graphics links можно использовать Graphics Programming Weekly как curated discovery-источник.
@@ -82,6 +86,8 @@ Post-processing в активный pipeline пока не подключён.
 - Phase 1.6 current target: перевести vegetation из horizon-locked overlay в world-space shoreline placement.
 - Для `BushesPass` это означает: инстансы хранят корень карточки в world-space вдоль bank/shoreline, затем проецируются той же камерой, что и landscape; единый `u_horizon` как финальная посадка кустов больше не считается достаточным baseline.
 - Atlas/billboard техника для дальней береговой растительности считается валидной; текущие артефакты читаются как проблема пространственной привязки, а не как доказательство, что cards/atlas не подходят.
+- Для следующего polish-слоя bank/water transition разрешён локальный SDF-подход: shoreline distance mask + `smin`/soft union для более мягкой посадки берега в воду, если это не ломает текущий pond-scale baseline.
+- При использовании `smin` помнить, что blend-region перестаёт быть exact distance field; держать `k` небольшим и сначала применять это как shaping/masking tool, а не как основу для тяжёлого raymarch-пайплайна.
 - После world-space миграции vegetation двигаем title из 2D overlay в world-anchored SDF/MSDF слой.
 - Только после этого оцениваем selective SDF для volumetrics, story reveals и hero-объектов; не делаем мгновенный переход на “полный 3D engine”.
 
