@@ -243,6 +243,10 @@ float aaCoverage(float signedDistance) {
     return smoothstep(-width, width, signedDistance);
 }
 
+float contactGapMask(float gap, float radius) {
+    return 1.0 - smoothstep(0.0, radius, gap);
+}
+
 vec3 makeCameraRay(vec2 screenUV) {
     vec2 ndc = screenUV * 2.0 - 1.0;
     float aspect = u_resolution.x / max(u_resolution.y, 1.0);
@@ -307,7 +311,7 @@ bool intersectWater(vec3 ro, vec3 rd, out float t, out vec3 pos) {
 
 const float SHORE_BANK_TOE_OFFSET = 0.028;
 const float SHORE_BANK_CREST_SETBACK = 0.020;
-const float SHORE_BANK_FOOT_OFFSET_Y = -0.008;
+const float SHORE_BANK_FOOT_OFFSET_Y = 0.0;
 
 float shorelineHeightAt(float worldX) {
     float x01 = clamp(worldX * 0.16 + 0.5, 0.0, 1.0);
@@ -316,6 +320,13 @@ float shorelineHeightAt(float worldX) {
 
 float shorelineWaterEdgeZ() {
     return u_shorePlaneZ + SHORE_BANK_TOE_OFFSET;
+}
+
+float underwaterShelfHeightAt(float worldX, float worldZ) {
+    float shelfDistance = max(worldZ - shorelineWaterEdgeZ(), 0.0);
+    float shelfT = smoothstep(0.0, 0.78, shelfDistance);
+    float shelfNoise = (shoreFbm(worldX * 0.95 + 21.0, 47.3) - 0.5) * 0.006 * (1.0 - shelfT);
+    return min(u_waterLevel - 0.006, u_waterLevel - mix(0.014, 0.072, shelfT) + shelfNoise);
 }
 
 float shorelineTransitionSdf(vec2 p) {
@@ -327,6 +338,27 @@ float shorelineTransitionSdf(vec2 p) {
 
 float shorelineTransitionMask(vec2 p, float radius) {
     return 1.0 - smoothstep(0.0, radius, shorelineTransitionSdf(p));
+}
+
+float shorelineBankSurfaceYAt(float worldX, float worldZ) {
+    float crestY = shorelineHeightAt(worldX);
+    float yBase = u_waterLevel + SHORE_BANK_FOOT_OFFSET_Y;
+    float zToe = shorelineWaterEdgeZ();
+    float zCrest = u_shorePlaneZ - SHORE_BANK_CREST_SETBACK;
+    float slopeT = saturate((zToe - worldZ) / max(zToe - zCrest, 0.001));
+    return mix(yBase, crestY, slopeT);
+}
+
+vec3 bankMaterialBase(float worldX, float hNorm, float phase) {
+    float bankNoise = shoreFbm(worldX * 1.35 + 17.0, 61.7);
+    float crestMask = smoothstep(0.58, 0.94, hNorm);
+    vec3 bankShadow = mix(vec3(0.060, 0.050, 0.052), vec3(0.070, 0.048, 0.046), phase);
+    vec3 bankLight = mix(vec3(0.122, 0.112, 0.092), vec3(0.140, 0.104, 0.070), phase);
+    vec3 bankGrass = mix(vec3(0.090, 0.102, 0.070), vec3(0.112, 0.096, 0.062), phase);
+    vec3 col = mix(bankShadow, bankLight, pow(hNorm, 0.72));
+    col *= mix(0.94, 1.06, bankNoise);
+    col = mix(col, bankGrass, crestMask * (0.28 + bankNoise * 0.18));
+    return col;
 }
 
 bool intersectShore(vec3 ro, vec3 rd, out float t, out vec3 pos, out float height) {
@@ -402,7 +434,28 @@ void main()
     bool hasShore = intersectShore(ro, rd, tShore, shorePos, shoreHeight);
     float shoreWaterEdgeZ = shorelineWaterEdgeZ();
     bool waterWithinPond = hasWater && waterPos.z > shoreWaterEdgeZ;
-    bool shoreOccludes = hasShore && (!waterWithinPond || !hasWater || tShore < tWater);
+    float waterToShoreGap = (hasWater && hasShore && tShore > tWater) ? (tShore - tWater) : 1e5;
+    float shoreToWaterGap = (hasWater && hasShore && tWater > tShore) ? (tWater - tShore) : 1e5;
+    float shorelineGap = min(waterToShoreGap, shoreToWaterGap);
+    float shoreOverlapMask = 0.0;
+    if (hasShore && hasWater && waterWithinPond && tShore < tWater) {
+        vec2 shoreCrossPre = vec2(shorePos.z - shoreWaterEdgeZ, shorePos.y - u_waterLevel);
+        float shorelineSeatMaskPre = shorelineTransitionMask(shoreCrossPre, 0.050);
+        float shoreContactMaskPre = contactGapMask(shorelineGap, 0.22);
+        float shoreBottomCoveragePre = aaCoverage(shorePos.y - (u_waterLevel + SHORE_BANK_FOOT_OFFSET_Y));
+        float shoreRunupWavePre = max(
+            waveFieldWithMasks(vec2(shorePos.x, shoreWaterEdgeZ) * 1.1, u_time, 0.16, 0.26, 0.32),
+            0.0
+        );
+        float shoreFilmThicknessPre = max(0.0, (u_waterLevel + shoreRunupWavePre * 0.22 + shorelineSeatMaskPre * 0.007) - shorePos.y);
+        float shoreFilmMaskPre = smoothstep(0.0, 0.018, shoreFilmThicknessPre) * shorelineSeatMaskPre;
+        shoreOverlapMask = max(
+            shoreFilmMaskPre,
+            (1.0 - shoreBottomCoveragePre) * (0.88 * shorelineSeatMaskPre + 0.12 * shoreContactMaskPre)
+        );
+    }
+    bool shoreAllowsWaterOverlap = shoreOverlapMask > 0.06;
+    bool shoreOccludes = hasShore && (!waterWithinPond || !hasWater || (tShore < tWater && !shoreAllowsWaterOverlap));
 
 #ifdef DEBUG_RIPPLE
     float debugHeight = 0.0;
@@ -431,31 +484,59 @@ void main()
 #endif
 
         float hNorm = saturate((shorePos.y - u_waterLevel) / max(shoreHeight - u_waterLevel, 0.001));
-        float bankNoise = shoreFbm(shorePos.x * 1.35 + 17.0, 61.7);
         float topEdge = exp(-abs(shoreHeight - shorePos.y) * 130.0);
-        float waterline = exp(-abs(shorePos.y - u_waterLevel) * 150.0);
         vec2 shoreCross = vec2(shorePos.z - shoreWaterEdgeZ, shorePos.y - u_waterLevel);
-        float shorelineSoftMask = shorelineTransitionMask(shoreCross, 0.050);
+        float shorelineSeatMask = shorelineTransitionMask(shoreCross, 0.050);
+        float shoreContactMask = contactGapMask(shoreToWaterGap, 0.22);
+        float shoreContactCore = contactGapMask(shoreToWaterGap, 0.08);
         float shoreTopCoverage = aaCoverage(shoreHeight - shorePos.y);
         float shoreBottomCoverage = aaCoverage(shorePos.y - (u_waterLevel + SHORE_BANK_FOOT_OFFSET_Y));
+        float shoreFootMask = 1.0 - smoothstep(0.0, 0.18, hNorm);
         float sunFacing = saturate(dot(normalize(vec3(0.0, 0.32, 1.0)), sunDir) * 0.5 + 0.5);
         float crestMask = smoothstep(0.58, 0.94, hNorm);
+        float bankNoise = shoreFbm(shorePos.x * 1.35 + 17.0, 61.7);
         vec3 bankShadow = mix(vec3(0.060, 0.050, 0.052), vec3(0.070, 0.048, 0.046), phase);
-        vec3 bankLight = mix(vec3(0.122, 0.112, 0.092), vec3(0.140, 0.104, 0.070), phase);
-        vec3 bankGrass = mix(vec3(0.090, 0.102, 0.070), vec3(0.112, 0.096, 0.062), phase);
         vec3 shallowShelfTint = mix(vec3(0.40, 0.31, 0.25), vec3(0.48, 0.28, 0.20), phase);
         vec3 wetEdgeTint = mix(vec3(0.18, 0.13, 0.11), vec3(0.20, 0.11, 0.09), phase);
-        vec3 shoreCol = mix(bankShadow, bankLight, pow(hNorm, 0.72));
+        vec3 sharedContactCol = mix(
+            wetEdgeTint + shallowShelfTint * 0.10,
+            horizonSky * 0.58 + shallowShelfTint * 0.42,
+            0.58
+        );
+        vec3 shoreCol = bankMaterialBase(shorePos.x, hNorm, phase);
         shoreCol *= mix(0.86, 1.06, sunFacing * 0.34 + hNorm * 0.22);
-        shoreCol *= mix(0.94, 1.06, bankNoise);
-        shoreCol = mix(shoreCol, bankGrass + skyCol * 0.10, crestMask * (0.28 + bankNoise * 0.18));
         shoreCol = mix(shoreCol, skyCol * 0.66 + vec3(0.032, 0.028, 0.032), crestMask * 0.10);
         shoreCol += (sunCol * 0.09 + skyCol * 0.08) * topEdge;
-        shoreCol -= waterline * vec3(0.008, 0.006, 0.008);
-        shoreCol = mix(shoreCol, bankShadow * 0.86 + skyCol * 0.08, shorelineSoftMask * 0.26);
-        shoreCol += sunCol * shorelineSoftMask * 0.018;
-        vec3 edgeWaterCol = wetEdgeTint + skyCol * 0.18 + shallowShelfTint * 0.10;
-        shoreCol = mix(edgeWaterCol, shoreCol, shoreBottomCoverage);
+        shoreCol = mix(
+            shoreCol,
+            bankShadow * 0.90 + shallowShelfTint * 0.18 + skyCol * 0.04,
+            shorelineSeatMask * shoreContactMask * 0.05
+        );
+        float shoreRunupWave = max(
+            waveFieldWithMasks(vec2(shorePos.x, shoreWaterEdgeZ) * 1.1, u_time, 0.16, 0.26, 0.32),
+            0.0
+        );
+        float shoreFilmThickness = max(0.0, (u_waterLevel + shoreRunupWave * 0.22 + shorelineSeatMask * 0.007) - shorePos.y);
+        float shoreFilmMask = smoothstep(0.0, 0.018, shoreFilmThickness) * shorelineSeatMask;
+        shoreCol += sunCol * shorelineSeatMask * shoreContactCore * 0.010;
+        float shoreSharedBand = max(shoreContactMask * shorelineSeatMask, shoreFootMask);
+        shoreCol = mix(shoreCol, bankShadow * 0.92 + shallowShelfTint * 0.22, shoreSharedBand * 0.02);
+        vec2 shoreFilmP = vec2(shorePos.x, shoreWaterEdgeZ + 0.026) * 1.1;
+        vec3 shoreFilmN = waveNormal(shoreFilmP, u_time, 0.16, 0.24, 0.30);
+        shoreFilmN = normalize(mix(shoreFilmN, vec3(0.0, 1.0, 0.0), 0.62 + shoreFilmMask * 0.24));
+        vec3 shoreFilmViewDir = normalize(ro - vec3(shorePos.x, u_waterLevel + shoreRunupWave * 0.12, shoreWaterEdgeZ + 0.022));
+        vec3 shoreFilmReflDir = normalize(reflect(-shoreFilmViewDir, shoreFilmN));
+        shoreFilmReflDir.y = max(shoreFilmReflDir.y, 0.001);
+        vec3 shoreFilmSky = shadeSkyDirection(shoreFilmReflDir, phase, sunCol, sunDir);
+        float shoreFilmCosTheta = clamp(dot(shoreFilmViewDir, shoreFilmN), 0.0, 1.0);
+        float shoreFilmFresnel = 0.02 + 0.98 * pow(1.0 - shoreFilmCosTheta, 5.0);
+        float shoreFilmSunMirror = max(dot(shoreFilmReflDir, sunDir), 0.0);
+        vec3 shoreFilmSun = sunCol * (pow(shoreFilmSunMirror, 180.0) * 2.2 + pow(shoreFilmSunMirror, 42.0) * 0.34);
+        vec3 shoreSeenThroughWater = shoreCol * vec3(0.80, 0.89, 0.97) + shallowShelfTint * 0.18;
+        vec3 shoreFilmCol = mix(shoreSeenThroughWater, shoreFilmSky + shoreFilmSun, shoreFilmFresnel * 0.74);
+        shoreFilmCol = mix(shoreFilmCol, shallowShelfTint * 0.72 + skyCol * 0.16, shoreFilmMask * 0.12);
+        float shoreWatercoat = max(shoreFilmMask, (1.0 - shoreBottomCoverage) * (0.88 * shorelineSeatMask + 0.12 * shoreContactMask));
+        shoreCol = mix(shoreCol, shoreFilmCol, shoreWatercoat * 0.96);
         shoreCol = mix(skyCol, shoreCol, shoreTopCoverage);
 
         fragColor = vec4(tonemap(shoreCol), 1.0);
@@ -494,13 +575,17 @@ void main()
     float horizonGrazing = 1.0 - smoothstep(0.006, 0.05, abs(rd.y));
     float horizonMist = farField * horizonGrazing;
     float nearField = 1.0 - farField;
-    float shorelineMask = shorelineTransitionMask(vec2(waterPos.z - shoreWaterEdgeZ, waterPos.y - u_waterLevel), 0.22);
-    float shorelineCore = shorelineTransitionMask(vec2(waterPos.z - shoreWaterEdgeZ, waterPos.y - u_waterLevel), 0.09);
-    float largeWaveMask  = mix(1.0, 0.68, farField) * (1.0 - shorelineMask * 0.82);
-    float mediumWaveMask = mix(1.0, 0.44, farField) * (1.0 - shorelineMask * 0.52);
-    float rippleWaveMask = mix(1.0, 0.18, farField) * (1.0 - shorelineCore * 0.18);
-    float microNoiseMask = mix(1.0, 0.22, farField);
+    float shorelineMask = contactGapMask(shorelineGap, 0.28);
+    float shorelineCore = contactGapMask(shorelineGap, 0.10);
+    float shelfBottomY = underwaterShelfHeightAt(waterPos.x, waterPos.z);
+    float staticWaterDepth = max(u_waterLevel - shelfBottomY, 0.0);
+    float shallowWaveDamping = 1.0 - smoothstep(0.006, 0.050, staticWaterDepth);
+    float largeWaveMask  = mix(1.0, 0.68, farField) * (1.0 - shallowWaveDamping * 0.42);
+    float mediumWaveMask = mix(1.0, 0.44, farField) * (1.0 - shallowWaveDamping * 0.24);
+    float rippleWaveMask = mix(1.0, 0.18, farField) * (1.0 - shallowWaveDamping * 0.08);
+    float microNoiseMask = mix(1.0, 0.22, farField) * (1.0 - shallowWaveDamping * 0.22);
     vec2 p = waterPos.xz * 1.1;
+    float waveHeight = waveFieldWithMasks(p, t, largeWaveMask, mediumWaveMask, rippleWaveMask);
 
     // НОРМАЛЬ ВОЛН
     vec3 n = waveNormal(p, t, largeWaveMask, mediumWaveMask, rippleWaveMask);
@@ -532,6 +617,15 @@ void main()
         vec2 mn = microNormalDelta(p, t, microNoiseMask);
         n = normalize(n + vec3(mn.x, 0.0, mn.y) * 0.28);
     }
+
+    float bankSurfaceY = shorelineBankSurfaceYAt(waterPos.x, waterPos.z);
+    float bankSurfaceNorm = saturate((bankSurfaceY - u_waterLevel) / max(shorelineHeightAt(waterPos.x) - u_waterLevel, 0.001));
+    float waterSurfaceY = u_waterLevel + max(waveHeight, 0.0) * 0.22;
+    float shallowThickness = max(0.0, waterSurfaceY - shelfBottomY);
+    float shallowWaterAlpha = smoothstep(0.014, 0.060, shallowThickness);
+    float shallowReveal = 1.0 - shallowWaterAlpha;
+    float calmBand = max(shallowReveal * 0.30, shorelineCore * 0.08 + shallowWaveDamping * 0.12);
+    n = normalize(mix(n, vec3(0.0, 1.0, 0.0), calmBand));
 
     float rippleStrength = 1.0 - n.y;
     vec3 viewDir = normalize(ro - waterPos);
@@ -565,26 +659,44 @@ void main()
     // СОЛНЕЧНАЯ ДОРОЖКА
     float sunMirror = max(dot(reflDir, sunDir), 0.0);
     vec3 sunLight = sunCol * (pow(sunMirror, 180.0) * 4.5 + pow(sunMirror, 42.0) * 0.7);
+    sunLight *= (1.0 - shorelineCore * 0.72);
 
     // ЦВЕТ ВОДЫ
     vec3 waterDeep = mix(vec3(0.03,0.10,0.16), skyRefl*0.6, 0.3);
     vec3 waterCol  = mix(waterDeep, skyRefl + sunLight, fresnel);
     vec3 shallowShelfTint = mix(vec3(0.40, 0.31, 0.25), vec3(0.48, 0.28, 0.20), phase);
     vec3 wetEdgeTint = mix(vec3(0.18, 0.13, 0.11), vec3(0.20, 0.11, 0.09), phase);
-    waterCol = mix(waterCol, waterCol * vec3(0.94, 0.96, 0.90) + shallowShelfTint * 0.12, shorelineMask * 0.34);
-    waterCol = mix(waterCol, wetEdgeTint + skyRefl * 0.18, shorelineCore * 0.18);
+    vec3 sharedContactCol = mix(
+        wetEdgeTint + shallowShelfTint * 0.10,
+        horizonSky * 0.58 + shallowShelfTint * 0.42,
+        0.58
+    );
+    float waterSharedBand = max(shorelineCore * 0.18, shallowReveal * 0.24);
+    float shelfBottomNoise = 0.92 + 0.08 * shoreFbm(waterPos.x * 1.05 + 9.0, 63.7);
+    vec3 bankUnderwaterCol = bankMaterialBase(waterPos.x, max(bankSurfaceNorm, 0.05), phase) * vec3(0.78, 0.88, 0.97);
+    vec3 shallowBottomCol = mix(
+        shallowShelfTint * 0.80 + wetEdgeTint * 0.22 + skyRefl * 0.04,
+        bankUnderwaterCol + shallowShelfTint * 0.10,
+        shallowReveal * 0.72
+    ) * shelfBottomNoise;
+    waterCol = mix(waterCol, waterCol * vec3(0.94, 0.96, 0.90) + shallowShelfTint * 0.12, shorelineMask * 0.18);
+    waterCol = mix(shallowBottomCol, waterCol, shallowWaterAlpha);
+    waterCol = mix(waterCol, bankUnderwaterCol + skyRefl * 0.08, shallowReveal * 0.18);
+    waterCol = mix(waterCol, sharedContactCol, waterSharedBand * 0.015);
+    waterCol += (sunCol * 0.05 + vec3(0.015, 0.016, 0.018)) * shorelineCore * (0.10 + 0.24 * rippleStrength);
 
     // СПЕКУЛЯР + ГЛИНТЫ
     vec3 halfDir  = normalize(sunDir + viewDir);
     float glint = pow(max(dot(n,sunDir),0.0),80.0) * rippleStrength * mix(0.32, 1.0, nearField) * 3.5;
+    glint *= (1.0 - shorelineCore * 0.88);
     waterCol += glint*sunCol*1.2;
     waterCol  = mix(waterCol, waterCol*vec3(0.88,0.93,1.05),
                     rippleStrength * 0.28 * mix(0.26, 1.0, nearField));
     waterCol += pow(max(dot(n,halfDir),0.0),52.0) * 0.9 * mix(0.46, 1.0, nearField) * (sunCol*1.5+vec3(0.1));
 
     vec3 horizonLift = mix(horizonSky, skyRefl, 0.68);
-    vec3 col = mix(waterCol, horizonLift, horizonMist * 0.10);
-    col = mix(col, wetEdgeTint + skyRefl * 0.24, shorelineCore * 0.10);
+    vec3 col = mix(waterCol, horizonLift, horizonMist * 0.10 * (1.0 - shorelineCore * 0.82));
+    col = mix(col, sharedContactCol, waterSharedBand * 0.02);
 
     // ОТРАЖЕНИЕ НАЗВАНИЯ
     vec2 textRefl = vec2(

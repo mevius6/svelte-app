@@ -111,6 +111,9 @@ Use this as the preferred depth/immersion strategy for the project:
 - Migrate vegetation from horizon-locked overlay logic into world-space shoreline placement before treating atlas cards as a failed technique.
 - For vegetation migration, keep `BushesPass` as a separate pass, but store instance roots in shoreline/world space and project them through the same camera model as `LandscapePass`.
 - For later shoreline polish, prefer local SDF masking / smooth-union techniques for bank-to-water seating before reaching for heavier geometry or a full SDF-world rewrite.
+- For the actual bank/water contact, do not treat `waterPos.z` alone as a sufficient shoreline metric; when the result reads as a fixed stripe, prefer a shared ray-gap/depth-softening metric (`tShore - tWater` / `tWater - tShore`) before adding stronger wet-edge or foam styling.
+- Treat shoreline as a shallow-overlap problem, not just a color-seam problem. For the current baseline, prefer `shorelineGap`, underwater shelf depth, bank-through-water shading, and shore water-film logic before introducing explicit foam bands.
+- If the remaining issue is only a thin residual seam, do not keep iterating coefficients indefinitely. The next principled step after the current single-pass baseline is a dedicated shoreline overlap/depth layer or extra contact pass.
 - Move title/text from 2D overlay treatment toward world-anchored SDF/MSDF rendering before considering full 3D text extrusion.
 - Use SDF selectively for hero objects, volumetrics, reveal masks, and story hotspots; avoid turning the entire scene into an SDF world unless it clearly reduces complexity and improves the result.
 
@@ -254,8 +257,10 @@ The project has already completed the main architectural extraction. Treat the f
 - Shared resize/framing math now lives in `src/lib/scene/sceneFraming.ts` and uses height-normalized scene space. Treat that as the baseline for future aspect-ratio fixes in both landscape and vegetation paths.
 - `src/lib/scene/sceneCamera.ts` is the place to grow orbital camera state, screen-to-world ray helpers, water-plane hit testing, and the migration away from purely screen-space landscape composition.
 - The landscape baseline now reads as a compact pond rather than open water: opposite-bank termination and pond-scale framing are intentional parts of the current scene direction.
-- `BushesPass` has started Phase 1.6 migration: card roots now belong in shoreline/world space and should project through the same orbital camera model as `LandscapePass`.
+- `BushesPass` has completed the main Phase 1.6 migration baseline: card roots now belong in shoreline/world space and project through the same orbital camera model as `LandscapePass`.
 - The current vegetation output is still an evaluation scaffold. If cards feel detached from the bank during scroll/camera motion, first treat that as an anchoring/projection/integration bug, not as proof that atlas-card vegetation is invalid.
+- The shoreline contact baseline has already gone beyond simple edge tinting. `LandscapePass` now uses shared gap metrics, underwater shelf depth, bank-through-water color, shore water-film, and overlap-aware branch selection as the acceptable single-pass `2.5D` baseline.
+- A small residual bank/water seam should be interpreted as a limitation of the current single-pass dual-surface model, not necessarily as an immediate shader bug. If a future task wants a materially better result, reach first for a dedicated shoreline overlap/depth layer rather than more `contact band` tweaking.
 - Debug pass switches already exist in development mode and are wired to `Ripple`, `Landscape`, and `Vegetation/Bushes` views.
 - The project now uses `@sveltejs/adapter-vercel` so Vercel builds the correct platform output. Article pages still rely on server `load` functions and private Strapi environment variables.
 
@@ -267,10 +272,17 @@ Use this as the preferred order for upcoming work:
 2. Use the current migration order for scene depth:
    - Phase 1: orbital camera + world-ray reconstruction in `LandscapePass`
    - Phase 1.5: pond-scale calibration + finite opposite-bank read
-   - Phase 1.6: vegetation world-space migration (shoreline-rooted cards, camera-projected placement, no final dependence on a shared `u_horizon`)
+   - Phase 1.6: vegetation world-space migration (shoreline-rooted cards, camera-projected placement, no final dependence on a shared `u_horizon`) — current baseline complete
+   - Phase 1.7: shoreline overlap baseline inside `LandscapePass` (shared gap metric, shallow shelf, bank-through-water, shore water-film) — current baseline complete for single-pass work
    - Phase 2: world-anchored title/SDF text
+   - Phase 2.5: optional dedicated shoreline overlap/depth layer if the project later needs a more physical bank/water interaction than the single-pass baseline can provide
    - Phase 3: selective SDF / volumetrics / hero-object depth work
 3. Keep `README.md` and this instruction file in sync with meaningful runtime baseline changes, especially when camera model, atlas ownership, framing math, pass roles, or debug workflows change.
 4. Reassess whether pass ownership/orchestration should remain in `LandscapeScene` or move further into `Renderer`, but only if that change improves clarity without changing behavior.
 5. Perform safe shader optimization passes on real hot spots only after the camera/world-space migration has stabilized enough that we are not optimizing code that is about to be replaced.
 6. Keep validating the core invariant: ripple affects water normals, not direct color, and verify that debug views still work after each substantial change.
+7. Treat the next likely quality wins as:
+   - world-anchored title / reflection coherence,
+   - vegetation atlas/silhouette quality and layering,
+   - optional dedicated shoreline overlap/depth layer,
+   not as a reason to revisit completed camera/world-space migration from scratch.

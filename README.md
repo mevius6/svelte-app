@@ -83,11 +83,15 @@ Post-processing в активный pipeline пока не подключён.
 - Принятый курс: переводить `LandscapePass` в camera-space/world-space постепенно, сохраняя текущую pass-архитектуру.
 - Phase 1 baseline: orbital camera state, world-ray reconstruction, water-plane shading и shoreline hit-модель внутри `LandscapePass`.
 - Phase 1.5 baseline: pond-scale calibration — вода читается как городской пруд с конечным противоположным берегом, а не как бесконечная открытая акватория.
-- Phase 1.6 current target: перевести vegetation из horizon-locked overlay в world-space shoreline placement.
+- Phase 1.6 baseline: vegetation уже переведена из horizon-locked overlay в world-space shoreline placement.
 - Для `BushesPass` это означает: инстансы хранят корень карточки в world-space вдоль bank/shoreline, затем проецируются той же камерой, что и landscape; единый `u_horizon` как финальная посадка кустов больше не считается достаточным baseline.
 - Atlas/billboard техника для дальней береговой растительности считается валидной; текущие артефакты читаются как проблема пространственной привязки, а не как доказательство, что cards/atlas не подходят.
 - Для следующего polish-слоя bank/water transition разрешён локальный SDF-подход: shoreline distance mask + `smin`/soft union для более мягкой посадки берега в воду, если это не ломает текущий pond-scale baseline.
 - При использовании `smin` помнить, что blend-region перестаёт быть exact distance field; держать `k` небольшим и сначала применять это как shaping/masking tool, а не как основу для тяжёлого raymarch-пайплайна.
+- Для самого контакта `берег <-> вода` не считать `waterPos.z` достаточной метрикой. Если interaction выглядит как горизонтальная полоска, сначала переходить на shared ray-gap/depth-softening metric (`tShore - tWater` / `tWater - tShore`), а уже потом усиливать цвет/foam/wet-edge.
+- Phase 1.7 baseline: shoreline contact больше не считается purely color-seam задачей. Текущий acceptable result для single-pass `2.5D` строится через `shorelineGap`, `underwater shelf`, `bank-through-water`, `shore water-film` и overlap-aware выбор ветки в `LandscapePass`.
+- Практическое правило на будущее: если край снова читается как “нарисованная полоска”, не начинать с очередного тюнинга `contact band`. Сначала проверять толщину воды у toe, overlap-compositing и слишком раннее разделение `shore`/`water`.
+- Текущий shoreline baseline считаем достаточным для движения дальше по проекту; остаточный микрошов трактуем как ограничение single-pass dual-surface модели, а не как blocker.
 - После world-space миграции vegetation двигаем title из 2D overlay в world-anchored SDF/MSDF слой.
 - Только после этого оцениваем selective SDF для volumetrics, story reveals и hero-объектов; не делаем мгновенный переход на “полный 3D engine”.
 
@@ -102,6 +106,17 @@ Post-processing в активный pipeline пока не подключён.
 - Runtime уже перешёл к orbital camera/world-space foundation для воды и противоположного берега: landscape больше не должен опираться только на экранный split по `uv.y`.
 - `BushesPass` начал Phase 1.6 migration: roots карточек уже хранятся в world-space вдоль той же shoreline/bank-модели, что использует `LandscapePass`, и проецируются через ту же orbital camera.
 - Vegetation shading и atlas quality всё ещё считаются промежуточным scaffold; если визуал выбивается, сначала проверяем anchoring/projection/integration, а не отвергаем atlas cards как технику.
+- Shoreline контакт сейчас доведён до приемлемого pond-scale baseline внутри single-pass `LandscapePass`: вода у toe больше не должна опираться только на fixed stripe, а использует shallow shelf depth, bank-through-water tint и shore watercoat.
+- Если когда-либо понадобится ещё более натуральный bank/water overlap, следующий правильный шаг — отдельный shoreline overlap/depth layer или дополнительный contact pass. Это уже следующий класс сложности, а не обязательная правка текущего baseline.
+
+## Заметки на будущее
+
+- `World-anchored title`: перевести название из screen overlay в world/view-space SDF/MSDF слой, чтобы убрать остаточную “плоскость” текста и сделать отражение более пространственным.
+- `Shoreline overlap layer`: если снова вернёмся к берегу/воде, пробовать не новые коэффициенты в `landscape.frag`, а отдельный overlap/depth слой для мелководья и water-on-bank compositing.
+- `Vegetation quality pass`: улучшить atlas silhouette variety, density clustering, layering, sorting/depth cues и художественную разнородность береговой ленты.
+- `Near-shore water detail`: при необходимости добавить очень мягкий локальный foam/sediment/wet-sand язык, но только поверх уже работающего overlap baseline, не вместо него.
+- `Ripple/world mapping`: при следующих итерациях стоит ещё раз проверить размеры `RIPPLE_WORLD_RECT` и near-shore damping, если у кромки снова появится ощущение отдельного calm-band.
+- `Selective depth work`: если иммерсив/сторителлинг потребуют большего объёма, следующим большим шагом должен быть не engine jump, а локальные overlap/depth/volumetric решения внутри текущей pass-архитектуры.
 
 Deployment/runtime: проект собирается через `@sveltejs/adapter-vercel`. Server `load` и private env для Strapi остаются валидными на Vercel, а production-артефакт больше не должен разворачиваться как статическая папка с `build/index.js`.
 
