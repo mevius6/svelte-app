@@ -1,24 +1,20 @@
 import { Program } from "../gl/Program"
 import { FullscreenQuad } from "../gl/FullscreenQuad"
 import { RenderPass } from "../render/RenderPass"
-import type { RippleWorldRect, SceneCameraState } from "../scene/sceneCamera"
+import type { RippleWorldRect, SceneCameraState, TitleHeroState } from "../scene/sceneCamera"
+import type { HeroTitleAtlasRenderData } from "../scene/LandscapeResources"
 import landscapeVert from "../shaders/landscape.vert?raw"
 import landscapeFrag from "../shaders/landscape.frag?raw"
 
 export type LandscapeDebugMode = "beauty" | "ripple" | "normals" | "reflection"
 
-type TextRect = {
-  x: number
-  y: number
-  w: number
-  h: number
-}
-
 type LandscapeFrameState = {
   camera: SceneCameraState
   scroll: number
   textTexture: WebGLTexture
-  textRect: TextRect
+  titleHero: TitleHeroState
+  useTitleBillboard: boolean
+  titleAtlasRenderData: HeroTitleAtlasRenderData | null
   rippleTexelSize: number
   rippleWorldRect: RippleWorldRect
   sceneScale: {
@@ -52,7 +48,13 @@ export class LandscapePass extends RenderPass {
   private debugMode: LandscapeDebugMode = "beauty"
   private scroll = 0
   private textTexture: WebGLTexture | null = null
-  private textRect: TextRect = { x: 0, y: 0, w: 0, h: 0 }
+  private titleHero: TitleHeroState = {
+    center: { x: 0, y: 0, z: 0 },
+    size: { w: 1, h: 1 },
+    uvRect: { x: 0, y: 0, w: 1, h: 1 },
+  }
+  private useTitleBillboard = true
+  private titleAtlasRenderData: HeroTitleAtlasRenderData | null = null
   private rippleTexelSize = 0
   private rippleWorldRect: RippleWorldRect = { x: 0, z: 0, w: 1, depth: 1 }
   private sceneScale = { x: 1, y: 1 }
@@ -76,7 +78,9 @@ export class LandscapePass extends RenderPass {
     this.camera = state.camera
     this.scroll = state.scroll
     this.textTexture = state.textTexture
-    this.textRect = state.textRect
+    this.titleHero = state.titleHero
+    this.useTitleBillboard = state.useTitleBillboard
+    this.titleAtlasRenderData = state.titleAtlasRenderData
     this.rippleTexelSize = state.rippleTexelSize
     this.rippleWorldRect = state.rippleWorldRect
     this.sceneScale = state.sceneScale
@@ -138,14 +142,56 @@ export class LandscapePass extends RenderPass {
       this.camera.forward.z
     )
     this.program.setFloat("u_cameraTanHalfFovY", Math.tan(this.camera.fovY * 0.5))
-    this.program.setVec4(
-      "u_textRect",
-      this.textRect.x,
-      this.textRect.y,
-      this.textRect.w,
-      this.textRect.h
-    )
     this.program.setTexture("u_textTex", this.textTexture, 0)
+    this.program.setFloat("u_useTitleBillboard", this.useTitleBillboard ? 1 : 0)
+    this.program.setFloat("u_useTitleAtlasReflection", this.titleAtlasRenderData?.atlas.texture ? 1 : 0)
+    this.program.setVec3(
+      "u_titleWorldCenter",
+      this.titleHero.center.x,
+      this.titleHero.center.y,
+      this.titleHero.center.z
+    )
+    this.program.setVec2(
+      "u_titleWorldSize",
+      this.titleHero.size.w,
+      this.titleHero.size.h
+    )
+    this.program.setVec4(
+      "u_titleTexRect",
+      this.titleHero.uvRect.x,
+      this.titleHero.uvRect.y,
+      this.titleHero.uvRect.w,
+      this.titleHero.uvRect.h
+    )
+    this.program.setTexture("u_titleAtlasTex", this.titleAtlasRenderData?.atlas.texture ?? null, 2)
+    this.program.setVec2(
+      "u_titleAtlasSize",
+      this.titleAtlasRenderData?.atlas.font.atlas.width ?? 1,
+      this.titleAtlasRenderData?.atlas.font.atlas.height ?? 1
+    )
+    this.program.setFloat(
+      "u_titleAtlasPxRange",
+      this.titleAtlasRenderData?.atlas.font.atlas.distanceRange ?? 4
+    )
+    this.program.setVec2(
+      "u_titleLayoutSize",
+      this.titleAtlasRenderData?.gpuLayout.phraseLayout.width ?? 1,
+      this.titleAtlasRenderData?.gpuLayout.phraseLayout.height ?? 1
+    )
+    this.program.setInt(
+      "u_titleGlyphCount",
+      this.titleAtlasRenderData?.gpuLayout.phraseLayout.glyphs.length ?? 0
+    )
+    if (this.titleAtlasRenderData) {
+      this.program.setVec4Array(
+        "u_titleGlyphBounds[0]",
+        this.titleAtlasRenderData.gpuLayout.glyphBoundsData
+      )
+      this.program.setVec4Array(
+        "u_titleGlyphAtlasRects[0]",
+        this.titleAtlasRenderData.gpuLayout.glyphAtlasData
+      )
+    }
 
     this.program.setTexture("u_rippleTex", rippleTex, 1)
     this.program.setFloat("u_rippleTexel", this.rippleTexelSize)

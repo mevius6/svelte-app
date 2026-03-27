@@ -1,10 +1,12 @@
 import { RipplePass } from "../passes/RipplePass"
 import { LandscapePass, type LandscapeDebugMode } from "../passes/LandscapePass"
 import { BushesPass } from "../passes/BushesPass"
+import { HeroTitlePass } from "../passes/HeroTitlePass"
 import { LandscapeResources, type FoliageAtlasSourceSet } from "./LandscapeResources"
 import {
   computeSceneCamera,
   computeVegetationHorizon,
+  computeTitleHeroState,
   intersectRayWithWaterPlane,
   RIPPLE_WORLD_RECT,
   screenPointToWorldRay,
@@ -41,6 +43,7 @@ export class LandscapeScene implements Scene {
   private ripple: RipplePass
   private landscape: LandscapePass
   private bushes: BushesPass
+  private heroTitle: HeroTitlePass
   private resources: LandscapeResources
 
   private width = 1
@@ -93,6 +96,7 @@ export class LandscapeScene implements Scene {
     this.ripple = new RipplePass(gl)
     this.landscape = new LandscapePass(gl)
     this.bushes = new BushesPass(gl)
+    this.heroTitle = new HeroTitlePass(gl, projectName)
     this.resources = new LandscapeResources(gl)
   }
 
@@ -121,6 +125,7 @@ export class LandscapeScene implements Scene {
     this.ripple.resize(width, height)
     this.landscape.resize(width, height)
     this.bushes.resize(width, height)
+    this.heroTitle.resize(width, height)
   }
 
   setDebugState(state: Partial<SceneDebugState>) {
@@ -145,15 +150,20 @@ export class LandscapeScene implements Scene {
     const sceneFrame = computeSceneFrame(this.width, this.height)
     const camera = computeSceneCamera(this.scrollNorm, this.width, this.height)
     const vegetationHorizon = computeVegetationHorizon(camera, this.width, this.height)
-    const hw = 0.22
     const textTexSize = this.resources.textTextureSize
-    const hh = hw * (textTexSize.h / textTexSize.w)
+    const titleLayout = this.resources.heroTitleLayout
+    const titleHero = computeTitleHeroState(this.scrollNorm, titleLayout.aspect, textTexSize.contentRect)
+    const heroTitleAtlasRenderData = this.resources.heroTitleAtlasRenderData
+    const heroTitleAtlas = heroTitleAtlasRenderData?.atlas ?? this.resources.heroTitleAtlas
+    const useGlyphTitle = Boolean(heroTitleAtlasRenderData?.atlas.texture)
 
     this.landscape.setFrameState({
       camera,
       scroll: this.scrollNorm,
       textTexture,
-      textRect: { x: 0.5, y: 0.67, w: hw, h: hh },
+      titleHero,
+      useTitleBillboard: !useGlyphTitle,
+      titleAtlasRenderData: heroTitleAtlasRenderData,
       rippleTexelSize: this.ripple.texelSize,
       rippleWorldRect: RIPPLE_WORLD_RECT,
       sceneScale: {
@@ -162,6 +172,13 @@ export class LandscapeScene implements Scene {
       },
       shorePlaneZ: SHORELINE_WORLD_Z,
       waterLevel: WATER_LEVEL,
+    })
+    this.heroTitle.setFrameState({
+      camera,
+      phase: this.scrollNorm,
+      titleHero,
+      atlas: heroTitleAtlas,
+      gpuLayout: heroTitleAtlasRenderData?.gpuLayout ?? null,
     })
 
     if (this.passView === "ripple") {
@@ -191,6 +208,15 @@ export class LandscapeScene implements Scene {
     this.landscape.setDebugMode(landscapeMode)
     this.landscape.render(time, rippleTex)
 
+    const shouldRenderHeroTitle =
+      useGlyphTitle &&
+      (this.passView === "final" ||
+        (this.passView === "landscape" && this.landscapeMode === "beauty"))
+
+    if (shouldRenderHeroTitle) {
+      this.heroTitle.render(time, null)
+    }
+
     if (this.passView === "final") {
       this.bushes.setFrameState({
         camera,
@@ -215,6 +241,7 @@ export class LandscapeScene implements Scene {
 
     this.landscape.dispose()
     this.bushes.dispose()
+    this.heroTitle.dispose()
     this.ripple.dispose()
     this.resources.dispose()
 

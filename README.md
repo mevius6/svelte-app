@@ -92,7 +92,14 @@ Post-processing в активный pipeline пока не подключён.
 - Phase 1.7 baseline: shoreline contact больше не считается purely color-seam задачей. Текущий acceptable result для single-pass `2.5D` строится через `shorelineGap`, `underwater shelf`, `bank-through-water`, `shore water-film` и overlap-aware выбор ветки в `LandscapePass`.
 - Практическое правило на будущее: если край снова читается как “нарисованная полоска”, не начинать с очередного тюнинга `contact band`. Сначала проверять толщину воды у toe, overlap-compositing и слишком раннее разделение `shore`/`water`.
 - Текущий shoreline baseline считаем достаточным для движения дальше по проекту; остаточный микрошов трактуем как ограничение single-pass dual-surface модели, а не как blocker.
-- После world-space миграции vegetation двигаем title из 2D overlay в world-anchored SDF/MSDF слой.
+- Phase 2 baseline больше не трактуем как финальный `canvas phrase billboard`. Этот путь остаётся только как временный fallback/scaffold, пока не внедрён atlas-driven рендеринг текста.
+- Новый курс для hero-title: `MSDF/MTSDF atlas + glyph metrics + отдельный HeroTitlePass` в world-space. Пропорции, kerning и glyph bounds должны приходить из font metrics, а не из alpha-crop canvas-текстуры.
+- Asset pipeline для hero-title уже активен: `bun run hero-title:generate` пишет atlas/metrics в `static/hero-title/`, а рантайм подхватывает их через `LandscapeResources`.
+- Текущий Phase 2.2 baseline: если atlas доступен, прямой title и его отражение должны идти через отдельный `HeroTitlePass`; старый fullscreen billboard внутри `LandscapePass` остаётся только fallback-путём на случай отсутствия atlas-артефактов.
+- В качестве primary reference-path предпочитаем `msdf-atlas-gen`/`msdfgen`; `msdf-bmfont-xml` допустим как pragmatic JS-friendly generator, если его формат/layout окажется удобнее для toolchain.
+- Для serif hero-title с потенциальными будущими soft effects предпочтителен `MTSDF`, но не в ущерб простоте пайплайна. Если первый шаг проще сделать на `MSDF`, это acceptable baseline.
+- Текущий hero-title baseline intentionally без встроенного glow: ни в canvas-texture, ни в shader compositing. Если позже понадобится bloom, его лучше делать отдельным pass, а не baked halo внутри самого title.
+- Следующий шаг для title-слоя — не возвращать overlay, а переводить именно ресурсный и render path на atlas-driven world-space решение: метрики, glyph layout, reflection coherence и затем уже отдельный bloom/material pass.
 - Только после этого оцениваем selective SDF для volumetrics, story reveals и hero-объектов; не делаем мгновенный переход на “полный 3D engine”.
 
 ## Текущий baseline для vegetation и framing
@@ -111,7 +118,10 @@ Post-processing в активный pipeline пока не подключён.
 
 ## Заметки на будущее
 
-- `World-anchored title`: перевести название из screen overlay в world/view-space SDF/MSDF слой, чтобы убрать остаточную “плоскость” текста и сделать отражение более пространственным.
+- `HeroTitlePass`: текущий canvas-billboard трактуем как bridge/fallback. Финальный путь для объекта-героя — отдельный pass с atlas texture, glyph metrics, kerning и camera-aware MSDF/MTSDF shading.
+- `Hero title asset pipeline`: нужен оффлайн-артефактный слой вида `static/hero-title/roslindale-msdf.json` + atlas image. Для генерации предпочтительны `.ttf/.otf` source fonts; runtime `woff2` не считать основным production-входом для atlas generation toolchain.
+- `Hero title reflection`: текущий acceptable baseline — world-space mirrored glyph pass. Если позже понадобится более физичная посадка отражения в воду, следующим правильным шагом будет отдельная интеграция с water/reflection layer, а не возврат к phrase-billboard sampling внутри fullscreen landscape shader.
+- `Bloom/blur pass`: если title снова попросит свечение, не возвращать canvas-shadow или shader halo. Добавлять отдельный post-process pass поверх уже работающего world-space baseline.
 - `Shoreline overlap layer`: если снова вернёмся к берегу/воде, пробовать не новые коэффициенты в `landscape.frag`, а отдельный overlap/depth слой для мелководья и water-on-bank compositing.
 - `Vegetation quality pass`: улучшить atlas silhouette variety, density clustering, layering, sorting/depth cues и художественную разнородность береговой ленты.
 - `Near-shore water detail`: при необходимости добавить очень мягкий локальный foam/sediment/wet-sand язык, но только поверх уже работающего overlap baseline, не вместо него.
@@ -123,6 +133,7 @@ Deployment/runtime: проект собирается через `@sveltejs/adap
 ## Asset workflow
 
 - Если обновился исходный grass atlas в `static/grass-atlas/*.tif`, сначала пересобираем web-runtime копии командой `npm run atlas:convert`.
+- Если обновился source font или phrase для hero-title, пересобираем atlas/metrics командой `bun run hero-title:generate`. Источник сейчас: `src/fonts/RoslindaleCyrillic-DisplayCondensedBlack.otf`; артефакты пишутся в `static/hero-title/`.
 - Runtime baseline сейчас завязан на `static/grass-atlas-web/*.png`; не переключать браузерный путь обратно на TIFF.
 - После изменений в render baseline или shader/framing model синхронизируем `README.md` и `codex-system-prompt.md`.
 

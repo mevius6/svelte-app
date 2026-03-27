@@ -12,6 +12,20 @@ export type SceneCameraState = {
   fovY: number
 }
 
+export type TitleHeroState = {
+  center: Vec3
+  size: {
+    w: number
+    h: number
+  }
+  uvRect: {
+    x: number
+    y: number
+    w: number
+    h: number
+  }
+}
+
 export type RippleWorldRect = {
   x: number
   z: number
@@ -27,6 +41,10 @@ export const WATER_LEVEL = 0
 export const SHORELINE_WORLD_Z = -0.95
 const VEGETATION_ANCHOR_HEIGHT = 0.09
 export const VEGETATION_WORLD_Z = SHORELINE_WORLD_Z - 0.035
+const TITLE_WORLD_Z_NEAR = -0.58
+const TITLE_WORLD_Z_FAR = -0.66
+const TITLE_WORLD_WIDTH_NEAR = 2.44
+const TITLE_WORLD_WIDTH_FAR = 2.62
 export const RIPPLE_WORLD_RECT: RippleWorldRect = {
   x: -2.15,
   z: SHORELINE_WORLD_Z,
@@ -154,6 +172,30 @@ export function shorelineVegetationRootAtWorldX(worldX: number): Vec3 {
     x: worldX,
     y: shorelineHeightAtWorldX(worldX) - 0.006,
     z: VEGETATION_WORLD_Z,
+  }
+}
+
+export function computeTitleHeroState(
+  scroll: number,
+  textAspect: number,
+  uvRect = { x: 0, y: 0, w: 1, h: 1 }
+): TitleHeroState {
+  const easedScroll = smoothstep01(scroll)
+  const width = mix(TITLE_WORLD_WIDTH_NEAR, TITLE_WORLD_WIDTH_FAR, easedScroll)
+  const height = width * textAspect
+  const baseLift = mix(-0.02, 0.18, easedScroll)
+
+  return {
+    center: {
+      x: 0,
+      y: WATER_LEVEL + baseLift + height * 0.5,
+      z: mix(TITLE_WORLD_Z_NEAR, TITLE_WORLD_Z_FAR, easedScroll),
+    },
+    size: {
+      w: width,
+      h: height,
+    },
+    uvRect,
   }
 }
 

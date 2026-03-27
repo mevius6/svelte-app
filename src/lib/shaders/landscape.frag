@@ -8,7 +8,19 @@ uniform float u_time;
 uniform float u_scroll;
 
 uniform sampler2D u_textTex;
-uniform vec4      u_textRect;
+uniform float     u_useTitleBillboard;
+uniform sampler2D u_titleAtlasTex;
+uniform float     u_useTitleAtlasReflection;
+uniform vec2      u_titleAtlasSize;
+uniform float     u_titleAtlasPxRange;
+uniform vec2      u_titleLayoutSize;
+uniform int       u_titleGlyphCount;
+const int         MAX_TITLE_GLYPHS = 32;
+uniform vec4      u_titleGlyphBounds[MAX_TITLE_GLYPHS];
+uniform vec4      u_titleGlyphAtlasRects[MAX_TITLE_GLYPHS];
+uniform vec3      u_titleWorldCenter;
+uniform vec2      u_titleWorldSize;
+uniform vec4      u_titleTexRect;
 
 uniform sampler2D u_rippleTex;
 uniform float     u_rippleTexel;
@@ -217,10 +229,45 @@ vec3 waveNormal(
 // HELPERS
 // ----------------------------------------------------
 
-float sampleTextAlpha(vec2 worldUV) {
-    vec2  uv2 = (worldUV - u_textRect.xy) / u_textRect.zw * 0.5 + 0.5;
-    float inB = step(0.0,uv2.x)*step(uv2.x,1.0)*step(0.0,uv2.y)*step(uv2.y,1.0);
-    return texture(u_textTex, clamp(uv2,0.0,1.0)).a * inB;
+float sampleTitleTextureAlpha(vec2 uv) {
+    float inBounds = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
+    vec2 texUv = u_titleTexRect.xy + clamp(uv, 0.0, 1.0) * u_titleTexRect.zw;
+    float edge = min(min(uv.x, uv.y), min(1.0 - uv.x, 1.0 - uv.y));
+    float edgeFade = smoothstep(0.0, 0.035, edge);
+    float rawAlpha = texture(u_textTex, texUv).a * inBounds * edgeFade;
+    return smoothstep(0.42, 0.82, rawAlpha);
+}
+
+float median3(vec3 sampleValue) {
+    return max(min(sampleValue.r, sampleValue.g), min(max(sampleValue.r, sampleValue.g), sampleValue.b));
+}
+
+float titleAtlasScreenPxRange(vec2 atlasUv) {
+    vec2 unitRange = vec2(u_titleAtlasPxRange) / max(u_titleAtlasSize, vec2(1.0));
+    vec2 screenTexSize = vec2(1.0) / max(fwidth(atlasUv), vec2(1e-5));
+    return max(0.5 * dot(unitRange, screenTexSize), 1.0);
+}
+
+float sampleTitleAtlasAlpha(vec2 atlasUv) {
+    vec3 msdf = texture(u_titleAtlasTex, atlasUv).rgb;
+    float signedDistance = median3(msdf) - 0.5;
+    return clamp(titleAtlasScreenPxRange(atlasUv) * signedDistance + 0.5, 0.0, 1.0);
+}
+
+float sampleTitleAtlasSignedDistance(vec2 atlasUv) {
+    vec3 msdf = texture(u_titleAtlasTex, atlasUv).rgb;
+    return median3(msdf) - 0.5;
+}
+
+void sampleTitleAtlasReflectionCoverage(vec2 atlasUv, out float fillAlpha, out float haloAlpha) {
+    float signedDistance = sampleTitleAtlasSignedDistance(atlasUv);
+    float pxRange = titleAtlasScreenPxRange(atlasUv) * 0.58;
+    float screenDistance = signedDistance * pxRange;
+    fillAlpha = clamp(screenDistance + 0.5, 0.0, 1.0);
+
+    float edgeBand = smoothstep(1.10, 0.04, abs(screenDistance));
+    float interiorSuppress = 1.0 - smoothstep(0.16, 0.80, fillAlpha);
+    haloAlpha = edgeBand * interiorSuppress;
 }
 
 float saturate(float v) {
@@ -286,9 +333,177 @@ vec3 shadeSkyDirection(vec3 dir, float phase01, vec3 sunCol, vec3 sunDir) {
     return mix(sky + sunLight, cloudLight + sunLight * sunLitCloud, density);
 }
 
+vec3 titleBillboardRight() {
+    vec3 right = vec3(u_cameraRight.x, 0.0, u_cameraRight.z);
+    float len = length(right);
+    if (len <= 0.0001) {
+        return vec3(1.0, 0.0, 0.0);
+    }
+
+    return right / len;
+}
+
 bool insideUnitSquare(vec2 uv) {
     return all(greaterThanEqual(uv, vec2(0.0))) &&
            all(lessThanEqual(uv, vec2(1.0)));
+}
+
+bool intersectTitleBillboard(
+    vec3 rayOrigin,
+    vec3 rayDir,
+    out float t,
+    out vec2 uv,
+    out vec3 hitPos,
+    out float alpha
+) {
+    vec3 titleRight = titleBillboardRight();
+    vec3 titleUp = vec3(0.0, 1.0, 0.0);
+    vec3 titleNormal = normalize(cross(titleRight, titleUp));
+    float denom = dot(rayDir, titleNormal);
+
+    if (abs(denom) <= 0.0001) {
+        return false;
+    }
+
+    t = dot(u_titleWorldCenter - rayOrigin, titleNormal) / denom;
+    if (t <= 0.0) {
+        return false;
+    }
+
+    hitPos = rayOrigin + rayDir * t;
+    vec3 local = hitPos - u_titleWorldCenter;
+    uv = vec2(
+        dot(local, titleRight) / max(u_titleWorldSize.x, 0.001) + 0.5,
+        dot(local, titleUp) / max(u_titleWorldSize.y, 0.001) + 0.5
+    );
+
+    if (!insideUnitSquare(uv)) {
+        return false;
+    }
+
+    alpha = sampleTitleTextureAlpha(uv);
+    return alpha > 0.012;
+}
+
+float sampleTitleGlyphPhraseAlpha(vec2 localMetric) {
+    float layoutHalfW = u_titleLayoutSize.x * 0.5;
+    float layoutHalfH = u_titleLayoutSize.y * 0.5;
+    if (
+        localMetric.x < -layoutHalfW || localMetric.x > layoutHalfW ||
+        localMetric.y < -layoutHalfH || localMetric.y > layoutHalfH
+    ) {
+        return 0.0;
+    }
+
+    float alpha = 0.0;
+    for (int i = 0; i < MAX_TITLE_GLYPHS; i++) {
+        if (i >= u_titleGlyphCount) {
+            break;
+        }
+
+        vec4 bounds = u_titleGlyphBounds[i];
+        vec2 glyphSize = max(bounds.zw - bounds.xy, vec2(0.001));
+        vec2 glyphUv = (localMetric - bounds.xy) / glyphSize;
+        float inBounds = step(0.0, glyphUv.x) * step(glyphUv.x, 1.0) * step(0.0, glyphUv.y) * step(glyphUv.y, 1.0);
+        if (inBounds <= 0.0) {
+            continue;
+        }
+
+        vec4 atlasRect = u_titleGlyphAtlasRects[i];
+        vec2 atlasUv = atlasRect.xy + clamp(glyphUv, 0.0, 1.0) * atlasRect.zw;
+        alpha = max(alpha, sampleTitleAtlasAlpha(atlasUv) * inBounds);
+    }
+
+    return alpha;
+}
+
+void sampleTitleGlyphPhraseReflection(vec2 localMetric, out float fillAlpha, out float haloAlpha) {
+    float layoutHalfW = u_titleLayoutSize.x * 0.5;
+    float layoutHalfH = u_titleLayoutSize.y * 0.5;
+    if (
+        localMetric.x < -layoutHalfW || localMetric.x > layoutHalfW ||
+        localMetric.y < -layoutHalfH || localMetric.y > layoutHalfH
+    ) {
+        fillAlpha = 0.0;
+        haloAlpha = 0.0;
+        return;
+    }
+
+    fillAlpha = 0.0;
+    haloAlpha = 0.0;
+    for (int i = 0; i < MAX_TITLE_GLYPHS; i++) {
+        if (i >= u_titleGlyphCount) {
+            break;
+        }
+
+        vec4 bounds = u_titleGlyphBounds[i];
+        vec2 glyphSize = max(bounds.zw - bounds.xy, vec2(0.001));
+        vec2 glyphUv = (localMetric - bounds.xy) / glyphSize;
+        float inBounds = step(0.0, glyphUv.x) * step(glyphUv.x, 1.0) * step(0.0, glyphUv.y) * step(glyphUv.y, 1.0);
+        if (inBounds <= 0.0) {
+            continue;
+        }
+
+        vec4 atlasRect = u_titleGlyphAtlasRects[i];
+        vec2 atlasUv = atlasRect.xy + clamp(glyphUv, 0.0, 1.0) * atlasRect.zw;
+        float glyphFill;
+        float glyphHalo;
+        sampleTitleAtlasReflectionCoverage(atlasUv, glyphFill, glyphHalo);
+        fillAlpha = max(fillAlpha, glyphFill * inBounds);
+        haloAlpha = max(haloAlpha, glyphHalo * inBounds);
+    }
+}
+
+vec2 titleLocalMetricFromHitPos(vec3 hitPos) {
+    vec3 titleRight = titleBillboardRight();
+    vec3 titleUp = vec3(0.0, 1.0, 0.0);
+    vec3 local = hitPos - u_titleWorldCenter;
+    return vec2(
+        dot(local, titleRight) / max(u_titleWorldSize.x, 0.001) * u_titleLayoutSize.x,
+        dot(local, titleUp) / max(u_titleWorldSize.y, 0.001) * u_titleLayoutSize.y
+    );
+}
+
+bool intersectTitleAtlas(
+    vec3 rayOrigin,
+    vec3 rayDir,
+    out float t,
+    out vec3 hitPos,
+    out float alpha
+) {
+    vec3 titleRight = titleBillboardRight();
+    vec3 titleUp = vec3(0.0, 1.0, 0.0);
+    vec3 titleNormal = normalize(cross(titleRight, titleUp));
+    float denom = dot(rayDir, titleNormal);
+
+    if (abs(denom) <= 0.0001) {
+        return false;
+    }
+
+    t = dot(u_titleWorldCenter - rayOrigin, titleNormal) / denom;
+    if (t <= 0.0) {
+        return false;
+    }
+
+    hitPos = rayOrigin + rayDir * t;
+    vec2 localMetric = titleLocalMetricFromHitPos(hitPos);
+
+    alpha = sampleTitleGlyphPhraseAlpha(localMetric);
+    return alpha > 0.012;
+}
+
+float titleAboveWaterAlpha(vec3 hitPos, float alpha) {
+    float emergence = smoothstep(u_waterLevel - 0.010, u_waterLevel + 0.018, hitPos.y);
+    return alpha * emergence;
+}
+
+vec3 titleHeroColor(vec3 rayDir, vec3 sunCol, vec3 sunDir) {
+    vec3 titleWarm = sunCol * 1.25 + vec3(0.20, 0.22, 0.28);
+    return mix(vec3(1.00, 0.97, 0.91), titleWarm, pow(max(dot(rayDir, sunDir), 0.0), 6.0) * 0.55);
+}
+
+vec3 compositeTitle(vec3 baseCol, vec3 titleCol, float alpha) {
+    return mix(baseCol, titleCol, alpha * 0.96);
 }
 
 vec2 waterWorldToRippleUV(vec3 worldPos) {
@@ -432,6 +647,16 @@ void main()
     vec3 shorePos;
     float shoreHeight;
     bool hasShore = intersectShore(ro, rd, tShore, shorePos, shoreHeight);
+    float tTitle;
+    vec2 titleUv;
+    vec3 titleHitPos;
+    float titleAlpha;
+    bool hasTitle = u_useTitleBillboard > 0.5 &&
+        intersectTitleBillboard(ro, rd, tTitle, titleUv, titleHitPos, titleAlpha);
+    if (hasTitle) {
+        titleAlpha = titleAboveWaterAlpha(titleHitPos, titleAlpha);
+        hasTitle = titleAlpha > 0.0005;
+    }
     float shoreWaterEdgeZ = shorelineWaterEdgeZ();
     bool waterWithinPond = hasWater && waterPos.z > shoreWaterEdgeZ;
     float waterToShoreGap = (hasWater && hasShore && tShore > tWater) ? (tShore - tWater) : 1e5;
@@ -538,6 +763,10 @@ void main()
         float shoreWatercoat = max(shoreFilmMask, (1.0 - shoreBottomCoverage) * (0.88 * shorelineSeatMask + 0.12 * shoreContactMask));
         shoreCol = mix(shoreCol, shoreFilmCol, shoreWatercoat * 0.96);
         shoreCol = mix(skyCol, shoreCol, shoreTopCoverage);
+        if (hasTitle && tTitle < tShore) {
+            vec3 titleCol = titleHeroColor(rd, sunCol, sunDir);
+            shoreCol = compositeTitle(shoreCol, titleCol, titleAlpha);
+        }
 
         fragColor = vec4(tonemap(shoreCol), 1.0);
         return;
@@ -557,9 +786,10 @@ void main()
         return;
 #endif
 
-        vec3 titleWarm = sunCol * 1.25 + vec3(0.20, 0.22, 0.28);
-        vec3 titleCol = mix(vec3(1.00, 0.97, 0.91), titleWarm, pow(max(dot(rd, sunDir), 0.0), 6.0) * 0.55);
-        skyCol = mix(skyCol, titleCol, sampleTextAlpha(screenUV) * 0.90);
+        if (hasTitle && (!hasShore || tTitle < tShore) && (!hasWater || tTitle < tWater)) {
+            vec3 titleCol = titleHeroColor(rd, sunCol, sunDir);
+            skyCol = compositeTitle(skyCol, titleCol, titleAlpha);
+        }
 
         fragColor = vec4(tonemap(skyCol), 1.0);
         return;
@@ -651,6 +881,55 @@ void main()
         }
     }
 
+    {
+        if (u_useTitleBillboard > 0.5) {
+            float tTitleRefl;
+            vec2 titleReflUv;
+            vec3 titleReflHitPos;
+            float titleReflAlpha;
+            bool hasTitleRefl = intersectTitleBillboard(
+                waterPos + n * 0.018 + vec3(0.0, 0.004, 0.0),
+                reflDir,
+                tTitleRefl,
+                titleReflUv,
+                titleReflHitPos,
+                titleReflAlpha
+            );
+            if (hasTitleRefl) {
+                titleReflAlpha = titleAboveWaterAlpha(titleReflHitPos, titleReflAlpha);
+                if (titleReflAlpha > 0.0005) {
+                    vec3 titleReflCol = titleHeroColor(reflDir, sunCol, sunDir);
+                    skyRefl = compositeTitle(skyRefl, titleReflCol, titleReflAlpha * 0.58);
+                }
+            }
+        } else if (u_useTitleAtlasReflection > 0.5) {
+            float tTitleRefl;
+            vec3 titleReflHitPos;
+            float titleReflAlpha;
+            bool hasTitleRefl = intersectTitleAtlas(
+                waterPos + n * 0.018 + vec3(0.0, 0.004, 0.0),
+                reflDir,
+                tTitleRefl,
+                titleReflHitPos,
+                titleReflAlpha
+            );
+            if (hasTitleRefl) {
+                vec2 titleReflMetric = titleLocalMetricFromHitPos(titleReflHitPos);
+                float titleReflFill;
+                float titleReflHalo;
+                sampleTitleGlyphPhraseReflection(titleReflMetric, titleReflFill, titleReflHalo);
+                titleReflFill = titleAboveWaterAlpha(titleReflHitPos, titleReflFill);
+                titleReflHalo = titleAboveWaterAlpha(titleReflHitPos, titleReflHalo);
+                if (titleReflFill + titleReflHalo > 0.0005) {
+                    vec3 titleReflCol = mix(titleHeroColor(reflDir, sunCol, sunDir), skyRefl, 0.16);
+                    vec3 titleHaloCol = mix(titleReflCol, horizonSky + sunCol * 0.05, 0.42);
+                    skyRefl = compositeTitle(skyRefl, titleReflCol, titleReflFill * 0.46);
+                    skyRefl = mix(skyRefl, titleHaloCol, titleReflHalo * 0.10);
+                }
+            }
+        }
+    }
+
 #ifdef DEBUG_REFLECTION
     fragColor = vec4(tonemap(skyRefl), 1.0);
     return;
@@ -697,17 +976,10 @@ void main()
     vec3 horizonLift = mix(horizonSky, skyRefl, 0.68);
     vec3 col = mix(waterCol, horizonLift, horizonMist * 0.10 * (1.0 - shorelineCore * 0.82));
     col = mix(col, sharedContactCol, waterSharedBand * 0.02);
-
-    // ОТРАЖЕНИЕ НАЗВАНИЯ
-    vec2 textRefl = vec2(
-        clamp(screenUV.x + n.x * 0.02, 0.0, 1.0),
-        clamp(1.0 - screenUV.y + n.z * 0.06, 0.0, 1.0)
-    );
-    float waterA = sampleTextAlpha(textRefl)
-                 * fresnel
-                 * (0.55 + 0.45 * nearField)
-                 * (0.50+0.50*rippleStrength);
-    col += (sunCol*1.6+vec3(0.12,0.15,0.22)) * waterA * 0.78;
+    if (hasTitle && tTitle < tWater && (!hasShore || tTitle < tShore)) {
+        vec3 titleCol = titleHeroColor(rd, sunCol, sunDir);
+        col = compositeTitle(col, titleCol, titleAlpha);
+    }
 
     fragColor = vec4(tonemap(col), 1.0);
 }

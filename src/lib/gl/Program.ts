@@ -20,6 +20,11 @@ export class Program {
     if (l !== null) this.gl.uniform1f(l, v)
   }
 
+  setInt(name: string, v: number) {
+    const l = this.loc(name)
+    if (l !== null) this.gl.uniform1i(l, v)
+  }
+
   setVec2(name: string, x: number, y: number) {
     const l = this.loc(name)
     if (l !== null) this.gl.uniform2f(l, x, y)
@@ -33,6 +38,11 @@ export class Program {
   setVec4(name: string, x: number, y: number, z: number, w: number) {
     const l = this.loc(name)
     if (l !== null) this.gl.uniform4f(l, x, y, z, w)
+  }
+
+  setVec4Array(name: string, values: Float32Array) {
+    const l = this.loc(name)
+    if (l !== null) this.gl.uniform4fv(l, values)
   }
 
   setTexture(name: string, tex: WebGLTexture | null, unit: number) {

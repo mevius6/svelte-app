@@ -261,6 +261,12 @@ The project has already completed the main architectural extraction. Treat the f
 - The current vegetation output is still an evaluation scaffold. If cards feel detached from the bank during scroll/camera motion, first treat that as an anchoring/projection/integration bug, not as proof that atlas-card vegetation is invalid.
 - The shoreline contact baseline has already gone beyond simple edge tinting. `LandscapePass` now uses shared gap metrics, underwater shelf depth, bank-through-water color, shore water-film, and overlap-aware branch selection as the acceptable single-pass `2.5D` baseline.
 - A small residual bank/water seam should be interpreted as a limitation of the current single-pass dual-surface model, not necessarily as an immediate shader bug. If a future task wants a materially better result, reach first for a dedicated shoreline overlap/depth layer rather than more `contact band` tweaking.
+- The hero title is no longer allowed to settle as a single-phrase canvas billboard. Treat the current world-space billboard path as a temporary fallback/bridge, not as the intended final text rendering model.
+- The preferred Phase 2 direction is now explicit: `MSDF/MTSDF atlas + glyph metrics + dedicated HeroTitlePass` in world-space. Title proportions, kerning, and glyph bounds should come from font metrics, not from canvas alpha crops.
+- Prefer `msdf-atlas-gen`/`msdfgen` as the primary reference path. `msdf-bmfont-xml` is an acceptable pragmatic generator if its output format integrates more easily with the JS toolchain.
+- The repository now owns a utility path for hero-title assets. Regenerate atlas artifacts from the source OTF via `bun run hero-title:generate` rather than hand-editing texture bounds in runtime code.
+- The runtime baseline has now moved one step further: when hero-title atlas assets are present, `LandscapeScene` should route direct title + reflection through a dedicated `HeroTitlePass`, while the old billboard path inside `LandscapePass` stays only as an explicit fallback.
+- Keep the hero-title baseline free of baked glow/halo. If the project later wants bloom, prefer a dedicated post-process pass over reintroducing canvas shadows or shader-side additive halos into the title itself.
 - Debug pass switches already exist in development mode and are wired to `Ripple`, `Landscape`, and `Vegetation/Bushes` views.
 - The project now uses `@sveltejs/adapter-vercel` so Vercel builds the correct platform output. Article pages still rely on server `load` functions and private Strapi environment variables.
 
@@ -274,7 +280,7 @@ Use this as the preferred order for upcoming work:
    - Phase 1.5: pond-scale calibration + finite opposite-bank read
    - Phase 1.6: vegetation world-space migration (shoreline-rooted cards, camera-projected placement, no final dependence on a shared `u_horizon`) — current baseline complete
    - Phase 1.7: shoreline overlap baseline inside `LandscapePass` (shared gap metric, shallow shelf, bank-through-water, shore water-film) — current baseline complete for single-pass work
-   - Phase 2: world-anchored title/SDF text
+   - Phase 2: atlas-driven world-anchored hero title — move from temporary world-space billboard fallback toward `MSDF/MTSDF + glyph metrics + HeroTitlePass`
    - Phase 2.5: optional dedicated shoreline overlap/depth layer if the project later needs a more physical bank/water interaction than the single-pass baseline can provide
    - Phase 3: selective SDF / volumetrics / hero-object depth work
 3. Keep `README.md` and this instruction file in sync with meaningful runtime baseline changes, especially when camera model, atlas ownership, framing math, pass roles, or debug workflows change.
@@ -282,7 +288,7 @@ Use this as the preferred order for upcoming work:
 5. Perform safe shader optimization passes on real hot spots only after the camera/world-space migration has stabilized enough that we are not optimizing code that is about to be replaced.
 6. Keep validating the core invariant: ripple affects water normals, not direct color, and verify that debug views still work after each substantial change.
 7. Treat the next likely quality wins as:
-   - world-anchored title / reflection coherence,
+   - atlas-driven hero-title layout / reflection coherence,
    - vegetation atlas/silhouette quality and layering,
    - optional dedicated shoreline overlap/depth layer,
    not as a reason to revisit completed camera/world-space migration from scratch.
