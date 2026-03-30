@@ -18,9 +18,12 @@ uniform float u_waterLevel;
 uniform float u_time;
 uniform float u_passMode;
 
-out vec2 v_uvAtlas;
+out vec2  v_uvAtlas;
 out float v_worldY;
 out float v_passMode;
+// AI: Phase 2 atmospheric perspective — camera-space depth for fragment distance fog.
+// viewZ = dot(worldPos - cameraPos, cameraForward): positive forward, increases with depth.
+out float v_viewDist;
 
 vec3 titleBillboardRight() {
     vec3 right = vec3(u_cameraRight.x, 0.0, u_cameraRight.z);
@@ -69,7 +72,11 @@ void main() {
         gl_Position = vec4(ndc, 0.0, 1.0);
     }
 
-    v_uvAtlas = a_atlasRect.xy + a_position * a_atlasRect.zw;
-    v_worldY = worldPos.y;
+    v_uvAtlas  = a_atlasRect.xy + a_position * a_atlasRect.zw;
+    v_worldY   = worldPos.y;
     v_passMode = u_passMode;
+    // AI: pass camera-forward depth to fragment for atmospheric perspective fade.
+    // At title z≈-0.58 with camera at z≈2.78: viewZ≈3.36 world units.
+    // Fragment uses exp(-max(viewZ-1.2,0)*0.09) → ~14% opacity reduction at that distance.
+    v_viewDist = viewZ;
 }

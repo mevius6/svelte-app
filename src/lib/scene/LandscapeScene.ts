@@ -204,19 +204,23 @@ export class LandscapeScene implements Scene {
       return
     }
 
-    const landscapeMode = this.passView === "landscape" ? this.landscapeMode : "beauty"
+    // ══════════════════════════════════════════════════════════════════
+    // PATCH: render passes in correct order for proper layering of transparent elements, without depth test.
+    //
+    // Fix render order: heroTitle must render AFTER bushes.
+    // Depth test is disabled (Context.ts: gl.disable(gl.DEPTH_TEST)),
+    // so render order = painter's algorithm.
+    // Current: landscape → heroTitle → bushes  (bushes occlude title)
+    // Fixed:   landscape → bushes  → heroTitle (title renders on top)
+    // ══════════════════════════════════════════════════════════════════
+
+        const landscapeMode = this.passView === "landscape" ? this.landscapeMode : "beauty"
     this.landscape.setDebugMode(landscapeMode)
     this.landscape.render(time, rippleTex)
 
-    const shouldRenderHeroTitle =
-      useGlyphTitle &&
-      (this.passView === "final" ||
-        (this.passView === "landscape" && this.landscapeMode === "beauty"))
-
-    if (shouldRenderHeroTitle) {
-      this.heroTitle.render(time, null)
-    }
-
+    // AI: bushes render BEFORE heroTitle — depth test is disabled (painter's algorithm).
+    // Old order (landscape → heroTitle → bushes) caused vegetation to occlude the title.
+    // New order: landscape → bushes → heroTitle keeps title always in front of shore vegetation.
     if (this.passView === "final") {
       this.bushes.setFrameState({
         camera,
@@ -229,6 +233,15 @@ export class LandscapeScene implements Scene {
         },
       })
       this.bushes.render(time, null)
+    }
+
+    const shouldRenderHeroTitle =
+      useGlyphTitle &&
+      (this.passView === "final" ||
+        (this.passView === "landscape" && this.landscapeMode === "beauty"))
+
+    if (shouldRenderHeroTitle) {
+      this.heroTitle.render(time, null)
     }
   }
 

@@ -6,8 +6,6 @@ import type { HeroTitlePhraseGpuLayout } from "../text/heroTitleAtlas"
 import type { HeroTitleAtlasResource } from "../scene/LandscapeResources"
 import type { SceneCameraState, TitleHeroState } from "../scene/sceneCamera"
 
-import { HERO_TITLE_ANCHOR } from '$lib/scene/sceneFraming';
-
 type HeroTitleFrameState = {
   camera: SceneCameraState
   phase: number

@@ -41,16 +41,49 @@ export const WATER_LEVEL = 0
 export const SHORELINE_WORLD_Z = -0.95
 const VEGETATION_ANCHOR_HEIGHT = 0.09
 export const VEGETATION_WORLD_Z = SHORELINE_WORLD_Z - 0.035
-const TITLE_WORLD_Z_NEAR = -0.58
-const TITLE_WORLD_Z_FAR = -0.66
-const TITLE_WORLD_WIDTH_NEAR = 2.44
-const TITLE_WORLD_WIDTH_FAR = 2.62
+
+// ══════════════════════════════════════════════════════════════════
+// PATCH: Retune camera and title hero framing for a more compact, city-pond read of the scene.
+//
+// Fix 1 — move title into the middle of the pond (not near the shore).
+// Fix 2 — remove scroll-driven baseLift animation.
+//
+// Geometry context:
+//   Camera z at scroll=0: ≈ +2.61
+//   Shore z (SHORELINE_WORLD_Z): -0.95
+//   Pond midpoint: (2.61 + (-0.95)) / 2 ≈ +0.83
+//   → TITLE_WORLD_Z_NEAR = +0.35 places title in clear water, well in front of shore
+//
+// Width is scaled proportionally to maintain apparent screen size:
+//   old: width=2.44 at depth=3.19 (2.61-(-0.58))
+//   new: width=1.75 at depth=2.26 (2.61-0.35) → same angular size
+// ══════════════════════════════════════════════════════════════════
+
+// AI: title anchor — middle of the pond, between camera and shore.
+// Camera z≈+2.61, shore z=-0.95 → z=+0.35 sits clearly over open water.
+// Widths scaled to preserve apparent screen size at the new depth.
+const TITLE_WORLD_Z_NEAR = 0.35
+const TITLE_WORLD_Z_FAR = -0.20
+const TITLE_WORLD_WIDTH_NEAR = 1.75
+const TITLE_WORLD_WIDTH_FAR = 2.10
+
 export const RIPPLE_WORLD_RECT: RippleWorldRect = {
   x: -2.15,
   z: SHORELINE_WORLD_Z,
   w: 4.3,
   depth: 3.15,
 }
+
+// AI: Phase 2 — named anchor for the world-space title billboard.
+// Describes where the title billboard sits at scroll=0:
+//   z: between camera (z≈+2.8) and shoreline (z=-0.95), close to shore side
+//   y: just above water level (actual center y also depends on text aspect)
+// computeTitleHeroState() uses TITLE_WORLD_Z_NEAR/FAR for scroll animation;
+// HERO_TITLE_ANCHOR_Z is the scroll=0 reference used by intersectTitleAtlas
+// in landscape.frag (same value as TITLE_WORLD_Z_NEAR).
+// Ref: landscape.frag intersectTitleAtlas, HeroTitlePass.ts u_titleWorldCenter
+export const HERO_TITLE_ANCHOR_Z = TITLE_WORLD_Z_NEAR   // -0.58
+export const HERO_TITLE_ANCHOR_Y_BASE = WATER_LEVEL     //  0.0  (text center lifts above this)
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
@@ -183,12 +216,14 @@ export function computeTitleHeroState(
   const easedScroll = smoothstep01(scroll)
   const width = mix(TITLE_WORLD_WIDTH_NEAR, TITLE_WORLD_WIDTH_FAR, easedScroll)
   const height = width * textAspect
-  const baseLift = mix(-0.02, 0.18, easedScroll)
+  // AI: baseLift animation removed — title stays at fixed height above water,
+  // scroll only moves it toward the shore (z-axis), no vertical drift.
+  // Small constant offset (+0.06) keeps text from clipping the water surface.
 
   return {
     center: {
       x: 0,
-      y: WATER_LEVEL + baseLift + height * 0.5,
+      y: WATER_LEVEL + height * 0.5 + 0.06,
       z: mix(TITLE_WORLD_Z_NEAR, TITLE_WORLD_Z_FAR, easedScroll),
     },
     size: {

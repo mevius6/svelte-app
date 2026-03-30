@@ -1,9 +1,11 @@
 #version 300 es
 precision highp float;
 
-in vec2 v_uvAtlas;
+in vec2  v_uvAtlas;
 in float v_worldY;
 in float v_passMode;
+// AI: Phase 2 atmospheric perspective — camera depth from vert shader.
+in float v_viewDist;
 
 uniform sampler2D u_titleAtlas;
 uniform vec2  u_titleAtlasSize;
@@ -31,16 +33,28 @@ void main() {
         discard;
     }
 
+    // Lime-green color matching original project design language.
+    // Both passMode paths use variants of this base color.
     vec3 directCol = vec3(0.7882353, 0.9411765, 0.5411765);
     vec3 reflectionCol = mix(directCol, vec3(0.84, 0.96, 0.74), 0.24);
 
     if (v_passMode > 0.5) {
+        // Reflection geometry path (mirrored billboard under water).
         float reflectionDepth = clamp((u_waterLevel - v_worldY) / 0.24, 0.0, 1.0);
         float reflectionAlpha = opacity * smoothstep(0.03, 0.22, reflectionDepth) * 0.28;
         fragColor = vec4(reflectionCol, reflectionAlpha);
         return;
     }
 
+    // Direct rendering path — world-space billboard above water.
     float emergence = smoothstep(u_waterLevel - 0.010, u_waterLevel + 0.030, v_worldY);
-    fragColor = vec4(directCol, opacity * emergence);
+
+    // AI: Phase 2 atmospheric perspective.
+    // Gentle depth fog: title at viewDist≈3.36 fades to ~86% opacity.
+    // Starts fading past 1.2 world units depth (near-camera text stays crisp).
+    // Ref: IQ "Outdoors Lighting" — atmospheric scattering per distance
+    // https://iquilezles.org/articles/outdoorslighting/
+    float atmFade = exp(-max(v_viewDist - 1.2, 0.0) * 0.09);
+
+    fragColor = vec4(directCol, opacity * emergence * atmFade);
 }
