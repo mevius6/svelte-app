@@ -213,18 +213,17 @@ export function computeTitleHeroState(
   textAspect: number,
   uvRect = { x: 0, y: 0, w: 1, h: 1 }
 ): TitleHeroState {
-  const easedScroll = smoothstep01(scroll)
-  const width = mix(TITLE_WORLD_WIDTH_NEAR, TITLE_WORLD_WIDTH_FAR, easedScroll)
+  // AI: scroll is time-of-day; title position is fully fixed in world space.
+  // No scroll-driven z-movement or width change — parallax comes from
+  // the fixed camera observing a static world-space billboard.
+  const width = TITLE_WORLD_WIDTH_NEAR
   const height = width * textAspect
-  // AI: baseLift animation removed — title stays at fixed height above water,
-  // scroll only moves it toward the shore (z-axis), no vertical drift.
-  // Small constant offset (+0.06) keeps text from clipping the water surface.
 
   return {
     center: {
       x: 0,
       y: WATER_LEVEL + height * 0.5 + 0.06,
-      z: mix(TITLE_WORLD_Z_NEAR, TITLE_WORLD_Z_FAR, easedScroll),
+      z: TITLE_WORLD_Z_NEAR,
     },
     size: {
       w: width,
@@ -240,11 +239,14 @@ export function computeSceneCamera(
   width: number,
   height: number
 ): SceneCameraState {
-  const easedScroll = smoothstep01(scroll)
+  // AI: scroll drives time-of-day, not camera orbit.
+  // Camera is fixed at a static angle looking over the pond.
+  // Small constants chosen so: horizon sits at ~45% screen height,
+  // title is fully over water, shore visible behind it.
   const aspect = Math.max(width, 1) / Math.max(height, 1)
-  const yaw = mix(-0.34, 0.10, easedScroll)
-  const pitch = mix(0.058, 0.092, Math.sin(easedScroll * Math.PI))
-  const radius = mix(3.0, 2.84, easedScroll)
+  const yaw   = -0.08   // slight left of center — matches asymmetric shore silhouette
+  const pitch =  0.068  // gentle downward look, water fills lower half
+  const radius = 2.92   // fixed distance from CAMERA_TARGET
 
   const orbitOffset = {
     x: Math.sin(yaw) * Math.cos(pitch) * radius,

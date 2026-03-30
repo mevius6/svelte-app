@@ -98,10 +98,20 @@ float cloudDetailFbm(vec2 p) {
 }
 
 float cloudDensity(vec2 uv, float t, float phase01, out float base) {
-    vec2 wind = vec2(t*0.012, t*0.004);
-    // AI: cache cloud UV variants/fades once and keep the lower-cost detail octave reduction local to the secondary cloud layer.
+    // AI: two-component cloud drift:
+    //   idle  — t-based real-time drift, always active (idle atmosphere).
+    //   solar — phase01-based offset so clouds travel with the sun.
+    //     Sun moves x: 0.25→0.75 as phase 0→1 (left to right).
+    //     phase01 * 0.42 in UV gives clouds ~1/8 texture-tile displacement
+    //     across the full day — matches apparent solar speed visually.
+    //   Vertical component (0.06) gives slight diagonal, avoiding pure
+    //   horizontal band drift.
+    // Ref: The Book of Shaders ch.13 fBM — domain shift per frame
+    vec2 solarDrift = vec2(phase01 * 0.42, phase01 * 0.06);
+    vec2 wind = vec2(t*0.012, t*0.004) + solarDrift;
     vec2 baseUv = uv * vec2(3.2,5.5) + wind;
     vec2 detailUv = uv * vec2(6.5,9.0) + wind * 1.4;
+
     base        = cloudBaseFbm(baseUv);
     float cloud = base + cloudDetailFbm(detailUv)*0.38;
     cloud       = smoothstep(0.60,0.88,cloud);
