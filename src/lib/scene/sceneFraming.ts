@@ -27,3 +27,18 @@ export function computeSceneFrame(width: number, height: number): SceneFrame {
     scaleY: 1,
   }
 }
+
+// TODO: возможно, эти значения импортируются/настраиваются в другом месте.
+export const POND_WATER_LEVEL = 0.0;
+export const POND_WORLD_RECT = { minZ: -1.0, maxZ: 1.0 };
+export function mix(a: number, b: number, t: number): number {
+  return a * (1 - t) + b * t;
+}
+
+// HERO TITLE — world-space anchor inside the pond
+// Текст расположен посреди пруда между камерой и берегом.
+export const HERO_TITLE_ANCHOR = {
+  x: 0.0,
+  y: POND_WATER_LEVEL + 0.55,
+  z: mix(POND_WORLD_RECT.minZ, POND_WORLD_RECT.maxZ, 0.45)
+};

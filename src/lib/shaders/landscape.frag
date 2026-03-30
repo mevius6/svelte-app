@@ -882,6 +882,20 @@ void main()
     }
 
     {
+        // AI: fix (3) — smooth water normal for title reflection ray.
+        // rippleStrength = 1.0 - n.y: 0 for flat water, increases with wave tilt.
+        // Strong ripples (> 0.5) pull nTitle toward vertical, stopping the reflected
+        // ray from scanning multiple glyph rows and creating columnar repetition.
+        // Ref: IQ "Water Shader" — specular normal smoothing for stability
+        float titleNormBlend = smoothstep(0.0, 0.48, rippleStrength) * 0.70;
+        vec3 nTitle = normalize(mix(n, vec3(0.0, 1.0, 0.0), titleNormBlend));
+        vec3 reflDirTitle = normalize(reflect(-viewDir, nTitle));
+        reflDirTitle.y = max(reflDirTitle.y, 0.001);
+
+        // AI: fix (2) — lime-green matching direct text color from hero-title.frag.
+        // Attenuated with ambient skyRefl (20%) for physical water-surface coherence.
+        const vec3 TITLE_LIME = vec3(0.788, 0.941, 0.541);
+
         if (u_useTitleBillboard > 0.5) {
             float tTitleRefl;
             vec2 titleReflUv;
@@ -889,7 +903,7 @@ void main()
             float titleReflAlpha;
             bool hasTitleRefl = intersectTitleBillboard(
                 waterPos + n * 0.018 + vec3(0.0, 0.004, 0.0),
-                reflDir,
+                reflDirTitle,
                 tTitleRefl,
                 titleReflUv,
                 titleReflHitPos,
@@ -898,26 +912,20 @@ void main()
             if (hasTitleRefl) {
                 titleReflAlpha = titleAboveWaterAlpha(titleReflHitPos, titleReflAlpha);
                 if (titleReflAlpha > 0.0005) {
-                    vec3 titleReflCol = titleHeroColor(reflDir, sunCol, sunDir);
-                    skyRefl = compositeTitle(skyRefl, titleReflCol, titleReflAlpha * 0.58);
+                    // Depth-based attenuation: reflection fades with ray travel distance,
+                    // reinforcing spatial depth of the world-space billboard.
+                    float distFade = exp(-tTitleRefl * 0.28);
+                    vec3 titleReflCol = TITLE_LIME * 0.55 + skyRefl * 0.20;
+                    skyRefl = compositeTitle(skyRefl, titleReflCol, titleReflAlpha * 0.36 * distFade);
                 }
             }
         } else if (u_useTitleAtlasReflection > 0.5) {
-            // AI: fix title reflection — 3 issues addressed:
-            // (1) smoothed normal prevents columnar repeat from strong ripples
-            // (2) lime green color instead of titleHeroColor warm white
-            // (3) haloAlpha removed → eliminates white border at glyph quad edges
-            float titleNormSmooth = smoothstep(0.0, 0.45, rippleStrength);
-            vec3 titleReflN = normalize(mix(n, vec3(0.0, 1.0, 0.0), titleNormSmooth * 0.62));
-            vec3 titleReflDir = normalize(reflect(-viewDir, titleReflN));
-            titleReflDir.y = max(titleReflDir.y, 0.001);
-
             float tTitleRefl;
             vec3 titleReflHitPos;
             float titleReflAlpha;
             bool hasTitleRefl = intersectTitleAtlas(
                 waterPos + n * 0.018 + vec3(0.0, 0.004, 0.0),
-                titleReflDir,
+                reflDirTitle,
                 tTitleRefl,
                 titleReflHitPos,
                 titleReflAlpha
@@ -928,19 +936,20 @@ void main()
                 float titleReflHalo;
                 sampleTitleGlyphPhraseReflection(titleReflMetric, titleReflFill, titleReflHalo);
                 titleReflFill = titleAboveWaterAlpha(titleReflHitPos, titleReflFill);
+                // AI: fix (1) — titleReflHalo NOT composited.
+                // sampleTitleAtlasReflectionCoverage: edgeBand=smoothstep(1.10,0.04,abs(screenDist))
+                // is maximal where signedDist≈0 — the glyph outline AND quad boundaries.
+                // Mixing with titleHaloCol (near-white) produces a bright ring around every
+                // glyph quad edge, visible as white border in the water reflection.
                 if (titleReflFill > 0.0005) {
-                    // Lime green matching direct text, softened with water ambience
-                    vec3 titleDirectCol = vec3(0.788, 0.941, 0.541);
-                    vec3 titleReflCol = titleDirectCol * 0.55 + skyRefl * 0.18;
-                    // Fade when ripples are very strong (normal smoothing handles geometry,
-                    // this fades fill alpha for extreme interaction bursts)
-                    float rippleAtten = 1.0 - smoothstep(0.0, 0.55, rippleStrength) * 0.45;
-                    skyRefl = compositeTitle(skyRefl, titleReflCol, titleReflFill * 0.30 * rippleAtten);
+                    float distFade = exp(-tTitleRefl * 0.28);
+                    // Suppress further when water is very agitated: secondary damping
+                    // beyond normal smoothing above, guards against extreme ripple bursts.
+                    float rippleAtten = 1.0 - smoothstep(0.0, 0.65, rippleStrength) * 0.38;
+                    vec3 titleReflCol = TITLE_LIME * 0.55 + skyRefl * 0.20;
+                    skyRefl = compositeTitle(skyRefl, titleReflCol,
+                                            titleReflFill * 0.28 * distFade * rippleAtten);
                 }
-                // haloAlpha intentionally not composited:
-                // edgeBand = smoothstep(1.10, 0.04, abs(screenDistance)) is maximal
-                // where signedDistance ≈ 0 (glyph perimeter & quad boundaries),
-                // producing white border artifact in skyRefl composite.
             }
         }
     }
