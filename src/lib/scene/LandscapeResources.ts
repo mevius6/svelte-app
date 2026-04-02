@@ -1,3 +1,4 @@
+import { createShoreProfileTexture } from "$lib/scene/ShoreProfileBaker"
 import {
   buildHeroTitlePhraseGpuLayout,
   measureHeroTitleLayoutFromAtlas,
@@ -89,6 +90,8 @@ export class LandscapeResources {
   private heroTitleLayoutRef: HeroTitleLayoutMetrics = DEFAULT_HERO_TITLE_LAYOUT
   private foliageAtlasRef: FoliageAtlasTextureSet = createEmptyFoliageAtlasTextures()
   private rippleFallbackTextureRef: WebGLTexture | null = null
+  // AI: Phase A — 1D shore profile, baked once, replaces per-pixel shoreFbm.
+  private shoreProfileTexRef: WebGLTexture | null = null
 
   constructor(private gl: WebGL2RenderingContext) {}
 
@@ -118,6 +121,9 @@ export class LandscapeResources {
     if (needsRippleFallback) {
       this.rippleFallbackTextureRef = this.createDummyRippleTexture()
     }
+    // AI: Phase A — bake static shore profile texture (512×1 RGBA32F).
+    // Replaces ~90 vnoise calls per water pixel with a single texture fetch.
+    this.shoreProfileTexRef = createShoreProfileTexture(this.gl)
   }
 
   get textTexture() {
@@ -148,6 +154,11 @@ export class LandscapeResources {
     return this.rippleFallbackTextureRef
   }
 
+  // AI: Phase A — shore profile 1D texture for landscape.frag.
+  get shoreProfileTexture() {
+    return this.shoreProfileTexRef
+  }
+
   dispose() {
     if (this.textTextureRef) {
       this.gl.deleteTexture(this.textTextureRef)
@@ -170,6 +181,10 @@ export class LandscapeResources {
     if (this.rippleFallbackTextureRef) {
       this.gl.deleteTexture(this.rippleFallbackTextureRef)
       this.rippleFallbackTextureRef = null
+    }
+    if (this.shoreProfileTexRef) {
+      this.gl.deleteTexture(this.shoreProfileTexRef)
+      this.shoreProfileTexRef = null
     }
 
     this.textTextureSizeRef = {

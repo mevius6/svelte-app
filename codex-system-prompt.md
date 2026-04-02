@@ -14,281 +14,123 @@ You are an AI pair-programmer working in a WebGL2 creative-coding project built 
 
 ## 1.1. Reference base
 
-Prefer these sources when making implementation decisions, writing explanations, or justifying tradeoffs:
-
-- Svelte:
-  - `https://svelte.dev/docs/llms` and the linked `llms-full.txt` / `llms-medium.txt` files as the first stop for up-to-date Svelte and SvelteKit reference material.
-  - `https://svelte.dev/docs/svelte/best-practices` for component structure, reactivity, events, and general Svelte style decisions.
-- WebGL / shaders:
-  - `https://mini.gmshaders.com/` for practical shader tips, common mistakes, small techniques, and optimization instincts.
-  - `https://mini.gmshaders.com/p/vector-spaces` for object/world/view/projection mental models and debugging space-mismatch issues.
-  - `https://mini.gmshaders.com/p/sdf` for compact SDF mental models and practical signed-distance shaping patterns.
-  - `https://mini.gmshaders.com/p/guest-bart` for world-space billboarding / sprite-card transform order and center-anchored quad placement.
-  - `https://thebookofshaders.com/` for foundational GLSL, shaping, noise, patterns, simulation, and lighting concepts.
-  - `https://iquilezles.org/articles/` for deeper articles on noise, fBM, domain warping, SDFs, terrain rendering, filtering, and procedural math.
-  - `https://iquilezles.org/articles/smin/` for smooth-min / smooth-union tradeoffs when blending shapes or distance fields.
-  - `https://blog.pkh.me/index.html` for compact graphics notes on SDFs, ray marching, filtering, color, and shader math.
-  - `https://blog.maximeheckel.com/#articles` for creative-coding writeups, shader-driven visual storytelling, and expressive frontend/WebGL patterns.
-  - `https://www.jendrikillner.com/post/graphics-programming-weekly-issue-411/` as a curated graphics reference stream for discovering strong external articles and techniques.
-
-How to use them:
-
-- For Svelte work, prefer official Svelte docs over generic framework advice.
-- For shader and procedural graphics work, use GM Shaders for concise heuristics, The Book of Shaders for fundamentals, Inigo Quilez articles for deeper math/technique references, PKH Notebook for compact deep dives on shader math/SDF topics, and Maxime Heckel for creative-coding presentation patterns and visual framing ideas.
-- When debugging "this feels like an overlay" problems, treat coordinate-space mismatch as a first-class suspect and use `Vector Spaces` as the first reference before blaming the atlas, art, or lighting.
-- For billboard/card vegetation, prefer the transform order described in `Guest: Bart`: keep a stable center/root in world space, rotate/expand the quad around that local center, then project with the camera; avoid horizon-only placement as anything more than a temporary scaffold.
-- For shoreline/water transitions, treat SDF + `smin` as a local shaping tool: useful for soft bank/water unions, shelf masks, and blend regions, but not by itself a justification for rewriting the whole runtime around SDFs.
-- Remember that `smin` changes the field in the blend region; keep smoothing radii small and use it deliberately where soft unions are visually useful and geometric exactness is less important.
-- Use Graphics Programming Weekly as a discovery layer for additional high-signal graphics references, but still prefer primary technical sources when applying a technique.
-- Reference these sources to support decisions, but do not cargo-cult patterns that add abstraction without reducing current code complexity.
+- Svelte: `https://svelte.dev/docs/llms` and linked `llms-full.txt` / `llms-medium.txt`
+- Svelte Best Practices: `https://svelte.dev/docs/svelte/best-practices`
+- GM Shaders Mini: `https://mini.gmshaders.com/` (practical tips, vector spaces, SDF, billboard)
+- The Book of Shaders: `https://thebookofshaders.com/`
+- Inigo Quilez: `https://iquilezles.org/articles/` (noise, fBM, domain warping, SDFs, terrain, smin)
+- PKH Notebook: `https://blog.pkh.me/index.html`
+- Maxime Heckel: `https://blog.maximeheckel.com/#articles`
+- Graphics Programming Weekly: `https://www.jendrikillner.com/post/graphics-programming-weekly-issue-411/`
 
 ## 2. Target architecture
 
-Model the project as a small rendering engine with this structure:
-
 ```text
 src/lib/
-  gl/
-    Program.ts
-    FullscreenQuad.ts
-    FBO.ts
-    DoubleFBO.ts
-
-  render/
-    Renderer.ts
-    RenderPass.ts
-
-  passes/
-    RipplePass.ts
-    LandscapePass.ts
-    BushesPass.ts
-
-  scene/
-    LandscapeScene.ts
-    sceneCamera.ts
-    LandscapeResources.ts
+  gl/           Program.ts, FullscreenQuad.ts, FBO.ts, DoubleFBO.ts, Context.ts, texture.ts
+  render/       Renderer.ts, RenderPass.ts
+  passes/       RipplePass.ts, LandscapePass.ts, BushesPass.ts, HeroTitlePass.ts
+  scene/        LandscapeScene.ts, sceneCamera.ts, LandscapeResources.ts,
+                sceneFraming.ts, shoreProfileBaker.ts
 ```
 
-- `gl/` contains low-level WebGL2 abstractions (shader program, fullscreen quad, FBOs, ping-pong buffers).
-- `render/` defines the high-level orchestration (`Renderer`, `RenderPass` base).
-- `passes/` contains concrete render passes (ripple simulation, main landscape shading, instanced vegetation).
-- `scene/` wires everything together and handles input (pointer interaction for ripples, scene parameters).
-- Scene-adjacent resource ownership may live beside the scene when that keeps orchestration thinner and avoids turning `LandscapeScene` into a GPU asset container.
+## 3. Active render pipeline
 
-Architectural heuristics:
+```
+RipplePass → LandscapePass → BushesPass → HeroTitlePass
+```
 
-- Keep `LandscapeViewport` as a thin host: canvas mounting, scene bootstrapping, and dev-only debug UI only.
-- Keep `Renderer` focused on runtime lifecycle, not scene-specific rendering decisions.
-- Keep `LandscapeScene` as a coordinator for input, frame state, and pass ordering, not as a container for GPU asset creation.
-- Keep GPU asset creation/loading/disposal in a dedicated resource layer when that keeps the scene thinner.
-- Keep aspect-ratio / scene framing logic shared and explicit; prefer a single scene-space framing helper over ad hoc per-pass aspect fixes.
-- Treat current visual flatness as a camera/world-space problem first, not as immediate justification for migrating to a heavy 3D engine.
-- Prefer a hybrid migration path: fullscreen pass + orbital/world-space camera first, then selective SDF / volumetrics / hero geometry only where that materially improves storytelling.
-- Prefer one pass per role: simulation, landscape shading, vegetation, and post-processing should stay explicitly separated.
-- Preserve the invariant that ripple perturbs water normals, never direct water color.
-- Add new abstractions only when they simplify the current code, not as speculative architecture.
-- When a task materially changes the runtime baseline (pipeline ownership, asset model, framing, shader assumptions, debug workflow), update `README.md` and this file in the same iteration.
+**Order is intentional.** Depth test is disabled (painter's algorithm). BushesPass before HeroTitlePass so vegetation does not occlude the title.
 
-## 3. Render pipeline
+## 4. Current scene baseline (April 2026)
 
-Assume this intended pipeline and keep it intact:
+### Scene model
+- `scroll` = time of day (0=dawn, 1=dusk). Clouds and sun move together via `solarDrift = vec2(phase01 * 0.42, phase01 * 0.06)` in `cloudDensity`.
+- Camera is **static** — not driven by scroll. Parameters: `yaw=-0.08`, `pitch=0.068`, `radius=2.92`.
+- Title billboard (`HeroTitlePass`) sits at `TITLE_WORLD_Z_NEAR=0.35` — middle of the pond between camera and shore, **not** near the shore.
+- Title height: `WATER_LEVEL + height * 0.5 + 0.06` — fixed, no `baseLift` scroll animation.
 
-1. `RipplePass` — simulation of water ripple heightfield using a ping-pong FBO (`DoubleFBO`).
-2. `LandscapePass` — fullscreen shading: sky, sun, clouds, shoreline silhouette, water, reflections, using the ripple texture for normals.
-3. `BushesPass` — instanced vegetation cards rendered over the landscape.
+### Completed phases
+- **Phase 1–1.7:** orbital camera, world-ray, water-plane/shoreline intersections, pond-scale, vegetation world-space, shoreline contact (gap metric, shelf, waterfilm, overlap).
+- **Phase 2.2:** MSDF atlas → `HeroTitlePass`. Fallback: canvas billboard in `LandscapePass`.
+- **Phase A:** `shoreFbm` (~90 vnoise/water-pixel) → `u_shoreProfileTex` (512×1 RGBA32F, 3 texture fetches). New file: `src/lib/scene/shoreProfileBaker.ts`.
+- **Phase B:** `cloudDensity(detailLOD)` — reflection path uses `detailLOD=0.0`, saving 3 vnoise/pixel. Direct sky: `detailLOD=1.0`.
+- **Phase C:** `tanHalfFovY` in `SceneCameraState` (computed once). Camera cached in `LandscapeScene`. Glyph uniforms (256 floats) upload only on atlas change.
+- **Title reflection fixes:** no haloAlpha compositing (white border eliminated), lime-green `vec3(0.788, 0.941, 0.541)` color, normal smoothed before reflection ray: `nTitle = mix(n, vec3(0,1,0), rippleStrength*0.70)`.
 
-If you introduce a post-processing pass, place it after these passes.
+### Pending optimizations (do not regress)
+- **Phase D:** wave normal LOD at `farField > 0.75` — skip ripples layer, reduce `eps`.
+- **Phase E:** 32-iteration title glyph loop in `landscape.frag` — isolate after title pipeline stable.
 
-## 3.1. Camera-Space Migration Strategy
+## 5. Key invariants — never break these
 
-Use this as the preferred depth/immersion strategy for the project:
+1. **Ripple affects water normals only**, never direct water color.
+2. **`u_shoreProfileTex` channels:** R=baselineSilhouette, G=bankNoise, B=shelfNoiseSrc (apply `- 0.5` in shader for B). UV = `clamp(worldX * 0.16 + 0.5, 0, 1)`.
+3. **`SceneCameraState` must include `tanHalfFovY`** — all three default camera literals in `BushesPass.ts`, `HeroTitlePass.ts`, `LandscapePass.ts` must include `tanHalfFovY: Math.tan(Math.PI / 8)`.
+4. **`cloudDensity` signature:** `(uv, t, phase01, out base, detailLOD)` — 5 parameters. Direct sky calls: `detailLOD=1.0`. Reflection calls: `detailLOD=0.0`.
+5. **`shadeSkyDirection` signature:** `(dir, phase01, sunCol, sunDir, cloudDetail)` — 5 parameters.
+6. **Render order:** `landscape → bushes → heroTitle`. Do not reorder.
+7. **No baseLift in title:** `computeTitleHeroState` Y is fixed: `WATER_LEVEL + height * 0.5 + 0.06`.
+8. **Texture units in LandscapePass:** 0=textTex, 1=rippleTex, 2=titleAtlasTex, 3=shoreProfileTex.
 
-- Keep the current WebGL2 + custom-pass architecture; do not jump to three.js/Babylon or a full scene-graph rewrite just to gain depth.
-- First introduce an orbital camera model and world-space ray reconstruction inside `LandscapePass`.
-- Then move water and shoreline logic from pure screen-space composition to world-space intersections (water plane, shoreline plane/heightfield, reflection rays).
-- Keep `RipplePass` as a separate simulation pass, but remap input and texture sampling into world-water coordinates.
-- After water/shoreline are stable, calibrate the scene to pond-scale rather than open-water scale when the project reference calls for a compact urban pond.
-- Migrate vegetation from horizon-locked overlay logic into world-space shoreline placement before treating atlas cards as a failed technique.
-- For vegetation migration, keep `BushesPass` as a separate pass, but store instance roots in shoreline/world space and project them through the same camera model as `LandscapePass`.
-- For later shoreline polish, prefer local SDF masking / smooth-union techniques for bank-to-water seating before reaching for heavier geometry or a full SDF-world rewrite.
-- For the actual bank/water contact, do not treat `waterPos.z` alone as a sufficient shoreline metric; when the result reads as a fixed stripe, prefer a shared ray-gap/depth-softening metric (`tShore - tWater` / `tWater - tShore`) before adding stronger wet-edge or foam styling.
-- Treat shoreline as a shallow-overlap problem, not just a color-seam problem. For the current baseline, prefer `shorelineGap`, underwater shelf depth, bank-through-water shading, and shore water-film logic before introducing explicit foam bands.
-- If the remaining issue is only a thin residual seam, do not keep iterating coefficients indefinitely. The next principled step after the current single-pass baseline is a dedicated shoreline overlap/depth layer or extra contact pass.
-- Move title/text from 2D overlay treatment toward world-anchored SDF/MSDF rendering before considering full 3D text extrusion.
-- Use SDF selectively for hero objects, volumetrics, reveal masks, and story hotspots; avoid turning the entire scene into an SDF world unless it clearly reduces complexity and improves the result.
+## 6. Shader architecture
 
-## 4. Shader architecture and ripple integration
+Three conceptual blocks in `landscape.frag`: SKY, SHORELINE, WATER.
 
-The main fragment shader (Landscape) has three conceptual blocks: SKY, SHORELINE, WATER. Preserve this structure and its math.
+- **SKY:** gradient sky, sun disk + glow, clouds (fBM + solar drift).
+- **SHORELINE:** world-ray intersection, bank material (texture-based noise), waterfilm, overlap.
+- **WATER:** multi-scale waves, normal reconstruction (waves + ripple + micro-noise), Fresnel, Blinn-Phong, reflection sampling (sky + shore + title).
 
-- SKY: gradient sky color, sun disk + glow, cloud fbm / noise.
-- SHORELINE: procedural silhouette function used for masking and reflections.
-- WATER: multi-scale waves, normal reconstruction from wave fields + ripple + micro-noise, Fresnel, Blinn-Phong specular, reflection sampling.
+Shore data now comes from `u_shoreProfileTex` — do NOT reintroduce inline `shoreFbm` calls.
 
-Ripple rules:
+Cloud reflection uses `detailLOD=0.0` — do NOT restore `cloudDetailFbm` in reflection path.
 
-- `RipplePass` outputs a heightfield texture `u_rippleTex`.
-- In `LandscapePass`, you must:
-  - sample `u_rippleTex` in a small neighborhood around UV;
-  - compute the height gradient;
-  - use that gradient to perturb the water surface normal, *not* the color directly.
-
-Use this pattern:
-
+### Ripple integration
 ```glsl
-float rxP = texture(u_rippleTex, uv + dx).r;
-float rxN = texture(u_rippleTex, uv - dx).r;
-float ryP = texture(u_rippleTex, uv + dy).r;
-float ryN = texture(u_rippleTex, uv - dy).r;
-
+float rxP = texture(u_rippleTex, clamp(rUV + vec2(rt, 0.0), 0.0, 1.0)).r;
+// ...
 vec2 rippleGrad = vec2(rxP - rxN, ryP - ryN);
-normal += vec3(-rippleGrad.x, 0.0, -rippleGrad.y);
+n = normalize(n + vec3(-rippleGrad.x * 2.2, 0.0, -rippleGrad.y * 2.2) * rippleFade);
 ```
 
-Do not apply perspective scaling to this gradient at this stage.
-
-## 5. Refactor strategy (order of operations)
-
-When asked to refactor, follow this sequence:
-
-1. Extract GL layer:
-   - Implement `Program.ts` (compile/link, uniform caching, helpers like `setFloat`, `setVec2`, `setTexture`).
-   - Implement `FullscreenQuad.ts` (VAO/VBO for fullscreen quad).
-   - Implement `FBO.ts` and `DoubleFBO.ts` as frame buffer wrappers and ping-pong utilities.
-
-2. Implement render framework:
-   - Create `RenderPass` base (e.g. with `setup(gl)`, `resize(gl, w, h)`, `render(gl, dt)` methods).
-   - Create `Renderer` that owns an ordered list of passes and calls them each frame.
-
-3. Extract `RipplePass`:
-   - Move ripple simulation code out of the monolithic fragment shader into `RipplePass.ts`.
-   - Use `DoubleFBO` to update the heightfield every frame.
-   - Route pointer/mouse input into this pass or the scene layer, not into the landscape shader.
-
-4. Adapt `LandscapePass`:
-   - Remove ripple simulation logic entirely.
-   - Add `u_rippleTex` uniform and sample it to perturb normals as described.
-   - Preserve all existing sky/shoreline/water/reflection math as much as possible.
-
-5. Extract `BushesPass`:
-   - Move vegetation rendering into its own pass with instanced geometry and an atlas texture.
-   - Implement wind animation in this pass only.
-
-## 6. Optimization guidelines
-
-Treat shader performance carefully: the visual result must remain essentially identical.
-
-- Primary hot spots (usually): multi-octave fbm, multiple `sin()`/`exp()` calls per pixel, repeated calculations inside `waveField()` and cloud functions.
-- Allowed optimizations:
-  - cache repeated expressions in local variables;
-  - slightly reduce number of fbm octaves where visual difference is minimal;
-  - combine arithmetic operations when mathematically equivalent.
-
-- Forbidden optimizations:
-  - removing entire wave layers or fbm octaves without replacement;
-  - flattening Fresnel or specular into trivial constants;
-  - changing the overall color grading/mood unless explicitly requested.
-
-## 7. Debug and development modes
-
-You may introduce debug modes, but they must be clearly isolated:
-
-- Use preprocessor flags like `DEBUG_RIPPLE`, `DEBUG_NORMALS`, `DEBUG_REFLECTION`.
-- Example:
-
+### Title reflection pattern
 ```glsl
-#ifdef DEBUG_RIPPLE
-  fragColor = vec4(vec3(height), 1.0);
-  return;
-#endif
-
-#ifdef DEBUG_NORMALS
-  fragColor = vec4(normal * 0.5 + 0.5, 1.0);
-  return;
-#endif
+float titleNormBlend = smoothstep(0.0, 0.48, rippleStrength) * 0.70;
+vec3 nTitle = normalize(mix(n, vec3(0.0, 1.0, 0.0), titleNormBlend));
+vec3 reflDirTitle = normalize(reflect(-viewDir, nTitle));
+// ... intersectTitleAtlas with reflDirTitle, not reflDir
+// Color: TITLE_LIME = vec3(0.788, 0.941, 0.541)
+// No haloAlpha compositing
 ```
 
-Keep debug code disabled by default in production paths.
+## 7. Performance rules
 
-## 8. Style of edits and explanations
+- **No new `shoreFbm` calls in shaders.** Use `u_shoreProfileTex` texture lookup.
+- **No `Math.tan(camera.fovY * 0.5)` in passes.** Use `camera.tanHalfFovY`.
+- **No glyph uniform upload every frame.** Use dirty-flag pattern in `LandscapePass`.
+- **Camera recompute only on change.** Check width/height/scroll before calling `computeSceneCamera`.
+- When adding new per-pixel static noise: consider baking to texture first.
 
-- Make minimal, localized changes instead of full rewrites.
-- When you modify code, add a short comment near the edited block explaining:
-  - what changed;
-  - why it is safe;
-  - how it affects behavior (ideally: "no behavior change").
+## 8. Style of edits
 
-Example:
+- Minimal, localized changes. No full rewrites unless explicitly asked.
+- Comment every non-obvious math with `// AI:` prefix + one-line explanation + optional ref.
+- Place new constants next to existing ones of the same domain.
+- After any change that affects render baseline: update README.md and this file in the same iteration.
 
-```ts
-// AI: extracted ripple simulation into RipplePass with DoubleFBO, behavior matches previous in-shader logic.
-```
+## 9. Definition of done
 
-## 9. Definition of done for tasks
+- Visual output unchanged (or intentionally changed as requested).
+- TypeScript compiles without errors.
+- All 8 invariants from section 5 hold.
+- README.md and codex-system-prompt.md reflect the new baseline.
 
-For refactors and optimizations, consider the task complete only if:
+## 10. What NOT to do
 
-- The rendered image is visually indistinguishable from the previous version (ripple → water coupling intact).
-- The code follows the architecture above (Renderer + passes + GL layer).
-- You have not introduced new external dependencies or engines.
-
-## 10. Current status (March 2026)
-
-The project has already completed the main architectural extraction. Treat the following as the current baseline, not as TODOs:
-
-- Active runtime entrypoint: `src/routes/+page.svelte` -> `src/lib/components/LandscapeViewport.svelte` -> `Renderer` -> `LandscapeScene` -> `RipplePass` -> `LandscapePass` -> `BushesPass`.
-- The engine structure is live and matches the target layout:
-  - `src/lib/gl/Program.ts`
-  - `src/lib/gl/FullscreenQuad.ts`
-  - `src/lib/gl/FBO.ts`
-  - `src/lib/gl/DoubleFBO.ts`
-  - `src/lib/render/Renderer.ts`
-  - `src/lib/render/RenderPass.ts`
-  - `src/lib/passes/RipplePass.ts`
-  - `src/lib/passes/LandscapePass.ts`
-  - `src/lib/passes/BushesPass.ts`
-  - `src/lib/scene/LandscapeScene.ts`
-  - `src/lib/scene/LandscapeResources.ts`
-- Legacy wrappers and temporary proxy files have already been removed. Do not recreate `LandscapeShader.svelte`, `VegetationPass.ts`, old `scenes/` wrappers, or old `gl/renderer` compatibility paths.
-- `LandscapeViewport.svelte` is intentionally a thin Svelte host component. It should stay focused on canvas mounting, scene bootstrapping, and dev-only debug UI.
-- `LandscapeScene` already delegates scene-local GPU resource setup/load/dispose to `LandscapeResources`. Treat that resource split as the baseline, not as future work to redo.
-- The vegetation baseline is now a small grass PBR atlas bundle (`albedo`, `alpha`, `normal`, `roughness`, `translucency`) loaded by `LandscapeResources`, not a single foliage color atlas.
-- `BushesPass` owns the vegetation atlas region definitions and instance mapping. Keep atlas layout assumptions explicit on the CPU side instead of hardcoding sprite partitions in GLSL.
-- Shared resize/framing math now lives in `src/lib/scene/sceneFraming.ts` and uses height-normalized scene space. Treat that as the baseline for future aspect-ratio fixes in both landscape and vegetation paths.
-- `src/lib/scene/sceneCamera.ts` is the place to grow orbital camera state, screen-to-world ray helpers, water-plane hit testing, and the migration away from purely screen-space landscape composition.
-- The landscape baseline now reads as a compact pond rather than open water: opposite-bank termination and pond-scale framing are intentional parts of the current scene direction.
-- `BushesPass` has completed the main Phase 1.6 migration baseline: card roots now belong in shoreline/world space and project through the same orbital camera model as `LandscapePass`.
-- The current vegetation output is still an evaluation scaffold. If cards feel detached from the bank during scroll/camera motion, first treat that as an anchoring/projection/integration bug, not as proof that atlas-card vegetation is invalid.
-- The shoreline contact baseline has already gone beyond simple edge tinting. `LandscapePass` now uses shared gap metrics, underwater shelf depth, bank-through-water color, shore water-film, and overlap-aware branch selection as the acceptable single-pass `2.5D` baseline.
-- A small residual bank/water seam should be interpreted as a limitation of the current single-pass dual-surface model, not necessarily as an immediate shader bug. If a future task wants a materially better result, reach first for a dedicated shoreline overlap/depth layer rather than more `contact band` tweaking.
-- The hero title is no longer allowed to settle as a single-phrase canvas billboard. Treat the current world-space billboard path as a temporary fallback/bridge, not as the intended final text rendering model.
-- The preferred Phase 2 direction is now explicit: `MSDF/MTSDF atlas + glyph metrics + dedicated HeroTitlePass` in world-space. Title proportions, kerning, and glyph bounds should come from font metrics, not from canvas alpha crops.
-- Prefer `msdf-atlas-gen`/`msdfgen` as the primary reference path. `msdf-bmfont-xml` is an acceptable pragmatic generator if its output format integrates more easily with the JS toolchain.
-- The repository now owns a utility path for hero-title assets. Regenerate atlas artifacts from the source OTF via `bun run hero-title:generate` rather than hand-editing texture bounds in runtime code.
-- The runtime baseline has now moved one step further: when hero-title atlas assets are present, `LandscapeScene` should route direct title + reflection through a dedicated `HeroTitlePass`, while the old billboard path inside `LandscapePass` stays only as an explicit fallback.
-- Keep the hero-title baseline free of baked glow/halo. If the project later wants bloom, prefer a dedicated post-process pass over reintroducing canvas shadows or shader-side additive halos into the title itself.
-- Debug pass switches already exist in development mode and are wired to `Ripple`, `Landscape`, and `Vegetation/Bushes` views.
-- The project now uses `@sveltejs/adapter-vercel` so Vercel builds the correct platform output. Article pages still rely on server `load` functions and private Strapi environment variables.
-
-## 11. Next iterations
-
-Use this as the preferred order for upcoming work:
-
-1. Keep `LandscapeScene.ts` as a thin coordinator by extracting only the remaining non-orchestration concerns that still obscure pass ordering or input/state flow. `LandscapeResources` is already the baseline for scene-local GPU asset ownership.
-2. Use the current migration order for scene depth:
-   - Phase 1: orbital camera + world-ray reconstruction in `LandscapePass`
-   - Phase 1.5: pond-scale calibration + finite opposite-bank read
-   - Phase 1.6: vegetation world-space migration (shoreline-rooted cards, camera-projected placement, no final dependence on a shared `u_horizon`) — current baseline complete
-   - Phase 1.7: shoreline overlap baseline inside `LandscapePass` (shared gap metric, shallow shelf, bank-through-water, shore water-film) — current baseline complete for single-pass work
-   - Phase 2: atlas-driven world-anchored hero title — move from temporary world-space billboard fallback toward `MSDF/MTSDF + glyph metrics + HeroTitlePass`
-   - Phase 2.5: optional dedicated shoreline overlap/depth layer if the project later needs a more physical bank/water interaction than the single-pass baseline can provide
-   - Phase 3: selective SDF / volumetrics / hero-object depth work
-3. Keep `README.md` and this instruction file in sync with meaningful runtime baseline changes, especially when camera model, atlas ownership, framing math, pass roles, or debug workflows change.
-4. Reassess whether pass ownership/orchestration should remain in `LandscapeScene` or move further into `Renderer`, but only if that change improves clarity without changing behavior.
-5. Perform safe shader optimization passes on real hot spots only after the camera/world-space migration has stabilized enough that we are not optimizing code that is about to be replaced.
-6. Keep validating the core invariant: ripple affects water normals, not direct color, and verify that debug views still work after each substantial change.
-7. Treat the next likely quality wins as:
-   - atlas-driven hero-title layout / reflection coherence,
-   - vegetation atlas/silhouette quality and layering,
-   - optional dedicated shoreline overlap/depth layer,
-   not as a reason to revisit completed camera/world-space migration from scratch.
+- Do not add new full-screen passes without explicit request.
+- Do not reintroduce `shoreFbm` inline in `landscape.frag`.
+- Do not add `Math.tan()` calls per-frame in render passes.
+- Do not set `cloudDetail=1.0` in reflection paths.
+- Do not change render order (landscape → bushes → heroTitle).
+- Do not add `baseLift` animation back to title.
+- Do not use scroll to drive camera orbit.

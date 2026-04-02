@@ -66,6 +66,7 @@ export class BushesPass extends RenderPass {
     right: { x: 1, y: 0, z: 0 },
     up: { x: 0, y: 1, z: 0 },
     fovY: Math.PI / 4,
+    tanHalfFovY: Math.tan(Math.PI / 8),
   }
   private atlasTextures: FoliageAtlasTextureSet = {
     albedo: null,
@@ -231,7 +232,7 @@ export class BushesPass extends RenderPass {
       this.camera.forward.y,
       this.camera.forward.z
     )
-    this.program.setFloat("u_cameraTanHalfFovY", Math.tan(this.camera.fovY * 0.5))
+    this.program.setFloat("u_cameraTanHalfFovY", this.camera.tanHalfFovY)
     this.program.setFloat("u_horizon", this.horizon)
     this.program.setFloat("u_phase", this.phase)
     this.program.setVec2("u_resolution", this.width, this.height)

@@ -23,6 +23,8 @@ type LandscapeFrameState = {
   }
   shorePlaneZ: number
   waterLevel: number
+  // AI: Phase A — pre-baked shore profile (512×1 RGBA32F).
+  shoreProfileTexture: WebGLTexture | null
 }
 
 function injectShaderDefines(source: string, defines: string[]) {
@@ -46,6 +48,9 @@ export class LandscapePass extends RenderPass {
   private program: Program
   private quad: FullscreenQuad
   private debugMode: LandscapeDebugMode = "beauty"
+  // AI: Phase C — glyph data is static after load; only re-upload on change.
+  private glyphDataDirty = true
+  private lastGlyphKey = ""
   private scroll = 0
   private textTexture: WebGLTexture | null = null
   private titleHero: TitleHeroState = {
@@ -64,9 +69,12 @@ export class LandscapePass extends RenderPass {
     right: { x: 1, y: 0, z: 0 },
     up: { x: 0, y: 1, z: 0 },
     fovY: Math.PI / 4,
+    tanHalfFovY: Math.tan(Math.PI / 8),
   }
   private shorePlaneZ = -1
   private waterLevel = 0
+  // AI: Phase A
+  private shoreProfileTexture: WebGLTexture | null = null
 
   constructor(gl: WebGL2RenderingContext) {
     super(gl)
@@ -80,12 +88,22 @@ export class LandscapePass extends RenderPass {
     this.textTexture = state.textTexture
     this.titleHero = state.titleHero
     this.useTitleBillboard = state.useTitleBillboard
+
+    const newGlyphKey = state.titleAtlasRenderData
+      ? `${state.titleAtlasRenderData.atlas.imageUrl}:${state.titleAtlasRenderData.gpuLayout.phraseLayout.glyphs.length}`
+      : ""
+    if (newGlyphKey !== this.lastGlyphKey) {
+      this.glyphDataDirty = true
+      this.lastGlyphKey = newGlyphKey
+    }
     this.titleAtlasRenderData = state.titleAtlasRenderData
+
     this.rippleTexelSize = state.rippleTexelSize
     this.rippleWorldRect = state.rippleWorldRect
     this.sceneScale = state.sceneScale
     this.shorePlaneZ = state.shorePlaneZ
     this.waterLevel = state.waterLevel
+    this.shoreProfileTexture = state.shoreProfileTexture ?? null
   }
 
   setDebugMode(mode: LandscapeDebugMode) {
@@ -141,7 +159,8 @@ export class LandscapePass extends RenderPass {
       this.camera.forward.y,
       this.camera.forward.z
     )
-    this.program.setFloat("u_cameraTanHalfFovY", Math.tan(this.camera.fovY * 0.5))
+    // AI: Phase C — tanHalfFovY pre-computed in computeSceneCamera.
+    this.program.setFloat("u_cameraTanHalfFovY", this.camera.tanHalfFovY)
     this.program.setTexture("u_textTex", this.textTexture, 0)
     this.program.setFloat("u_useTitleBillboard", this.useTitleBillboard ? 1 : 0)
     this.program.setFloat("u_useTitleAtlasReflection", this.titleAtlasRenderData?.atlas.texture ? 1 : 0)
@@ -182,7 +201,8 @@ export class LandscapePass extends RenderPass {
       "u_titleGlyphCount",
       this.titleAtlasRenderData?.gpuLayout.phraseLayout.glyphs.length ?? 0
     )
-    if (this.titleAtlasRenderData) {
+    // AI: Phase C — only upload 256 floats when glyph data actually changes.
+    if (this.glyphDataDirty && this.titleAtlasRenderData) {
       this.program.setVec4Array(
         "u_titleGlyphBounds[0]",
         this.titleAtlasRenderData.gpuLayout.glyphBoundsData
@@ -191,10 +211,13 @@ export class LandscapePass extends RenderPass {
         "u_titleGlyphAtlasRects[0]",
         this.titleAtlasRenderData.gpuLayout.glyphAtlasData
       )
+      this.glyphDataDirty = false
     }
 
     this.program.setTexture("u_rippleTex", rippleTex, 1)
     this.program.setFloat("u_rippleTexel", this.rippleTexelSize)
+    // AI: Phase A — texture unit 3 (0=textTex, 1=ripple, 2=titleAtlas)
+    this.program.setTexture("u_shoreProfileTex", this.shoreProfileTexture, 3)
     this.program.setVec4(
       "u_rippleWorldRect",
       this.rippleWorldRect.x,

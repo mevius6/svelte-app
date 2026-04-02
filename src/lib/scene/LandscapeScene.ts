@@ -13,6 +13,7 @@ import {
   SHORELINE_WORLD_Z,
   WATER_LEVEL,
   waterWorldToRippleUV,
+  type SceneCameraState,
 } from "./sceneCamera"
 import { computeSceneFrame } from "./sceneFraming"
 import type { Scene } from "./Scene"
@@ -49,6 +50,12 @@ export class LandscapeScene implements Scene {
   private width = 1
   private height = 1
   private scrollNorm = 0
+  // AI: Phase C — camera is now effectively static (time-of-day scroll,
+  // fixed orbital params). Cache to avoid trig on every RAF call.
+  private cachedCamera: SceneCameraState | null = null
+  private cameraWidth = 0
+  private cameraHeight = 0
+  private cameraScroll = -1
   private lastDropMs = 0
   private initialized = false
   private passView: PassDebugView = "final"
@@ -172,6 +179,8 @@ export class LandscapeScene implements Scene {
       },
       shorePlaneZ: SHORELINE_WORLD_Z,
       waterLevel: WATER_LEVEL,
+      // AI: Phase A — pre-baked shore profile texture.
+      shoreProfileTexture: this.resources.shoreProfileTexture,
     })
     this.heroTitle.setFrameState({
       camera,
@@ -214,7 +223,9 @@ export class LandscapeScene implements Scene {
     // Fixed:   landscape → bushes  → heroTitle (title renders on top)
     // ══════════════════════════════════════════════════════════════════
 
-        const landscapeMode = this.passView === "landscape" ? this.landscapeMode : "beauty"
+    const landscapeMode = this.passView === "landscape"
+      ? this.landscapeMode
+      : "beauty"
     this.landscape.setDebugMode(landscapeMode)
     this.landscape.render(time, rippleTex)
 
@@ -264,7 +275,21 @@ export class LandscapeScene implements Scene {
   private pointerToRippleUV(clientX: number, clientY: number) {
     const viewportWidth = window.innerWidth
     const viewportHeight = window.innerHeight
-    const camera = computeSceneCamera(this.scrollNorm, viewportWidth, viewportHeight)
+
+    // AI: Phase C — recompute only on resize or scroll change.
+    if (
+      !this.cachedCamera ||
+      this.width    !== this.cameraWidth  ||
+      this.height   !== this.cameraHeight ||
+      this.scrollNorm !== this.cameraScroll
+    ) {
+      this.cachedCamera   = computeSceneCamera(this.scrollNorm, this.width, this.height)
+      this.cameraWidth    = this.width
+      this.cameraHeight   = this.height
+      this.cameraScroll   = this.scrollNorm
+    }
+    const camera = this.cachedCamera
+
     const direction = screenPointToWorldRay(
       camera,
       clientX,

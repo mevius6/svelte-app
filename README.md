@@ -10,132 +10,89 @@
 
 - host/UI layer: `src/lib/components/LandscapeViewport.svelte` — тонкий Svelte-shell конкретной сцены; создаёт `canvas`, монтирует `Renderer`, показывает dev-only debug panel.
 - runtime layer: `src/lib/render/Renderer.ts` — владеет WebGL2 context lifecycle, `requestAnimationFrame`, resize по DPR и вызовом активной сцены.
-- scene/orchestration layer: `src/lib/scene/LandscapeScene.ts` — связывает input, scroll/debug state и порядок проходов; координирует кадр, но не должен разрастаться в склад GPU-ресурсов.
-- camera layer: `src/lib/scene/sceneCamera.ts` — хранит orbital camera model, screen-to-world ray helpers, world-space water mapping и общий переход от плоского screen-space к camera-space rendering.
-- resource layer: `src/lib/scene/LandscapeResources.ts` — владеет загрузкой и жизненным циклом GPU-ресурсов сцены: title-texture, foliage PBR atlas bundle и fallback ripple texture.
-- framing layer: `src/lib/scene/sceneFraming.ts` — задаёт общую scene-space framing-модель, чтобы landscape и vegetation одинаково переживали resize.
-- pass layer: `src/lib/passes/RipplePass.ts`, `src/lib/passes/LandscapePass.ts`, `src/lib/passes/BushesPass.ts` — отдельные рендер-проходы симуляции, fullscreen shading и инстансной растительности.
-- GL layer: `src/lib/gl/` — низкоуровневые WebGL-абстракции: `Program`, `FullscreenQuad`, `FBO`, `DoubleFBO`, `Context`.
+- scene/orchestration layer: `src/lib/scene/LandscapeScene.ts` — связывает input, scroll/debug state и порядок проходов; координирует кадр.
+- camera layer: `src/lib/scene/sceneCamera.ts` — хранит orbital camera model, screen-to-world ray helpers, world-space water mapping. **Камера статична; scroll больше не двигает орбиту.**
+- resource layer: `src/lib/scene/LandscapeResources.ts` — владеет загрузкой и жизненным циклом GPU-ресурсов: title-texture, foliage PBR atlas, fallback ripple texture, **shore profile 1D texture**.
+- baker layer: `src/lib/scene/shoreProfileBaker.ts` — **новый файл.** Запекает `shoreFbm` (5 октав, 3 seed-набора) в 512×1 RGBA32F текстуру при старте. R=baselineSilhouette, G=bankNoise, B=shelfNoiseSrc.
+- framing layer: `src/lib/scene/sceneFraming.ts` — общая scene-space framing-модель.
+- pass layer: `RipplePass` → `LandscapePass` → `BushesPass` → `HeroTitlePass`.
+- GL layer: `src/lib/gl/` — `Program`, `FullscreenQuad`, `FBO`, `DoubleFBO`, `Context`.
 
-Практический смысл нового resource layer:
+## Активный render pipeline
 
-- `LandscapeScene` остаётся координатором, который знает, когда и в каком порядке использовать ресурсы.
-- `LandscapeResources` инкапсулирует создание, загрузку, хранение и `dispose()` для текстур, чтобы scene-класс не держал в себе детали GPU asset management.
-- `sceneFraming` инкапсулирует общую aspect/framing math, чтобы passes не чинили пропорции локальными ad hoc формулами.
-- Следующие рефакторинги сцены удобнее делать поверх этой границы ответственности, не затрагивая math и порядок проходов.
+```
+RipplePass → LandscapePass → BushesPass → HeroTitlePass
+```
+
+**Важно: порядок изменён.** BushesPass рендерится ДО HeroTitlePass — depth test отключён (painter's algorithm), растительность не перекрывает тайтл.
 
 ## Архитектурные принципы
 
-- `LandscapeViewport` остаётся тонким host-слоем: canvas mounting, scene bootstrapping и dev-only debug UI.
-- `Renderer` отвечает за runtime lifecycle, а не за смысл конкретной сцены.
-- `LandscapeScene` координирует input, frame state и порядок проходов, но не должен разрастаться в контейнер GPU-ресурсов.
-- `LandscapeResources` владеет созданием, загрузкой и освобождением GPU-ресурсов сцены.
-- Для роста иммерсива двигаемся не в сторону полного engine-jump, а в сторону hybrid 2.5D: сначала camera-space/world-space foundation в fullscreen pass'ах, потом выборочный объём и SDF там, где это окупается.
-- Aspect-ratio/framing исправления делаем один раз в общей scene-space модели (`src/lib/scene/sceneFraming.ts`), а затем переиспользуем в `LandscapePass` и `BushesPass`.
-- Один pass — одна роль: simulation, landscape shading, vegetation и возможный post-process держим раздельно.
-- Ripple влияет на нормали воды, а не на цвет напрямую.
-- Сначала добавляем камеру, world rays, water-plane/shoreline intersections и world-anchored text, и только потом обсуждаем более тяжёлый 3D/SDF слой.
-- SDF используем выборочно: для hero-объектов, volumetrics, world-anchored title/signage и storytelling hotspots, а не как blanket replacement всего runtime.
-- Новые абстракции добавляем только там, где они уже уменьшают сложность текущего кода, а не впрок.
-- После заметных runtime baseline-изменений обновляем `README.md` и `codex-system-prompt.md` в той же итерации, чтобы следующая работа опиралась на актуальное состояние проекта.
+- `LandscapeViewport` — тонкий host: canvas mounting, scene bootstrapping, dev-only debug UI.
+- `Renderer` — runtime lifecycle, не содержит scene-специфичной логики.
+- `LandscapeScene` — координатор input, frame state, порядка проходов. Не контейнер GPU-ресурсов.
+- `LandscapeResources` — владение созданием, загрузкой и освобождением GPU-ресурсов.
+- Один pass — одна роль: simulation, landscape shading, vegetation, title.
+- Ripple влияет на нормали воды, не на цвет напрямую.
+- **scroll = время суток**, а не движение камеры или тайтла.
 
 ## Reference Base
 
-Когда нужен внешний ориентир по решениям, стараемся опираться сначала на эти источники:
-
-- Svelte docs for LLMs: `https://svelte.dev/docs/llms`
-- Svelte Best Practices: `https://svelte.dev/docs/svelte/best-practices`
-- GM Shaders Mini Tutorials: `https://mini.gmshaders.com/`
-- GM Shaders Mini: Vector Spaces: `https://mini.gmshaders.com/p/vector-spaces`
-- GM Shaders Mini: Signed Distance Fields: `https://mini.gmshaders.com/p/sdf`
-- GM Shaders Guest: Bart: `https://mini.gmshaders.com/p/guest-bart`
+- Svelte docs: `https://svelte.dev/docs/llms`
+- GM Shaders Mini: `https://mini.gmshaders.com/`
 - The Book of Shaders: `https://thebookofshaders.com/`
-- Inigo Quilez Articles: `https://iquilezles.org/articles/`
-- Inigo Quilez: Smooth Minimum / Smooth Union: `https://iquilezles.org/articles/smin/`
-- PKH Notebook: `https://blog.pkh.me/index.html`
-- Maxime Heckel Articles: `https://blog.maximeheckel.com/#articles`
-- Graphics Programming Weekly: `https://www.jendrikillner.com/post/graphics-programming-weekly-issue-411/`
+- Inigo Quilez: `https://iquilezles.org/articles/`
+- IQ Smooth Min: `https://iquilezles.org/articles/smin/`
 
-Практическое правило:
+## Текущий cursor на глубину сцены
 
-- По Svelte сначала сверяемся с официальной документацией и best practices.
-- По GLSL, шумам, procedural math и shader-оптимизациям используем GM Shaders, The Book of Shaders и статьи Inigo Quilez как основную reference-базу.
-- Для вопросов про coordinate spaces, camera/view/projection math и “почему объект ведёт себя как overlay” сначала сверяемся с `GM Shaders Mini: Vector Spaces`.
-- Для локальных переходов bank -> water, shoreline masks, мягких silhouette blends и shape composition полезно сначала сверяться с `GM Shaders Mini: Signed Distance Fields` и `iq: smin`.
-- Для world-space billboards / sprite cards / order-of-operations при развороте карточек в 3D сначала сверяемся с `GM Shaders Guest: Bart`; практическое правило — сначала локальный поворот/разворот карточки вокруг её центра, потом перевод в world-space, а не наоборот.
-- Практическое правило по SDF/smin: использовать их как локальный инструмент для мягкого сращивания береговой формы, shallow-water shelf, vegetation masks и reveal transitions, но не как оправдание мгновенно переводить весь runtime в SDF-мир.
-- Для более глубоких заметок по signed distance functions, ray marching, filtering и shader math можно дополнительно опираться на PKH Notebook.
-- Для визуальных разборов creative coding, shader storytelling и выразительных frontend/WebGL-паттернов можно дополнительно смотреть статьи Maxime Heckel.
-- Для поиска сильных внешних ориентиров и свежих graphics links можно использовать Graphics Programming Weekly как curated discovery-источник.
-- Ссылки нужны как опора для решений, а не как повод тащить в проект лишнюю абстракцию.
+**Завершённые фазы:**
 
-Активный render pipeline сейчас такой:
+- Phase 1–1.7: orbital camera, world-ray, water-plane/shoreline, pond-scale, vegetation world-space, shoreline contact.
+- Phase 1.6: BushesPass — world-space roots на bank, projection через orbital camera.
+- Phase 1.7: shoreline overlap — gap metric, shallow shelf, bank-through-water, shore waterfilm.
+- Phase 2.2: MSDF atlas pipeline → `HeroTitlePass` с fallback на canvas billboard.
 
-1. `RipplePass`
-2. `LandscapePass`
-3. `BushesPass`
+**Завершённые в текущей итерации:**
 
-Post-processing в активный pipeline пока не подключён.
+- **Title world-space fix:** тайтл перемещён в середину пруда (`TITLE_WORLD_Z_NEAR = 0.35`), вместо берега (`-0.58`). Ширина масштабирована пропорционально для сохранения видимого размера.
+- **baseLift removed:** анимация подъёма тайтла по Y при скролле удалена. Высота теперь фиксирована: `WATER_LEVEL + height * 0.5 + 0.06`.
+- **Render order:** BushesPass перенесён перед HeroTitlePass — растительность за тайтлом, не перед ним.
+- **Статичная камера:** scroll больше не двигает орбиту. Камера зафиксирована: `yaw=-0.08`, `pitch=0.068`, `radius=2.92`.
+- **Scroll = time of day:** `u_scroll` теперь только фаза дня (0=рассвет, 1=закат).
+- **Clouds follow sun (Phase B):** `solarDrift = vec2(phase01 * 0.42, phase01 * 0.06)` в `cloudDensity` — облака движутся вместе с солнцем.
+- **Title reflection fixes:** убрана белая рамка (`haloAlpha` не композируется), цвет исправлен на lime-green `vec3(0.788, 0.941, 0.541)`, нормаль воды сглаживается перед reflection ray для title (`nTitle = mix(n, vec3(0,1,0), rippleStrength*0.70)`).
+- **Phase A — shore 1D texture:** `shoreFbm` (≈90 vnoise/пиксель воды) заменён на 1 texture fetch из `u_shoreProfileTex`. Новый файл: `src/lib/scene/shoreProfileBaker.ts`.
+- **Phase B — cloud reflection LOD:** `cloudDensity` принимает `detailLOD` флаг. Reflection path: `detailLOD=0.0` (экономия 3 vnoise/пиксель).
+- **Phase C — CPU caches:** `tanHalfFovY` перенесён в `SceneCameraState` (считается один раз в `computeSceneCamera`). Камера кэшируется в `LandscapeScene`, пересчёт только при resize/scroll. Glyph uniforms (256 floats) загружаются только при изменении атласа, не каждый кадр.
 
-## Текущий курс на глубину сцены
+## Следующие итерации
 
-- Главная визуальная проблема baseline — не отсутствие “настоящего 3D” само по себе, а то, что большая часть сцены долго жила в screen-space композиции.
-- Принятый курс: переводить `LandscapePass` в camera-space/world-space постепенно, сохраняя текущую pass-архитектуру.
-- Phase 1 baseline: orbital camera state, world-ray reconstruction, water-plane shading и shoreline hit-модель внутри `LandscapePass`.
-- Phase 1.5 baseline: pond-scale calibration — вода читается как городской пруд с конечным противоположным берегом, а не как бесконечная открытая акватория.
-- Phase 1.6 baseline: vegetation уже переведена из horizon-locked overlay в world-space shoreline placement.
-- Для `BushesPass` это означает: инстансы хранят корень карточки в world-space вдоль bank/shoreline, затем проецируются той же камерой, что и landscape; единый `u_horizon` как финальная посадка кустов больше не считается достаточным baseline.
-- Atlas/billboard техника для дальней береговой растительности считается валидной; текущие артефакты читаются как проблема пространственной привязки, а не как доказательство, что cards/atlas не подходят.
-- Для следующего polish-слоя bank/water transition разрешён локальный SDF-подход: shoreline distance mask + `smin`/soft union для более мягкой посадки берега в воду, если это не ломает текущий pond-scale baseline.
-- При использовании `smin` помнить, что blend-region перестаёт быть exact distance field; держать `k` небольшим и сначала применять это как shaping/masking tool, а не как основу для тяжёлого raymarch-пайплайна.
-- Для самого контакта `берег <-> вода` не считать `waterPos.z` достаточной метрикой. Если interaction выглядит как горизонтальная полоска, сначала переходить на shared ray-gap/depth-softening metric (`tShore - tWater` / `tWater - tShore`), а уже потом усиливать цвет/foam/wet-edge.
-- Phase 1.7 baseline: shoreline contact больше не считается purely color-seam задачей. Текущий acceptable result для single-pass `2.5D` строится через `shorelineGap`, `underwater shelf`, `bank-through-water`, `shore water-film` и overlap-aware выбор ветки в `LandscapePass`.
-- Практическое правило на будущее: если край снова читается как “нарисованная полоска”, не начинать с очередного тюнинга `contact band`. Сначала проверять толщину воды у toe, overlap-compositing и слишком раннее разделение `shore`/`water`.
-- Текущий shoreline baseline считаем достаточным для движения дальше по проекту; остаточный микрошов трактуем как ограничение single-pass dual-surface модели, а не как blocker.
-- Phase 2 baseline больше не трактуем как финальный `canvas phrase billboard`. Этот путь остаётся только как временный fallback/scaffold, пока не внедрён atlas-driven рендеринг текста.
-- Новый курс для hero-title: `MSDF/MTSDF atlas + glyph metrics + отдельный HeroTitlePass` в world-space. Пропорции, kerning и glyph bounds должны приходить из font metrics, а не из alpha-crop canvas-текстуры.
-- Asset pipeline для hero-title уже активен: `bun run hero-title:generate` пишет atlas/metrics в `static/hero-title/`, а рантайм подхватывает их через `LandscapeResources`.
-- Текущий Phase 2.2 baseline: если atlas доступен, прямой title и его отражение должны идти через отдельный `HeroTitlePass`; старый fullscreen billboard внутри `LandscapePass` остаётся только fallback-путём на случай отсутствия atlas-артефактов.
-- В качестве primary reference-path предпочитаем `msdf-atlas-gen`/`msdfgen`; `msdf-bmfont-xml` допустим как pragmatic JS-friendly generator, если его формат/layout окажется удобнее для toolchain.
-- Для serif hero-title с потенциальными будущими soft effects предпочтителен `MTSDF`, но не в ущерб простоте пайплайна. Если первый шаг проще сделать на `MSDF`, это acceptable baseline.
-- Текущий hero-title baseline intentionally без встроенного glow: ни в canvas-texture, ни в shader compositing. Если позже понадобится bloom, его лучше делать отдельным pass, а не baked halo внутри самого title.
-- Следующий шаг для title-слоя — не возвращать overlay, а переводить именно ресурсный и render path на atlas-driven world-space решение: метрики, glyph layout, reflection coherence и затем уже отдельный bloom/material pass.
-- Только после этого оцениваем selective SDF для volumetrics, story reveals и hero-объектов; не делаем мгновенный переход на “полный 3D engine”.
+По приоритету из code review (апрель 2026):
 
-## Текущий baseline для vegetation и framing
+1. **Phase D — Wave normal LOD:** при `farField > 0.75` пропускать ripples, уменьшать `eps` пропорционально `viewDistance`. Экономия ~5-8% GPU.
+2. **Phase E — Title glyph loop isolation:** 32-итерационный MSDF-цикл в `landscape.frag` — кандидат на изоляцию после стабилизации Phase 2 title pipeline.
+3. **Vegetation quality:** atlas silhouette variety, density clustering, layering. Текущий baseline: один atlas region `grass-clump-main`, 18 кустов × 3 карточки.
+4. **Scroll-driven title reveal animation:** при scroll=0 тайтл на месте посреди пруда; разработать эффект появления (не подъём по Y — заменён). Candidate: fade-in по opacity + лёгкий scale.
+5. **Bloom/post-process pass:** если title потребует свечение — отдельный pass, не shader halo.
+6. **Phase 3 selective SDF/volumetrics:** только после стабилизации всего выше.
 
-- Вегетация больше не опирается на один color atlas. `LandscapeResources` загружает небольшой grass PBR bundle: `albedo`, `alpha`, `normal`, `roughness`, `translucency`.
-- Runtime использует web-ready PNG-копии из `static/grass-atlas-web/`; TIFF-файлы в `static/grass-atlas/` считаются source assets для конвертации.
-- `BushesPass` остаётся отдельным pass и владеет atlas region definitions, instancing и wind animation.
-- Atlas mapping сделан через явные region rect'ы на CPU, а не через жёсткий layout hardcode в GLSL.
-- Общая framing-модель height-normalized: при resize меняется горизонтальный охват сцены, а не вертикальные пропорции композиции.
-- Эту framing-модель считают в `src/lib/scene/sceneFraming.ts` и прокидывают в `LandscapePass` и `BushesPass` как shared frame state.
-- Runtime уже перешёл к orbital camera/world-space foundation для воды и противоположного берега: landscape больше не должен опираться только на экранный split по `uv.y`.
-- `BushesPass` начал Phase 1.6 migration: roots карточек уже хранятся в world-space вдоль той же shoreline/bank-модели, что использует `LandscapePass`, и проецируются через ту же orbital camera.
-- Vegetation shading и atlas quality всё ещё считаются промежуточным scaffold; если визуал выбивается, сначала проверяем anchoring/projection/integration, а не отвергаем atlas cards как технику.
-- Shoreline контакт сейчас доведён до приемлемого pond-scale baseline внутри single-pass `LandscapePass`: вода у toe больше не должна опираться только на fixed stripe, а использует shallow shelf depth, bank-through-water tint и shore watercoat.
-- Если когда-либо понадобится ещё более натуральный bank/water overlap, следующий правильный шаг — отдельный shoreline overlap/depth layer или дополнительный contact pass. Это уже следующий класс сложности, а не обязательная правка текущего baseline.
+## Кэширование и производительность — текущий baseline
 
-## Заметки на будущее
-
-- `HeroTitlePass`: текущий canvas-billboard трактуем как bridge/fallback. Финальный путь для объекта-героя — отдельный pass с atlas texture, glyph metrics, kerning и camera-aware MSDF/MTSDF shading.
-- `Hero title asset pipeline`: нужен оффлайн-артефактный слой вида `static/hero-title/roslindale-msdf.json` + atlas image. Для генерации предпочтительны `.ttf/.otf` source fonts; runtime `woff2` не считать основным production-входом для atlas generation toolchain.
-- `Hero title reflection`: текущий acceptable baseline — world-space mirrored glyph pass. Если позже понадобится более физичная посадка отражения в воду, следующим правильным шагом будет отдельная интеграция с water/reflection layer, а не возврат к phrase-billboard sampling внутри fullscreen landscape shader.
-- `Bloom/blur pass`: если title снова попросит свечение, не возвращать canvas-shadow или shader halo. Добавлять отдельный post-process pass поверх уже работающего world-space baseline.
-- `Shoreline overlap layer`: если снова вернёмся к берегу/воде, пробовать не новые коэффициенты в `landscape.frag`, а отдельный overlap/depth слой для мелководья и water-on-bank compositing.
-- `Vegetation quality pass`: улучшить atlas silhouette variety, density clustering, layering, sorting/depth cues и художественную разнородность береговой ленты.
-- `Near-shore water detail`: при необходимости добавить очень мягкий локальный foam/sediment/wet-sand язык, но только поверх уже работающего overlap baseline, не вместо него.
-- `Ripple/world mapping`: при следующих итерациях стоит ещё раз проверить размеры `RIPPLE_WORLD_RECT` и near-shore damping, если у кромки снова появится ощущение отдельного calm-band.
-- `Selective depth work`: если иммерсив/сторителлинг потребуют большего объёма, следующим большим шагом должен быть не engine jump, а локальные overlap/depth/volumetric решения внутри текущей pass-архитектуры.
-
-Deployment/runtime: проект собирается через `@sveltejs/adapter-vercel`. Server `load` и private env для Strapi остаются валидными на Vercel, а production-артефакт больше не должен разворачиваться как статическая папка с `build/index.js`.
+| Что | До | После |
+|-----|----|-------|
+| `shoreFbm` на водный пиксель | ≈90 vnoise | 3 texture fetch |
+| Cloud reflection | 7 vnoise | 4 vnoise (detail пропущен) |
+| `tanHalfFovY` | `Math.tan()` 3× per frame | 1× в `computeSceneCamera` |
+| Camera recompute | каждый RAF | только при resize/scroll |
+| Glyph upload | 256 floats каждый кадр | только при смене атласа |
 
 ## Asset workflow
 
-- Если обновился исходный grass atlas в `static/grass-atlas/*.tif`, сначала пересобираем web-runtime копии командой `npm run atlas:convert`.
-- Если обновился source font или phrase для hero-title, пересобираем atlas/metrics командой `bun run hero-title:generate`. Источник сейчас: `src/fonts/RoslindaleCyrillic-DisplayCondensedBlack.otf`; артефакты пишутся в `static/hero-title/`.
-- Runtime baseline сейчас завязан на `static/grass-atlas-web/*.png`; не переключать браузерный путь обратно на TIFF.
-- После изменений в render baseline или shader/framing model синхронизируем `README.md` и `codex-system-prompt.md`.
+- Обновился grass atlas → `npm run atlas:convert`
+- Обновился source font или phrase → `bun run hero-title:generate`
+- Runtime: `static/grass-atlas-web/*.png`; `static/hero-title/roslindale-msdf.*`
+- После изменений в render baseline синхронизировать README и codex-system-prompt.
 
 ## Структура проекта
 
@@ -162,11 +119,13 @@ src/lib/
     sceneCamera.ts
     LandscapeResources.ts
     sceneFraming.ts
+    shoreProfileBaker.ts      ← NEW (Phase A)
 
   passes/
     RipplePass.ts
     LandscapePass.ts
     BushesPass.ts
+    HeroTitlePass.ts
 
   shaders/
     landscape.vert
@@ -174,6 +133,8 @@ src/lib/
     ripple.frag
     bushes.vert
     bushes.frag
+    hero-title.vert
+    hero-title.frag
     post/
       tonemap.frag
 

@@ -31,6 +31,7 @@ export class HeroTitlePass extends RenderPass {
     right: { x: 1, y: 0, z: 0 },
     up: { x: 0, y: 1, z: 0 },
     fovY: Math.PI / 4,
+    tanHalfFovY: Math.tan(Math.PI / 8),
   }
   private phase = 0
   private titleHero: TitleHeroState = {
@@ -136,7 +137,7 @@ export class HeroTitlePass extends RenderPass {
       this.camera.forward.y,
       this.camera.forward.z
     )
-    this.program.setFloat("u_cameraTanHalfFovY", Math.tan(this.camera.fovY * 0.5))
+    this.program.setFloat("u_cameraTanHalfFovY", this.camera.tanHalfFovY)
     this.program.setVec3(
       "u_titleWorldCenter",
       this.titleHero.center.x,

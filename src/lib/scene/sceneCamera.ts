@@ -10,6 +10,8 @@ export type SceneCameraState = {
   right: Vec3
   up: Vec3
   fovY: number
+  // AI: Phase C — cached to avoid Math.tan() in every render pass.
+  tanHalfFovY: number
 }
 
 export type TitleHeroState = {
@@ -83,7 +85,7 @@ export const RIPPLE_WORLD_RECT: RippleWorldRect = {
 // in landscape.frag (same value as TITLE_WORLD_Z_NEAR).
 // Ref: landscape.frag intersectTitleAtlas, HeroTitlePass.ts u_titleWorldCenter
 export const HERO_TITLE_ANCHOR_Z = TITLE_WORLD_Z_NEAR   // -0.58
-export const HERO_TITLE_ANCHOR_Y_BASE = WATER_LEVEL     //  0.0  (text center lifts above this)
+export const HERO_TITLE_ANCHOR_Y_BASE = WATER_LEVEL     //  0.0 (text center lifts above this)
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
@@ -245,7 +247,7 @@ export function computeSceneCamera(
   // title is fully over water, shore visible behind it.
   const aspect = Math.max(width, 1) / Math.max(height, 1)
   const yaw   = -0.08   // slight left of center — matches asymmetric shore silhouette
-  const pitch =  0.068  // gentle downward look, water fills lower half
+  const pitch  = 0.068  // gentle downward look, water fills lower half
   const radius = 2.92   // fixed distance from CAMERA_TARGET
 
   const orbitOffset = {
@@ -260,7 +262,10 @@ export function computeSceneCamera(
   const right = normalize(cross(forward, WORLD_UP))
   const safeRight = length(right) > 1e-6 ? right : fallbackRight
   const up = normalize(cross(safeRight, forward))
+
   const fovY = mix(46, 49, clamp(aspect - 1, 0, 1)) * DEG_TO_RAD
+  // AI: Phase C — tanHalfFovY cached here so passes don't call Math.tan() each frame.
+  const tanHalfFovY = Math.tan(fovY * 0.5)
 
   return {
     position,
@@ -268,6 +273,7 @@ export function computeSceneCamera(
     right: safeRight,
     up,
     fovY,
+    tanHalfFovY,
   }
 }
 
