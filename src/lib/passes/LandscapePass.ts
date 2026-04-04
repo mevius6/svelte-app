@@ -48,9 +48,6 @@ export class LandscapePass extends RenderPass {
   private program: Program
   private quad: FullscreenQuad
   private debugMode: LandscapeDebugMode = "beauty"
-  // AI: Phase C — glyph data is static after load; only re-upload on change.
-  private glyphDataDirty = true
-  private lastGlyphKey = ""
   private scroll = 0
   private textTexture: WebGLTexture | null = null
   private titleHero: TitleHeroState = {
@@ -89,13 +86,6 @@ export class LandscapePass extends RenderPass {
     this.titleHero = state.titleHero
     this.useTitleBillboard = state.useTitleBillboard
 
-    const newGlyphKey = state.titleAtlasRenderData
-      ? `${state.titleAtlasRenderData.atlas.imageUrl}:${state.titleAtlasRenderData.gpuLayout.phraseLayout.glyphs.length}`
-      : ""
-    if (newGlyphKey !== this.lastGlyphKey) {
-      this.glyphDataDirty = true
-      this.lastGlyphKey = newGlyphKey
-    }
     this.titleAtlasRenderData = state.titleAtlasRenderData
 
     this.rippleTexelSize = state.rippleTexelSize
@@ -124,7 +114,7 @@ export class LandscapePass extends RenderPass {
 
     const gl = this.gl
 
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    this.bindOutputFramebuffer()
     gl.viewport(0, 0, this.width, this.height)
 
     this.program.use()
@@ -163,7 +153,7 @@ export class LandscapePass extends RenderPass {
     this.program.setFloat("u_cameraTanHalfFovY", this.camera.tanHalfFovY)
     this.program.setTexture("u_textTex", this.textTexture, 0)
     this.program.setFloat("u_useTitleBillboard", this.useTitleBillboard ? 1 : 0)
-    this.program.setFloat("u_useTitleAtlasReflection", this.titleAtlasRenderData?.atlas.texture ? 1 : 0)
+    this.program.setFloat("u_useTitlePhraseReflection", this.titleAtlasRenderData?.phraseTexture ? 1 : 0)
     this.program.setVec3(
       "u_titleWorldCenter",
       this.titleHero.center.x,
@@ -182,12 +172,6 @@ export class LandscapePass extends RenderPass {
       this.titleHero.uvRect.w,
       this.titleHero.uvRect.h
     )
-    this.program.setTexture("u_titleAtlasTex", this.titleAtlasRenderData?.atlas.texture ?? null, 2)
-    this.program.setVec2(
-      "u_titleAtlasSize",
-      this.titleAtlasRenderData?.atlas.font.atlas.width ?? 1,
-      this.titleAtlasRenderData?.atlas.font.atlas.height ?? 1
-    )
     this.program.setFloat(
       "u_titleAtlasPxRange",
       this.titleAtlasRenderData?.atlas.font.atlas.distanceRange ?? 4
@@ -197,26 +181,17 @@ export class LandscapePass extends RenderPass {
       this.titleAtlasRenderData?.gpuLayout.phraseLayout.width ?? 1,
       this.titleAtlasRenderData?.gpuLayout.phraseLayout.height ?? 1
     )
-    this.program.setInt(
-      "u_titleGlyphCount",
-      this.titleAtlasRenderData?.gpuLayout.phraseLayout.glyphs.length ?? 0
+    this.program.setTexture("u_titlePhraseTex", this.titleAtlasRenderData?.phraseTexture ?? null, 4)
+    this.program.setVec2(
+      "u_titlePhraseTexSize",
+      this.titleAtlasRenderData?.phraseTextureSize.width ?? 1,
+      this.titleAtlasRenderData?.phraseTextureSize.height ?? 1
     )
-    // AI: Phase C — only upload 256 floats when glyph data actually changes.
-    if (this.glyphDataDirty && this.titleAtlasRenderData) {
-      this.program.setVec4Array(
-        "u_titleGlyphBounds[0]",
-        this.titleAtlasRenderData.gpuLayout.glyphBoundsData
-      )
-      this.program.setVec4Array(
-        "u_titleGlyphAtlasRects[0]",
-        this.titleAtlasRenderData.gpuLayout.glyphAtlasData
-      )
-      this.glyphDataDirty = false
-    }
 
     this.program.setTexture("u_rippleTex", rippleTex, 1)
     this.program.setFloat("u_rippleTexel", this.rippleTexelSize)
-    // AI: Phase A — texture unit 3 (0=textTex, 1=ripple, 2=titleAtlas)
+    // AI: texture units:
+    // 0=textTex, 1=ripple, 3=shoreProfile, 4=titlePhraseTex (2 currently free).
     this.program.setTexture("u_shoreProfileTex", this.shoreProfileTexture, 3)
     this.program.setVec4(
       "u_rippleWorldRect",

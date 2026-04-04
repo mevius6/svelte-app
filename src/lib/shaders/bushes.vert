@@ -18,6 +18,8 @@ uniform float u_time;
 
 out vec2 v_uvAtlas;
 out float v_height;
+out float v_viewDist;
+out float v_worldY;
 
 void main() {
     const vec3 worldUp = vec3(0.0, 1.0, 0.0);
@@ -50,6 +52,7 @@ void main() {
                   + worldUp * local.y;
 
     vec3 relative = worldPos - u_cameraPos;
+    float viewDist = length(relative);
     float viewX = dot(relative, u_cameraRight);
     float viewY = dot(relative, u_cameraUp);
     float viewZ = dot(relative, u_cameraForward);
@@ -71,4 +74,6 @@ void main() {
     v_uvAtlas = a_atlasRect.xy + baseUVAtlas * a_atlasRect.zw;
 
     v_height = h;
+    v_viewDist = viewDist;
+    v_worldY = worldPos.y;
 }

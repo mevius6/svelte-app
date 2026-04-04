@@ -68,6 +68,11 @@ const TITLE_WORLD_Z_NEAR = 0.35
 const TITLE_WORLD_Z_FAR = -0.20
 const TITLE_WORLD_WIDTH_NEAR = 1.75
 const TITLE_WORLD_WIDTH_FAR = 2.10
+// AI: sunset reveal window for title appearance.
+// Text starts appearing in late-day range and reaches full presence near sunset.
+const TITLE_REVEAL_START = 0.62
+const TITLE_REVEAL_END = 0.88
+const TITLE_REVEAL_SCALE_MIN = 0.965
 
 export const RIPPLE_WORLD_RECT: RippleWorldRect = {
   x: -2.15,
@@ -215,16 +220,21 @@ export function computeTitleHeroState(
   textAspect: number,
   uvRect = { x: 0, y: 0, w: 1, h: 1 }
 ): TitleHeroState {
-  // AI: scroll is time-of-day; title position is fully fixed in world space.
-  // No scroll-driven z-movement or width change — parallax comes from
-  // the fixed camera observing a static world-space billboard.
-  const width = TITLE_WORLD_WIDTH_NEAR
+  // AI: keep world anchor fixed while adding a subtle sunset reveal scale.
+  // No scroll-driven z-movement or y-lift.
+  const revealT = smoothstep01(
+    (scroll - TITLE_REVEAL_START) / Math.max(TITLE_REVEAL_END - TITLE_REVEAL_START, 1e-6)
+  )
+  const revealScale = mix(TITLE_REVEAL_SCALE_MIN, 1, revealT)
+  const baseWidth = TITLE_WORLD_WIDTH_NEAR
+  const baseHeight = baseWidth * textAspect
+  const width = baseWidth * revealScale
   const height = width * textAspect
 
   return {
     center: {
       x: 0,
-      y: WATER_LEVEL + height * 0.5 + 0.06,
+      y: WATER_LEVEL + baseHeight * 0.5 + 0.06,
       z: TITLE_WORLD_Z_NEAR,
     },
     size: {

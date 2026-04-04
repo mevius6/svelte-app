@@ -13,6 +13,7 @@ type BushesFrameState = {
   camera: SceneCameraState
   horizon: number
   phase: number
+  debugView?: boolean
   atlasTextures: FoliageAtlasTextureSet
   sceneScale: {
     x: number
@@ -30,6 +31,12 @@ const FOLIAGE_ATLAS_SIZE = 512
 
 function mix(a: number, b: number, t: number) {
   return a + (b - a) * t
+}
+
+function smoothstep(edge0: number, edge1: number, value: number) {
+  const width = Math.max(edge1 - edge0, 1e-6)
+  const t = Math.min(Math.max((value - edge0) / width, 0), 1)
+  return t * t * (3 - 2 * t)
 }
 
 function atlasRegionFromPixels(
@@ -51,6 +58,14 @@ const FOLIAGE_ATLAS_REGIONS: BushAtlasRegion[] = [
   atlasRegionFromPixels("grass-clump-main", 95, 26, 320, 465),
 ]
 
+function createSeededRng(seed: number) {
+  let state = seed >>> 0
+  return () => {
+    state = (state * 1664525 + 1013904223) >>> 0
+    return state / 0x100000000
+  }
+}
+
 export class BushesPass extends RenderPass {
 
   private program: Program
@@ -59,6 +74,7 @@ export class BushesPass extends RenderPass {
   private instanceCount = 0
   private horizon = 0.5
   private phase = 0
+  private debugView = false
   private sceneScale = { x: 1, y: 1 }
   private camera: SceneCameraState = {
     position: { x: 0, y: 0, z: 1 },
@@ -103,51 +119,95 @@ export class BushesPass extends RenderPass {
       2
     )
 
-    const BUSH_COUNT = 18
-    const CARDS_PER_BUSH = 3
-    this.instanceCount = BUSH_COUNT * CARDS_PER_BUSH
-
-    const instanceRoot  = new Float32Array(this.instanceCount * 3)
-    const instanceScale = new Float32Array(this.instanceCount * 2)
-    const instanceAtlas = new Float32Array(this.instanceCount * 4)
-    const cardIndex     = new Float32Array(this.instanceCount)
-    const instanceRand  = new Float32Array(this.instanceCount * 2)
+    // AI: vegetation PoC — cover full shoreline strip, but preserve
+    // painterly rhythm via clustered density + intentional gaps.
+    const GRASS_COLUMNS = 90
+    const GRASS_ROWS = 4
+    const CARDS_PER_CLUMP = 3
+    const instanceRootData: number[] = []
+    const instanceScaleData: number[] = []
+    const instanceAtlasData: number[] = []
+    const cardIndexData: number[] = []
+    const instanceRandData: number[] = []
     const bankXMin = RIPPLE_WORLD_RECT.x + 0.18
     const bankXMax = RIPPLE_WORLD_RECT.x + RIPPLE_WORLD_RECT.w - 0.18
+    const rng = createSeededRng(0x5eedc0de)
+    const laneStep = 1 / Math.max(GRASS_COLUMNS - 1, 1)
+    const rowDepthStep = 0.016
 
-    for (let b = 0; b < BUSH_COUNT; b++) {
-      const laneT = b / (BUSH_COUNT - 1)
-      const heroBias = 1.0 - Math.abs(laneT * 2.0 - 1.0)
-      const baseWorldX = Math.min(
-        bankXMax,
-        Math.max(bankXMin, mix(bankXMin, bankXMax, laneT) + (Math.random() - 0.5) * 0.12)
-      )
-      const root = shorelineVegetationRootAtWorldX(baseWorldX)
-      root.y += (Math.random() - 0.5) * 0.004 - heroBias * 0.001
-      root.z += (Math.random() - 0.5) * 0.018
-      const atlasRegion =
-        FOLIAGE_ATLAS_REGIONS[Math.floor(Math.random() * FOLIAGE_ATLAS_REGIONS.length)] ??
-        FOLIAGE_ATLAS_REGIONS[0]
-      const atlasAspect = atlasRegion.uvSize[0] / atlasRegion.uvSize[1]
-      const baseH = 0.026 + heroBias * 0.010 + Math.random() * 0.012
-      const baseW = baseH * atlasAspect * (0.62 + Math.random() * 0.12)
+    for (let row = 0; row < GRASS_ROWS; row++) {
+      const rowT = GRASS_ROWS > 1 ? row / (GRASS_ROWS - 1) : 0
+      const rowXOffset = (row % 2 === 0 ? 0 : 0.5) * laneStep
 
-      for (let c = 0; c < CARDS_PER_BUSH; c++) {
-        const i = b * CARDS_PER_BUSH + c
-        instanceRoot[i * 3 + 0]  = root.x + (Math.random() - 0.5) * 0.05
-        instanceRoot[i * 3 + 1]  = root.y + (Math.random() - 0.5) * 0.002
-        instanceRoot[i * 3 + 2]  = root.z + (Math.random() - 0.5) * 0.008
-        instanceScale[i * 2 + 0] = baseW * (0.9 + Math.random() * 0.2)
-        instanceScale[i * 2 + 1] = baseH * (0.9 + Math.random() * 0.2)
-        instanceAtlas[i * 4 + 0] = atlasRegion.uvMin[0]
-        instanceAtlas[i * 4 + 1] = atlasRegion.uvMin[1]
-        instanceAtlas[i * 4 + 2] = atlasRegion.uvSize[0]
-        instanceAtlas[i * 4 + 3] = atlasRegion.uvSize[1]
-        cardIndex[i]             = c
-        instanceRand[i * 2 + 0]  = Math.random()
-        instanceRand[i * 2 + 1]  = Math.random()
+      for (let col = 0; col < GRASS_COLUMNS; col++) {
+        const laneT = GRASS_COLUMNS > 1 ? col / (GRASS_COLUMNS - 1) : 0.5
+        const jitteredLane = Math.min(
+          1,
+          Math.max(0, laneT + rowXOffset + (rng() - 0.5) * laneStep * 0.9)
+        )
+        const worldX = mix(bankXMin, bankXMax, jitteredLane)
+        const centerBias = 1 - Math.abs(jitteredLane * 2 - 1)
+        // AI: PoC tuning — distribute vegetation into soft clusters and preserve
+        // a readability corridor around the center title zone.
+        const clusterWave = 0.5 + 0.5 * Math.sin(worldX * 5.4 + row * 1.7)
+        const microWave = 0.5 + 0.5 * Math.sin(worldX * 15.7 + row * 3.9 + 1.2)
+        const clusteredCoverage = 0.18 + (0.58 * clusterWave + 0.42 * microWave) * 0.74
+        const centerDistance = Math.abs(jitteredLane - 0.5)
+        const centerCoverage = mix(0.28, 1, smoothstep(0.0, 0.20, centerDistance))
+        const keepChance = Math.min(Math.max(clusteredCoverage * centerCoverage, 0.08), 0.96)
+        if (rng() > keepChance) {
+          continue
+        }
+
+        const root = shorelineVegetationRootAtWorldX(worldX)
+        // AI: seating fix — keep roots biased below ground to avoid floating clumps.
+        // Positive Y jitter is intentionally removed; random shift stays negative only.
+        root.y -= 0.0012 + rng() * 0.003 + centerBias * 0.0005
+        root.z += (rng() - 0.5) * 0.010 - row * rowDepthStep
+
+        const atlasRegion =
+          FOLIAGE_ATLAS_REGIONS[Math.floor(rng() * FOLIAGE_ATLAS_REGIONS.length)] ??
+          FOLIAGE_ATLAS_REGIONS[0]
+        const atlasAspect = atlasRegion.uvSize[0] / atlasRegion.uvSize[1]
+        const clumpShape = mix(0.86, 1.08, clusterWave)
+        const baseHeight =
+          (0.018 +
+          rowT * 0.009 +
+          rng() * 0.010 +
+          centerBias * 0.003) * clumpShape
+        const baseWidth = baseHeight * atlasAspect * (0.58 + rng() * 0.18)
+
+        for (let card = 0; card < CARDS_PER_CLUMP; card++) {
+          // AI: bury each card a bit deeper based on card height so the transparent
+          // atlas foot does not read as hovering over the shoreline.
+          const buryDepth = baseHeight * (0.10 + rng() * 0.06)
+          instanceRootData.push(
+            root.x + (rng() - 0.5) * 0.032,
+            root.y - buryDepth - rng() * 0.0012,
+            root.z + (rng() - 0.5) * 0.006
+          )
+          instanceScaleData.push(
+            baseWidth * (0.86 + rng() * 0.22),
+            baseHeight * (0.88 + rng() * 0.24)
+          )
+          instanceAtlasData.push(
+            atlasRegion.uvMin[0],
+            atlasRegion.uvMin[1],
+            atlasRegion.uvSize[0],
+            atlasRegion.uvSize[1]
+          )
+          cardIndexData.push(card)
+          instanceRandData.push(rng(), rng())
+        }
       }
     }
+
+    this.instanceCount = cardIndexData.length
+    const instanceRoot = new Float32Array(instanceRootData)
+    const instanceScale = new Float32Array(instanceScaleData)
+    const instanceAtlas = new Float32Array(instanceAtlasData)
+    const cardIndex = new Float32Array(cardIndexData)
+    const instanceRand = new Float32Array(instanceRandData)
 
     // AI: store vegetation roots directly in world space so placement can follow the same shoreline/camera model as LandscapePass.
     this.makeBuffer(instanceRoot, 1, 3, 1)
@@ -187,6 +247,7 @@ export class BushesPass extends RenderPass {
     this.camera = state.camera
     this.horizon = state.horizon
     this.phase = state.phase
+    this.debugView = state.debugView ?? false
     this.atlasTextures = state.atlasTextures
     this.sceneScale = state.sceneScale
   }
@@ -204,6 +265,7 @@ export class BushesPass extends RenderPass {
 
     const gl = this.gl
 
+    this.bindOutputFramebuffer()
     gl.viewport(0, 0, this.width, this.height)
     gl.enable(gl.BLEND)
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
@@ -235,6 +297,7 @@ export class BushesPass extends RenderPass {
     this.program.setFloat("u_cameraTanHalfFovY", this.camera.tanHalfFovY)
     this.program.setFloat("u_horizon", this.horizon)
     this.program.setFloat("u_phase", this.phase)
+    this.program.setFloat("u_debugView", this.debugView ? 1 : 0)
     this.program.setVec2("u_resolution", this.width, this.height)
     this.program.setVec2("u_sceneScale", this.sceneScale.x, this.sceneScale.y)
     this.program.setFloat("u_time", time)

@@ -2,6 +2,9 @@ import { RipplePass } from "../passes/RipplePass"
 import { LandscapePass, type LandscapeDebugMode } from "../passes/LandscapePass"
 import { BushesPass } from "../passes/BushesPass"
 import { HeroTitlePass } from "../passes/HeroTitlePass"
+import { MorningFogPass } from "../passes/MorningFogPass"
+import { FinalColorPass } from "../passes/FinalColorPass"
+import { FBO } from "../gl/FBO"
 import { LandscapeResources, type FoliageAtlasSourceSet } from "./LandscapeResources"
 import {
   computeSceneCamera,
@@ -28,7 +31,7 @@ const DEFAULT_FOLIAGE_ATLAS_SOURCES: FoliageAtlasSourceSet = {
 const DROP_THROTTLE_MS = 45
 const VEGETATION_DEBUG_CLEAR: [number, number, number, number] = [0.03, 0.04, 0.06, 1.0]
 
-export type PassDebugView = "final" | "ripple" | "landscape" | "vegetation"
+export type PassDebugView = "final" | "ripple" | "landscape" | "vegetation" | "fog"
 
 export type SceneDebugState = {
   passView: PassDebugView
@@ -44,8 +47,11 @@ export class LandscapeScene implements Scene {
   private ripple: RipplePass
   private landscape: LandscapePass
   private bushes: BushesPass
+  private morningFog: MorningFogPass
   private heroTitle: HeroTitlePass
+  private finalColor: FinalColorPass
   private resources: LandscapeResources
+  private sceneColor: FBO | null = null
 
   private width = 1
   private height = 1
@@ -103,7 +109,9 @@ export class LandscapeScene implements Scene {
     this.ripple = new RipplePass(gl)
     this.landscape = new LandscapePass(gl)
     this.bushes = new BushesPass(gl)
+    this.morningFog = new MorningFogPass(gl)
     this.heroTitle = new HeroTitlePass(gl, projectName)
+    this.finalColor = new FinalColorPass(gl)
     this.resources = new LandscapeResources(gl)
   }
 
@@ -132,7 +140,12 @@ export class LandscapeScene implements Scene {
     this.ripple.resize(width, height)
     this.landscape.resize(width, height)
     this.bushes.resize(width, height)
+    this.morningFog.resize(width, height)
     this.heroTitle.resize(width, height)
+    this.finalColor.resize(width, height)
+
+    this.sceneColor?.dispose()
+    this.sceneColor = new FBO(this.gl, width, height)
   }
 
   setDebugState(state: Partial<SceneDebugState>) {
@@ -153,6 +166,8 @@ export class LandscapeScene implements Scene {
       return
     }
 
+    this.setSceneOutputFramebuffer(null)
+
     const rippleTex = this.ripple.render(time, null) ?? this.resources.rippleFallbackTexture
     const sceneFrame = computeSceneFrame(this.width, this.height)
     const camera = computeSceneCamera(this.scrollNorm, this.width, this.height)
@@ -162,7 +177,12 @@ export class LandscapeScene implements Scene {
     const titleHero = computeTitleHeroState(this.scrollNorm, titleLayout.aspect, textTexSize.contentRect)
     const heroTitleAtlasRenderData = this.resources.heroTitleAtlasRenderData
     const heroTitleAtlas = heroTitleAtlasRenderData?.atlas ?? this.resources.heroTitleAtlas
-    const useGlyphTitle = Boolean(heroTitleAtlasRenderData?.atlas.texture)
+    // AI: Phase E — require both atlas texture and precomposed phrase texture so
+    // direct title and reflection stay on the same MSDF source.
+    const useGlyphTitle = Boolean(
+      heroTitleAtlasRenderData?.atlas.texture &&
+      heroTitleAtlasRenderData?.phraseTexture
+    )
 
     this.landscape.setFrameState({
       camera,
@@ -203,6 +223,7 @@ export class LandscapeScene implements Scene {
         camera,
         horizon: vegetationHorizon,
         phase: this.scrollNorm,
+        debugView: true,
         atlasTextures: this.resources.foliageAtlas,
         sceneScale: {
           x: sceneFrame.scaleX,
@@ -213,37 +234,15 @@ export class LandscapeScene implements Scene {
       return
     }
 
-    // ══════════════════════════════════════════════════════════════════
-    // PATCH: render passes in correct order for proper layering of transparent elements, without depth test.
-    //
-    // Fix render order: heroTitle must render AFTER bushes.
-    // Depth test is disabled (Context.ts: gl.disable(gl.DEPTH_TEST)),
-    // so render order = painter's algorithm.
-    // Current: landscape → heroTitle → bushes  (bushes occlude title)
-    // Fixed:   landscape → bushes  → heroTitle (title renders on top)
-    // ══════════════════════════════════════════════════════════════════
-
-    const landscapeMode = this.passView === "landscape"
-      ? this.landscapeMode
-      : "beauty"
-    this.landscape.setDebugMode(landscapeMode)
-    this.landscape.render(time, rippleTex)
-
-    // AI: bushes render BEFORE heroTitle — depth test is disabled (painter's algorithm).
-    // Old order (landscape → heroTitle → bushes) caused vegetation to occlude the title.
-    // New order: landscape → bushes → heroTitle keeps title always in front of shore vegetation.
-    if (this.passView === "final") {
-      this.bushes.setFrameState({
-        camera,
-        horizon: vegetationHorizon,
+    if (this.passView === "fog") {
+      this.gl.clearColor(0.02, 0.03, 0.05, 1.0)
+      this.gl.clear(this.gl.COLOR_BUFFER_BIT)
+      this.morningFog.setFrameState({
         phase: this.scrollNorm,
-        atlasTextures: this.resources.foliageAtlas,
-        sceneScale: {
-          x: sceneFrame.scaleX,
-          y: sceneFrame.scaleY,
-        },
+        debugDensity: true,
       })
-      this.bushes.render(time, null)
+      this.morningFog.render(time, null)
+      return
     }
 
     const shouldRenderHeroTitle =
@@ -251,9 +250,59 @@ export class LandscapeScene implements Scene {
       (this.passView === "final" ||
         (this.passView === "landscape" && this.landscapeMode === "beauty"))
 
+    if (this.passView === "landscape" && this.landscapeMode !== "beauty") {
+      this.landscape.setDebugMode(this.landscapeMode)
+      this.landscape.render(time, rippleTex)
+      return
+    }
+
+    if (!this.sceneColor) {
+      return
+    }
+
+    // AI: linear scene composition is now done in offscreen target first, then a single
+    // display transfer pass applies sRGB output conversion.
+    this.setSceneOutputFramebuffer(this.sceneColor.framebuffer)
+    this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.sceneColor.framebuffer)
+    this.gl.viewport(0, 0, this.width, this.height)
+    this.gl.clearColor(0.0, 0.0, 0.0, 1.0)
+    this.gl.clear(this.gl.COLOR_BUFFER_BIT)
+
+    // AI: renderer uses painter's algorithm (depth test disabled), so pass order defines layering.
+    // Final chain: landscape → bushes → morningFog → heroTitle.
+    this.landscape.setDebugMode("beauty")
+    this.landscape.render(time, rippleTex)
+
+    // AI: bushes + fog render before heroTitle so text remains crisp/legible over atmosphere.
+    if (this.passView === "final") {
+      this.bushes.setFrameState({
+        camera,
+        horizon: vegetationHorizon,
+        phase: this.scrollNorm,
+        debugView: false,
+        atlasTextures: this.resources.foliageAtlas,
+        sceneScale: {
+          x: sceneFrame.scaleX,
+          y: sceneFrame.scaleY,
+        },
+      })
+      this.bushes.render(time, null)
+
+      this.morningFog.setFrameState({
+        phase: this.scrollNorm,
+        debugDensity: false,
+      })
+      this.morningFog.render(time, null)
+    }
+
     if (shouldRenderHeroTitle) {
       this.heroTitle.render(time, null)
     }
+
+    this.setSceneOutputFramebuffer(null)
+    this.finalColor.setOutputFramebuffer(null)
+    this.finalColor.setFrameState({ useExactSrgb: true })
+    this.finalColor.render(time, this.sceneColor.texture)
   }
 
   dispose() {
@@ -265,11 +314,22 @@ export class LandscapeScene implements Scene {
 
     this.landscape.dispose()
     this.bushes.dispose()
+    this.morningFog.dispose()
     this.heroTitle.dispose()
+    this.finalColor.dispose()
     this.ripple.dispose()
     this.resources.dispose()
+    this.sceneColor?.dispose()
+    this.sceneColor = null
 
     this.initialized = false
+  }
+
+  private setSceneOutputFramebuffer(framebuffer: WebGLFramebuffer | null) {
+    this.landscape.setOutputFramebuffer(framebuffer)
+    this.bushes.setOutputFramebuffer(framebuffer)
+    this.morningFog.setOutputFramebuffer(framebuffer)
+    this.heroTitle.setOutputFramebuffer(framebuffer)
   }
 
   private pointerToRippleUV(clientX: number, clientY: number) {

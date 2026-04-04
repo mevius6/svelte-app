@@ -81,6 +81,7 @@
         <option value="ripple">Ripple</option>
         <option value="landscape">Landscape</option>
         <option value="vegetation">Vegetation</option>
+        <option value="fog">Fog</option>
       </select>
     </label>
 

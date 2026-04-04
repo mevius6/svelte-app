@@ -25,6 +25,21 @@ float screenPxRange() {
     return max(0.5 * dot(unitRange, screenTexSize), 1.0);
 }
 
+float titleReveal(float phase01) {
+    return smoothstep(0.62, 0.88, clamp(phase01, 0.0, 1.0));
+}
+
+float titleReflectionReveal(float phase01) {
+    // AI: reflection lags direct title slightly, matching late-sunset readability.
+    return smoothstep(0.67, 0.93, clamp(phase01, 0.0, 1.0));
+}
+
+// AI: exact display target for title ink:
+// DayGlo NightGlo NG200 reference -> #c9f08a (sRGB 201,240,138).
+// Since scene composition is linear, keep shader constants in linear space.
+const vec3 TITLE_DAYGLO_LINEAR = vec3(0.584078418, 0.871367119, 0.254152094);
+const vec3 TITLE_DAYGLO_REFLECTION_TINT_LINEAR = vec3(0.673859541, 0.911407500, 0.507078510);
+
 void main() {
     vec3 msdf = texture(u_titleAtlas, v_uvAtlas).rgb;
     float signedDistance = median3(msdf) - 0.5;
@@ -33,15 +48,15 @@ void main() {
         discard;
     }
 
-    // Lime-green color matching original project design language.
-    // Both passMode paths use variants of this base color.
-    vec3 directCol = vec3(0.7882353, 0.9411765, 0.5411765);
-    vec3 reflectionCol = mix(directCol, vec3(0.84, 0.96, 0.74), 0.24);
+    vec3 directCol = TITLE_DAYGLO_LINEAR;
+    vec3 reflectionCol = mix(directCol, TITLE_DAYGLO_REFLECTION_TINT_LINEAR, 0.24);
+    float revealDirect = titleReveal(u_phase);
+    float revealReflection = titleReflectionReveal(u_phase);
 
     if (v_passMode > 0.5) {
         // Reflection geometry path (mirrored billboard under water).
         float reflectionDepth = clamp((u_waterLevel - v_worldY) / 0.24, 0.0, 1.0);
-        float reflectionAlpha = opacity * smoothstep(0.03, 0.22, reflectionDepth) * 0.28;
+        float reflectionAlpha = opacity * smoothstep(0.03, 0.22, reflectionDepth) * 0.28 * revealReflection;
         fragColor = vec4(reflectionCol, reflectionAlpha);
         return;
     }
@@ -56,5 +71,5 @@ void main() {
     // https://iquilezles.org/articles/outdoorslighting/
     float atmFade = exp(-max(v_viewDist - 1.2, 0.0) * 0.09);
 
-    fragColor = vec4(directCol, opacity * emergence * atmFade);
+    fragColor = vec4(directCol, opacity * emergence * atmFade * revealDirect);
 }

@@ -3,11 +3,14 @@ precision highp float;
 
 in vec2  v_uvAtlas;
 in float v_height;
+in float v_viewDist;
+in float v_worldY;
 
 uniform vec2  u_resolution;
 uniform vec2  u_sceneScale;
 uniform float u_horizon;
 uniform float u_phase;
+uniform float u_debugView;
 
 uniform sampler2D u_foliageAlbedo;
 uniform sampler2D u_foliageAlpha;
@@ -18,6 +21,10 @@ uniform sampler2D u_foliageTranslucency;
 out vec4 fragColor;
 
 #define PI 3.14159265359
+const float VEGETATION_FOG_DISSIPATE_START = 0.38;
+const float VEGETATION_FOG_DISSIPATE_END = 0.58;
+const float VEGETATION_FOG_DENSITY = 0.085;
+const float VEGETATION_FOG_HEIGHT_FALLOFF = 3.2;
 
 vec3 skyColor(float y, float phase01)
 {
@@ -82,9 +89,45 @@ void main() {
     col = mix(col, tipHaze, tipMask * 0.24);
     col = mix(col, ambientSky * vec3(0.76, 0.78, 0.72), 0.14 + tipMask * 0.08);
 
-    float luma = dot(col, vec3(0.299, 0.587, 0.114));
-    col = mix(col, vec3(luma), 0.08 + tipMask * 0.08);
-    col *= shade;
+    // AI: PoC tuning — soften far-horizon grass into atmosphere to avoid hard
+    // "saw" silhouette and reduce alpha-overdraw dominance near horizon.
+    float distanceFade = smoothstep(2.2, 5.6, v_viewDist);
+    float horizonBand = exp(-abs(screenUV.y - u_horizon) * 30.0);
+    float atmosphericBlend = clamp(distanceFade * (0.35 + horizonBand * 0.65), 0.0, 1.0);
+    vec3 hazeTarget = ambientSky * vec3(0.84, 0.88, 0.82) + sunCol * 0.06;
+    if (u_debugView <= 0.5) {
+        col = mix(col, hazeTarget, atmosphericBlend * 0.32);
+    }
 
-    fragColor = vec4(col, alpha * alphaSoft * (0.76 - tipMask * 0.10));
+    // AI: make grass participate in dawn fog so it does not read as "over" atmosphere.
+    // Uses a cheap exponential-height approximation in the vegetation pass.
+    float dawnMask = 1.0 - smoothstep(
+        VEGETATION_FOG_DISSIPATE_START,
+        VEGETATION_FOG_DISSIPATE_END,
+        clamp(u_phase, 0.0, 1.0)
+    );
+    float fogDistance = max(v_viewDist - 0.35, 0.0);
+    float fogHeight = max(v_worldY, -0.02);
+    float fogTau = VEGETATION_FOG_DENSITY * dawnMask * exp(-VEGETATION_FOG_HEIGHT_FALLOFF * fogHeight) * fogDistance;
+    float fogAmount = 1.0 - exp(-fogTau);
+    vec3 dawnFogCol = vec3(0.90, 0.86, 0.84);
+    vec3 vegetationFogCol = mix(dawnFogCol, ambientSky * vec3(0.92, 0.95, 0.90), 0.38);
+    if (u_debugView <= 0.5) {
+        col = mix(col, vegetationFogCol, fogAmount * 0.78);
+    }
+
+    float luma = dot(col, vec3(0.299, 0.587, 0.114));
+    col = mix(
+        col,
+        vec3(luma),
+        (0.08 + tipMask * 0.08) + (u_debugView <= 0.5 ? atmosphericBlend * 0.12 : 0.0)
+    );
+    col *= mix(shade, shade * 0.94, u_debugView <= 0.5 ? atmosphericBlend : 0.0);
+
+    float distanceAlpha = mix(1.0, 0.72, distanceFade);
+    if (u_debugView > 0.5) {
+        distanceAlpha = 1.0;
+    }
+
+    fragColor = vec4(col, alpha * alphaSoft * (0.76 - tipMask * 0.10) * distanceAlpha);
 }

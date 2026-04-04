@@ -9,21 +9,20 @@ uniform float u_scroll;
 
 uniform sampler2D u_textTex;
 uniform float     u_useTitleBillboard;
-uniform sampler2D u_titleAtlasTex;
-uniform float     u_useTitleAtlasReflection;
-uniform vec2      u_titleAtlasSize;
+uniform float     u_useTitlePhraseReflection;
+uniform sampler2D u_titlePhraseTex;
+uniform vec2      u_titlePhraseTexSize;
 uniform float     u_titleAtlasPxRange;
 uniform vec2      u_titleLayoutSize;
-uniform int       u_titleGlyphCount;
-const int         MAX_TITLE_GLYPHS = 32;
-uniform vec4      u_titleGlyphBounds[MAX_TITLE_GLYPHS];
-uniform vec4      u_titleGlyphAtlasRects[MAX_TITLE_GLYPHS];
 uniform vec3      u_titleWorldCenter;
 uniform vec2      u_titleWorldSize;
 uniform vec4      u_titleTexRect;
 
 uniform sampler2D u_rippleTex;
 uniform float     u_rippleTexel;
+// AI: Phase A — 1D shore profile (512×1 RGBA32F). Baked in LandscapeResources.
+// R=baselineSilhouette, G=bankNoise, B=shelfNoiseSrc (offset -0.5 in shader).
+uniform sampler2D u_shoreProfileTex;
 uniform vec3      u_cameraPos;
 uniform vec3      u_cameraRight;
 uniform vec3      u_cameraUp;
@@ -34,6 +33,10 @@ uniform float     u_waterLevel;
 uniform float     u_shorePlaneZ;
 
 #define PI 3.14159265359
+// AI: exact display target for title ink:
+// DayGlo NightGlo NG200 reference -> #c9f08a (sRGB 201,240,138).
+// Scene is composed in linear space; this constant is pre-converted linear.
+const vec3 TITLE_DAYGLO_LINEAR = vec3(0.584078418, 0.871367119, 0.254152094);
 
 // ----------------------------------------------------
 // SKY
@@ -49,7 +52,8 @@ vec3 skyColor(float y, float phase01)
 vec3 tonemap(vec3 x)
 {
     const float a=2.51, b=0.03, c=2.43, d=0.59, e=0.14;
-    return pow(clamp((x*(a*x+b))/(x*(c*x+d)+e),0.0,1.0), vec3(1.0/2.2));
+    // AI: keep tone mapping in linear space; final display transfer happens in FinalColorPass.
+    return clamp((x*(a*x+b))/(x*(c*x+d)+e), 0.0, 1.0);
 }
 
 vec3 sunColor(float phase01)
@@ -66,6 +70,94 @@ vec3 sunDirection(float phase01)
         sin(elevation),
         -cos(azimuth) * cos(elevation)
     ));
+}
+
+// ----------------------------------------------------
+// MORNING HEIGHT FOG (ANALYTIC)
+// ----------------------------------------------------
+// Ref: https://forwardscattering.org/post/72
+// Ref: https://www.scratchapixel.com/lessons/3d-basic-rendering/volume-rendering-for-developers/intro-volume-rendering.html
+// Ref: https://iquilezles.org/articles/fog/
+// AI: Important nuance (IQ non-constant density section):
+// The integrated optical depth (tau) must be exponentiated via transmittance.
+// Use fogAmount = 1 - exp(-tau), not fogAmount = tau.
+const float MORNING_FOG_DISSIPATE_START = 0.38;
+const float MORNING_FOG_DISSIPATE_END = 0.58;
+const float MORNING_FOG_DENSITY = 0.10;
+const float MORNING_FOG_HEIGHT_FALLOFF = 3.6;
+const float MORNING_FOG_SKY_DISTANCE = 12.0;
+
+float expSafe(float x) {
+    return exp(clamp(x, -60.0, 60.0));
+}
+
+float morningFogDawnMask(float phase01) {
+    return 1.0 - smoothstep(
+        MORNING_FOG_DISSIPATE_START,
+        MORNING_FOG_DISSIPATE_END,
+        clamp(phase01, 0.0, 1.0)
+    );
+}
+
+float expHeightFogOpticalDepth(
+    float distance,
+    float rayOriginHeight,
+    float rayDirY,
+    float density,
+    float heightFalloff
+) {
+    float safeDistance = max(distance, 0.0);
+    float safeFalloff = max(heightFalloff, 1e-4);
+    float startExp = expSafe(-safeFalloff * rayOriginHeight);
+
+    if (abs(rayDirY) <= 1e-4) {
+        return max(density * startExp * safeDistance, 0.0);
+    }
+
+    float endHeight = rayOriginHeight + rayDirY * safeDistance;
+    float endExp = expSafe(-safeFalloff * endHeight);
+    float tau = density * (startExp - endExp) / (safeFalloff * rayDirY);
+    return max(tau, 0.0);
+}
+
+vec3 morningFogColor(vec3 rayDir, float phase01, vec3 horizonCol, vec3 sunCol, vec3 sunDir) {
+    float dayFade = smoothstep(0.0, 0.65, phase01);
+    vec3 dawnFog = vec3(0.94, 0.88, 0.84);
+    vec3 lateFog = vec3(0.88, 0.84, 0.82);
+    vec3 baseFog = mix(dawnFog, lateFog, dayFade);
+    float sunForward = pow(max(dot(rayDir, sunDir), 0.0), 10.0);
+    vec3 sunFog = sunCol * 0.72 + vec3(0.22, 0.18, 0.16);
+    vec3 fogCol = mix(baseFog, sunFog, sunForward * 0.24);
+    return mix(fogCol, horizonCol, 0.28);
+}
+
+vec3 applyMorningHeightFog(
+    vec3 sceneCol,
+    vec3 rayOrigin,
+    vec3 rayDir,
+    float rayDistance,
+    float phase01,
+    vec3 horizonCol,
+    vec3 sunCol,
+    vec3 sunDir
+) {
+    float dawnMask = morningFogDawnMask(phase01);
+    if (dawnMask <= 0.0001 || rayDistance <= 0.0) {
+        return sceneCol;
+    }
+
+    float distanceClamped = min(max(rayDistance, 0.0), MORNING_FOG_SKY_DISTANCE);
+    float rayOriginHeight = rayOrigin.y - u_waterLevel;
+    float tau = expHeightFogOpticalDepth(
+        distanceClamped,
+        rayOriginHeight,
+        rayDir.y,
+        MORNING_FOG_DENSITY * dawnMask,
+        MORNING_FOG_HEIGHT_FALLOFF
+    );
+    float transmittance = expSafe(-tau);
+    vec3 fogCol = morningFogColor(rayDir, phase01, horizonCol, sunCol, sunDir);
+    return sceneCol * transmittance + fogCol * (1.0 - transmittance);
 }
 
 // ----------------------------------------------------
@@ -97,29 +189,19 @@ float cloudDetailFbm(vec2 p) {
     return v;
 }
 
-float cloudDensity(vec2 uv, float t, float phase01, out float base) {
-    // AI: two-component cloud drift:
-    //   idle  — t-based real-time drift, always active (idle atmosphere).
-    //   solar — phase01-based offset so clouds travel with the sun.
-    //     Sun moves x: 0.25→0.75 as phase 0→1 (left to right).
-    //     phase01 * 0.42 in UV gives clouds ~1/8 texture-tile displacement
-    //     across the full day — matches apparent solar speed visually.
-    //   Vertical component (0.06) gives slight diagonal, avoiding pure
-    //   horizontal band drift.
-    // Ref: The Book of Shaders ch.13 fBM — domain shift per frame
+// AI: Phase A+B cloudDensity:
+//   detailLOD=1.0 for direct sky, 0.0 for water reflection (saves 3 vnoise/pix).
+//   solarDrift: clouds follow sun across day — phase01*0.42 ≈ 1/8 tile per cycle.
+// Ref: Book of Shaders ch.13 fBM, IQ "Outdoors Lighting"
+float cloudDensity(vec2 uv, float t, float phase01, out float base, float detailLOD) {
     vec2 solarDrift = vec2(phase01 * 0.42, phase01 * 0.06);
-    vec2 wind = vec2(t*0.012, t*0.004) + solarDrift;
-    vec2 baseUv = uv * vec2(3.2,5.5) + wind;
-    vec2 detailUv = uv * vec2(6.5,9.0) + wind * 1.4;
-
-    base        = cloudBaseFbm(baseUv);
-    float cloud = base + cloudDetailFbm(detailUv)*0.38;
-    cloud       = smoothstep(0.60,0.88,cloud);
-    float phaseFade = 1.0 - min(phase01 * 1.4, 1.0) * 0.5;
-    float verticalFade = smoothstep(1.0,0.52,uv.y);
-    return cloud * verticalFade
-                 * phaseFade
-                 * 0.55;
+    vec2 wind = vec2(t * 0.012, t * 0.004) + solarDrift;
+    vec2 baseUv = uv * vec2(3.2, 5.5) + wind;
+    base = cloudBaseFbm(baseUv);
+    float cloud = base + cloudDetailFbm(uv * vec2(6.5, 9.0) + wind * 1.4) * 0.38 * detailLOD;
+    float phaseFade    = 1.0 - min(phase01 * 1.4, 1.0) * 0.5;
+    float verticalFade = smoothstep(1.0, 0.52, uv.y);
+    return cloud * verticalFade * phaseFade * 0.55;
 }
 
 // ----------------------------------------------------
@@ -147,16 +229,8 @@ vec2 microNormalDelta(vec2 p, float t, float depthMask) {
 // Ref: IQ "Terrain" — envelope * fbm pattern; "Painting a Landscape with Maths" https://iquilezles.org/articles/terrainmarching/
 // Ref: GPU Gems 3 ch.1 "Generating Complex Procedural Terrains"
 
-float shoreFbm(float x, float seedY) {
-    // 1D-профиль через 2D vnoise (seedY сдвигает из облачного диапазона)
-    float v=0.0, a=0.5, p=x;
-    for(int i=0;i<5;i++){
-        v += a * vnoise(vec2(p, seedY));
-        p *= 2.3;
-        a *= 0.48;
-    }
-    return v; // [0..1]
-}
+// AI: Phase A — shoreFbm body removed; replaced by u_shoreProfileTex texture lookup.
+// CPU mirror: src/lib/scene/shoreProfileBaker.ts
 
 // ----------------------------------------------------
 // VEGETATION SILHOUETTE SYSTEM
@@ -171,9 +245,9 @@ float shoreFbm(float x, float seedY) {
 // seed=55.5, 88.2 — независимы от cloud (cloudFbm) и shore (91.7, 71.3, 83.1).
 // [0.518 .. 0.586] UV: гарантирует тёмную полосу над горизонтом.
 float baselineSilhouette(float x) {
-    float hLarge  = shoreFbm(x * 4.2, 55.5) * 0.052;  // крупные рощевые горбы
-    float hDetail = shoreFbm(x * 16.0, 88.2) * 0.016; // мелкая зубчатость кромки
-    return 0.500 + 0.018 + hLarge + hDetail;
+    // AI: Phase A — 2×5-octave shoreFbm (10 vnoise calls) → 1 texture fetch.
+    // x is [0..1] normalised worldX → direct UV.  R channel: [~0.518..0.586].
+    return texture(u_shoreProfileTex, vec2(clamp(x, 0.0, 1.0), 0.5)).r;
 }
 
 // Профиль для отражения: используем только мягкий дальний берег.
@@ -210,8 +284,12 @@ float waveFieldWithMasks(
     vec2 warp=vec2(sin(p.x*0.7+t*0.15)*0.12+sin(p.y*0.5+t*0.11)*0.08,
                    sin(p.y*0.6+t*0.13)*0.12+sin(p.x*0.4+t*0.09)*0.08);
     vec2 pw=p+warp;
-    // AI: reuse precomputed depth masks from the caller; the layered wave blend is otherwise identical.
-    return largeWaves(pw,t,largeMask)+mediumWaves(pw,t,mediumMask)+ripples(pw*1.8,t,rippleMask)*0.8;
+    float baseWaves = largeWaves(pw,t,largeMask)+mediumWaves(pw,t,mediumMask);
+    // AI: Phase D — skip high-frequency ripple trig when rippleMask is effectively zero in far field.
+    if (rippleMask <= 0.0001) {
+        return baseWaves;
+    }
+    return baseWaves + ripples(pw*1.8,t,rippleMask)*0.8;
 }
 
 vec3 waveNormal(
@@ -219,9 +297,13 @@ vec3 waveNormal(
     float t,
     float largeMask,
     float mediumMask,
-    float rippleMask
+    float rippleMask,
+    float viewDistance
 ) {
-    const float eps = 0.003;
+    // AI: Phase D — scale finite-difference step with distance to stabilize far-field normals
+    // and reduce high-frequency normal jitter on the horizon.
+    float distanceLod = smoothstep(7.0, 26.0, viewDistance);
+    float eps = mix(0.0030, 0.0016, distanceLod);
     // AI: reuse the same depth attenuation across the four finite-difference wave samples; depth is constant for this fragment.
     float waveXp = waveFieldWithMasks(p + vec2(eps, 0.0), t, largeMask, mediumMask, rippleMask);
     float waveXn = waveFieldWithMasks(p - vec2(eps, 0.0), t, largeMask, mediumMask, rippleMask);
@@ -252,26 +334,43 @@ float median3(vec3 sampleValue) {
     return max(min(sampleValue.r, sampleValue.g), min(max(sampleValue.r, sampleValue.g), sampleValue.b));
 }
 
-float titleAtlasScreenPxRange(vec2 atlasUv) {
-    vec2 unitRange = vec2(u_titleAtlasPxRange) / max(u_titleAtlasSize, vec2(1.0));
-    vec2 screenTexSize = vec2(1.0) / max(fwidth(atlasUv), vec2(1e-5));
+vec2 titlePhraseUvFromLocalMetric(vec2 localMetric) {
+    return vec2(
+        localMetric.x / max(u_titleLayoutSize.x, 0.001) + 0.5,
+        localMetric.y / max(u_titleLayoutSize.y, 0.001) + 0.5
+    );
+}
+
+float titlePhraseScreenPxRange(vec2 phraseUv) {
+    vec2 unitRange = vec2(u_titleAtlasPxRange) / max(u_titlePhraseTexSize, vec2(1.0));
+    vec2 screenTexSize = vec2(1.0) / max(fwidth(phraseUv), vec2(1e-5));
     return max(0.5 * dot(unitRange, screenTexSize), 1.0);
 }
 
-float sampleTitleAtlasAlpha(vec2 atlasUv) {
-    vec3 msdf = texture(u_titleAtlasTex, atlasUv).rgb;
+float sampleTitlePhraseAlpha(vec2 localMetric) {
+    vec2 phraseUv = titlePhraseUvFromLocalMetric(localMetric);
+    bool inBounds = all(greaterThanEqual(phraseUv, vec2(0.0))) &&
+                    all(lessThanEqual(phraseUv, vec2(1.0)));
+    if (!inBounds) {
+        return 0.0;
+    }
+    vec3 msdf = texture(u_titlePhraseTex, phraseUv).rgb;
     float signedDistance = median3(msdf) - 0.5;
-    return clamp(titleAtlasScreenPxRange(atlasUv) * signedDistance + 0.5, 0.0, 1.0);
+    return clamp(titlePhraseScreenPxRange(phraseUv) * signedDistance + 0.5, 0.0, 1.0);
 }
 
-float sampleTitleAtlasSignedDistance(vec2 atlasUv) {
-    vec3 msdf = texture(u_titleAtlasTex, atlasUv).rgb;
-    return median3(msdf) - 0.5;
-}
-
-void sampleTitleAtlasReflectionCoverage(vec2 atlasUv, out float fillAlpha, out float haloAlpha) {
-    float signedDistance = sampleTitleAtlasSignedDistance(atlasUv);
-    float pxRange = titleAtlasScreenPxRange(atlasUv) * 0.58;
+void sampleTitlePhraseReflectionCoverage(vec2 localMetric, out float fillAlpha, out float haloAlpha) {
+    vec2 phraseUv = titlePhraseUvFromLocalMetric(localMetric);
+    bool inBounds = all(greaterThanEqual(phraseUv, vec2(0.0))) &&
+                    all(lessThanEqual(phraseUv, vec2(1.0)));
+    if (!inBounds) {
+        fillAlpha = 0.0;
+        haloAlpha = 0.0;
+        return;
+    }
+    vec3 msdf = texture(u_titlePhraseTex, phraseUv).rgb;
+    float signedDistance = median3(msdf) - 0.5;
+    float pxRange = titlePhraseScreenPxRange(phraseUv) * 0.58;
     float screenDistance = signedDistance * pxRange;
     fillAlpha = clamp(screenDistance + 0.5, 0.0, 1.0);
 
@@ -321,7 +420,8 @@ vec2 skyUvFromDirection(vec3 dir) {
     return vec2(dome.x * 0.18 + 0.5, y);
 }
 
-vec3 shadeSkyDirection(vec3 dir, float phase01, vec3 sunCol, vec3 sunDir) {
+// AI: Phase B — cloudDetail=1.0 for direct sky, 0.0 for reflection (saves 3 vnoise/pix).
+vec3 shadeSkyDirection(vec3 dir, float phase01, vec3 sunCol, vec3 sunDir, float cloudDetail) {
     vec2 skyUv = skyUvFromDirection(dir);
     float skyY = skyUv.y;
     vec3 sky = skyColor(skyY, phase01);
@@ -333,7 +433,7 @@ vec3 shadeSkyDirection(vec3 dir, float phase01, vec3 sunCol, vec3 sunDir) {
     vec3 sunLight = sunCol * (sunCore * 4.0 + sunGlow * 0.85 + sunWash * 0.22);
 
     float cloudBase;
-    float density = cloudDensity(skyUv, u_time, phase01, cloudBase);
+    float density = cloudDensity(skyUv, u_time, phase01, cloudBase, cloudDetail);
     float cloudBaseLight = smoothstep(0.52, 0.58, cloudBase);
     float sunLitCloud = sunWash * 0.15;
     vec3 warmCloudLight = sunCol * 1.3 + vec3(0.25);
@@ -395,75 +495,6 @@ bool intersectTitleBillboard(
     return alpha > 0.012;
 }
 
-float sampleTitleGlyphPhraseAlpha(vec2 localMetric) {
-    float layoutHalfW = u_titleLayoutSize.x * 0.5;
-    float layoutHalfH = u_titleLayoutSize.y * 0.5;
-    if (
-        localMetric.x < -layoutHalfW || localMetric.x > layoutHalfW ||
-        localMetric.y < -layoutHalfH || localMetric.y > layoutHalfH
-    ) {
-        return 0.0;
-    }
-
-    float alpha = 0.0;
-    for (int i = 0; i < MAX_TITLE_GLYPHS; i++) {
-        if (i >= u_titleGlyphCount) {
-            break;
-        }
-
-        vec4 bounds = u_titleGlyphBounds[i];
-        vec2 glyphSize = max(bounds.zw - bounds.xy, vec2(0.001));
-        vec2 glyphUv = (localMetric - bounds.xy) / glyphSize;
-        float inBounds = step(0.0, glyphUv.x) * step(glyphUv.x, 1.0) * step(0.0, glyphUv.y) * step(glyphUv.y, 1.0);
-        if (inBounds <= 0.0) {
-            continue;
-        }
-
-        vec4 atlasRect = u_titleGlyphAtlasRects[i];
-        vec2 atlasUv = atlasRect.xy + clamp(glyphUv, 0.0, 1.0) * atlasRect.zw;
-        alpha = max(alpha, sampleTitleAtlasAlpha(atlasUv) * inBounds);
-    }
-
-    return alpha;
-}
-
-void sampleTitleGlyphPhraseReflection(vec2 localMetric, out float fillAlpha, out float haloAlpha) {
-    float layoutHalfW = u_titleLayoutSize.x * 0.5;
-    float layoutHalfH = u_titleLayoutSize.y * 0.5;
-    if (
-        localMetric.x < -layoutHalfW || localMetric.x > layoutHalfW ||
-        localMetric.y < -layoutHalfH || localMetric.y > layoutHalfH
-    ) {
-        fillAlpha = 0.0;
-        haloAlpha = 0.0;
-        return;
-    }
-
-    fillAlpha = 0.0;
-    haloAlpha = 0.0;
-    for (int i = 0; i < MAX_TITLE_GLYPHS; i++) {
-        if (i >= u_titleGlyphCount) {
-            break;
-        }
-
-        vec4 bounds = u_titleGlyphBounds[i];
-        vec2 glyphSize = max(bounds.zw - bounds.xy, vec2(0.001));
-        vec2 glyphUv = (localMetric - bounds.xy) / glyphSize;
-        float inBounds = step(0.0, glyphUv.x) * step(glyphUv.x, 1.0) * step(0.0, glyphUv.y) * step(glyphUv.y, 1.0);
-        if (inBounds <= 0.0) {
-            continue;
-        }
-
-        vec4 atlasRect = u_titleGlyphAtlasRects[i];
-        vec2 atlasUv = atlasRect.xy + clamp(glyphUv, 0.0, 1.0) * atlasRect.zw;
-        float glyphFill;
-        float glyphHalo;
-        sampleTitleAtlasReflectionCoverage(atlasUv, glyphFill, glyphHalo);
-        fillAlpha = max(fillAlpha, glyphFill * inBounds);
-        haloAlpha = max(haloAlpha, glyphHalo * inBounds);
-    }
-}
-
 vec2 titleLocalMetricFromHitPos(vec3 hitPos) {
     vec3 titleRight = titleBillboardRight();
     vec3 titleUp = vec3(0.0, 1.0, 0.0);
@@ -498,7 +529,7 @@ bool intersectTitleAtlas(
     hitPos = rayOrigin + rayDir * t;
     vec2 localMetric = titleLocalMetricFromHitPos(hitPos);
 
-    alpha = sampleTitleGlyphPhraseAlpha(localMetric);
+    alpha = sampleTitlePhraseAlpha(localMetric);
     return alpha > 0.012;
 }
 
@@ -508,12 +539,21 @@ float titleAboveWaterAlpha(vec3 hitPos, float alpha) {
 }
 
 vec3 titleHeroColor(vec3 rayDir, vec3 sunCol, vec3 sunDir) {
-    vec3 titleWarm = sunCol * 1.25 + vec3(0.20, 0.22, 0.28);
-    return mix(vec3(1.00, 0.97, 0.91), titleWarm, pow(max(dot(rayDir, sunDir), 0.0), 6.0) * 0.55);
+    // AI: keep direct title ink locked to target display hue (#c9f08a).
+    return TITLE_DAYGLO_LINEAR;
 }
 
 vec3 compositeTitle(vec3 baseCol, vec3 titleCol, float alpha) {
     return mix(baseCol, titleCol, alpha * 0.96);
+}
+
+float titleReveal(float phase01) {
+    return smoothstep(0.62, 0.88, clamp(phase01, 0.0, 1.0));
+}
+
+float titleReflectionReveal(float phase01) {
+    // AI: keep reflection emergence a touch later than direct title.
+    return smoothstep(0.67, 0.93, clamp(phase01, 0.0, 1.0));
 }
 
 vec2 waterWorldToRippleUV(vec3 worldPos) {
@@ -550,7 +590,9 @@ float shorelineWaterEdgeZ() {
 float underwaterShelfHeightAt(float worldX, float worldZ) {
     float shelfDistance = max(worldZ - shorelineWaterEdgeZ(), 0.0);
     float shelfT = smoothstep(0.0, 0.78, shelfDistance);
-    float shelfNoise = (shoreFbm(worldX * 0.95 + 21.0, 47.3) - 0.5) * 0.006 * (1.0 - shelfT);
+    // AI: Phase A — B channel; raw [0..~0.94], offset -0.5 applied here as original.
+    float shelfNoise = (texture(u_shoreProfileTex,
+        vec2(clamp(worldX * 0.16 + 0.5, 0.0, 1.0), 0.5)).b - 0.5) * 0.006 * (1.0 - shelfT);
     return min(u_waterLevel - 0.006, u_waterLevel - mix(0.014, 0.072, shelfT) + shelfNoise);
 }
 
@@ -575,7 +617,9 @@ float shorelineBankSurfaceYAt(float worldX, float worldZ) {
 }
 
 vec3 bankMaterialBase(float worldX, float hNorm, float phase) {
-    float bankNoise = shoreFbm(worldX * 1.35 + 17.0, 61.7);
+    // AI: Phase A — G channel of shore profile texture (same UV mapping as R).
+    float bankNoise = texture(u_shoreProfileTex,
+        vec2(clamp(worldX * 0.16 + 0.5, 0.0, 1.0), 0.5)).g;
     float crestMask = smoothstep(0.58, 0.94, hNorm);
     vec3 bankShadow = mix(vec3(0.060, 0.050, 0.052), vec3(0.070, 0.048, 0.046), phase);
     vec3 bankLight = mix(vec3(0.122, 0.112, 0.092), vec3(0.140, 0.104, 0.070), phase);
@@ -647,6 +691,8 @@ void main()
     vec3 rd = makeCameraRay(screenUV);
     // AI: Phase 1 keeps the fullscreen pass, but moves the landscape into orbital camera/world-ray space so depth no longer depends only on a screen-space horizon split.
     float phase = clamp(u_scroll, 0.0, 1.0);
+    float titleRevealMask = titleReveal(phase);
+    float titleReflectionRevealMask = titleReflectionReveal(phase);
     vec3 sunCol = sunColor(phase);
     vec3 sunDir = sunDirection(phase);
     vec3 horizonSky = skyColor(0.5, phase);
@@ -664,7 +710,7 @@ void main()
     bool hasTitle = u_useTitleBillboard > 0.5 &&
         intersectTitleBillboard(ro, rd, tTitle, titleUv, titleHitPos, titleAlpha);
     if (hasTitle) {
-        titleAlpha = titleAboveWaterAlpha(titleHitPos, titleAlpha);
+        titleAlpha = titleAboveWaterAlpha(titleHitPos, titleAlpha) * titleRevealMask;
         hasTitle = titleAlpha > 0.0005;
     }
     float shoreWaterEdgeZ = shorelineWaterEdgeZ();
@@ -711,7 +757,7 @@ void main()
         return;
 #endif
 
-        vec3 skyCol = shadeSkyDirection(rd, phase, sunCol, sunDir);
+        vec3 skyCol = shadeSkyDirection(rd, phase, sunCol, sunDir, 1.0);
 
 #ifdef DEBUG_REFLECTION
         fragColor = vec4(tonemap(skyCol), 1.0);
@@ -729,7 +775,6 @@ void main()
         float shoreFootMask = 1.0 - smoothstep(0.0, 0.18, hNorm);
         float sunFacing = saturate(dot(normalize(vec3(0.0, 0.32, 1.0)), sunDir) * 0.5 + 0.5);
         float crestMask = smoothstep(0.58, 0.94, hNorm);
-        float bankNoise = shoreFbm(shorePos.x * 1.35 + 17.0, 61.7);
         vec3 bankShadow = mix(vec3(0.060, 0.050, 0.052), vec3(0.070, 0.048, 0.046), phase);
         vec3 shallowShelfTint = mix(vec3(0.40, 0.31, 0.25), vec3(0.48, 0.28, 0.20), phase);
         vec3 wetEdgeTint = mix(vec3(0.18, 0.13, 0.11), vec3(0.20, 0.11, 0.09), phase);
@@ -757,12 +802,12 @@ void main()
         float shoreSharedBand = max(shoreContactMask * shorelineSeatMask, shoreFootMask);
         shoreCol = mix(shoreCol, bankShadow * 0.92 + shallowShelfTint * 0.22, shoreSharedBand * 0.02);
         vec2 shoreFilmP = vec2(shorePos.x, shoreWaterEdgeZ + 0.026) * 1.1;
-        vec3 shoreFilmN = waveNormal(shoreFilmP, u_time, 0.16, 0.24, 0.30);
+        vec3 shoreFilmN = waveNormal(shoreFilmP, u_time, 0.16, 0.24, 0.30, tShore);
         shoreFilmN = normalize(mix(shoreFilmN, vec3(0.0, 1.0, 0.0), 0.62 + shoreFilmMask * 0.24));
         vec3 shoreFilmViewDir = normalize(ro - vec3(shorePos.x, u_waterLevel + shoreRunupWave * 0.12, shoreWaterEdgeZ + 0.022));
         vec3 shoreFilmReflDir = normalize(reflect(-shoreFilmViewDir, shoreFilmN));
         shoreFilmReflDir.y = max(shoreFilmReflDir.y, 0.001);
-        vec3 shoreFilmSky = shadeSkyDirection(shoreFilmReflDir, phase, sunCol, sunDir);
+        vec3 shoreFilmSky = shadeSkyDirection(shoreFilmReflDir, phase, sunCol, sunDir, 0.0);
         float shoreFilmCosTheta = clamp(dot(shoreFilmViewDir, shoreFilmN), 0.0, 1.0);
         float shoreFilmFresnel = 0.02 + 0.98 * pow(1.0 - shoreFilmCosTheta, 5.0);
         float shoreFilmSunMirror = max(dot(shoreFilmReflDir, sunDir), 0.0);
@@ -773,8 +818,10 @@ void main()
         float shoreWatercoat = max(shoreFilmMask, (1.0 - shoreBottomCoverage) * (0.88 * shorelineSeatMask + 0.12 * shoreContactMask));
         shoreCol = mix(shoreCol, shoreFilmCol, shoreWatercoat * 0.96);
         shoreCol = mix(skyCol, shoreCol, shoreTopCoverage);
+        shoreCol = applyMorningHeightFog(shoreCol, ro, rd, tShore, phase, horizonSky, sunCol, sunDir);
         if (hasTitle && tTitle < tShore) {
             vec3 titleCol = titleHeroColor(rd, sunCol, sunDir);
+            titleCol = applyMorningHeightFog(titleCol, ro, rd, tTitle, phase, horizonSky, sunCol, sunDir);
             shoreCol = compositeTitle(shoreCol, titleCol, titleAlpha);
         }
 
@@ -789,15 +836,23 @@ void main()
         return;
 #endif
 
-        vec3 skyCol = shadeSkyDirection(rd, phase, sunCol, sunDir);
+        vec3 skyCol = shadeSkyDirection(rd, phase, sunCol, sunDir, 1.0);
 
 #ifdef DEBUG_REFLECTION
         fragColor = vec4(tonemap(skyCol), 1.0);
         return;
 #endif
 
+        float skyFogDistance = mix(
+            MORNING_FOG_SKY_DISTANCE,
+            MORNING_FOG_SKY_DISTANCE * 0.32,
+            smoothstep(0.0, 0.85, max(rd.y, 0.0))
+        );
+        skyCol = applyMorningHeightFog(skyCol, ro, rd, skyFogDistance, phase, horizonSky, sunCol, sunDir);
+
         if (hasTitle && (!hasShore || tTitle < tShore) && (!hasWater || tTitle < tWater)) {
             vec3 titleCol = titleHeroColor(rd, sunCol, sunDir);
+            titleCol = applyMorningHeightFog(titleCol, ro, rd, tTitle, phase, horizonSky, sunCol, sunDir);
             skyCol = compositeTitle(skyCol, titleCol, titleAlpha);
         }
 
@@ -822,28 +877,38 @@ void main()
     float shallowWaveDamping = 1.0 - smoothstep(0.006, 0.050, staticWaterDepth);
     float largeWaveMask  = mix(1.0, 0.68, farField) * (1.0 - shallowWaveDamping * 0.42);
     float mediumWaveMask = mix(1.0, 0.44, farField) * (1.0 - shallowWaveDamping * 0.24);
-    float rippleWaveMask = mix(1.0, 0.18, farField) * (1.0 - shallowWaveDamping * 0.08);
+    // AI: Phase D — fade ripple contribution before horizon and force-disable at/after farField=0.75.
+    // Soft ramp avoids visible popping while still meeting the strict far cutoff.
+    // AI: Phase D tuning — start fading ripples a bit earlier to avoid a visible
+    // mid-distance "ripple lane" while preserving near-field interaction detail.
+    float rippleLod = 1.0 - smoothstep(0.66, 0.75, farField);
+    float rippleWaveMask = mix(1.0, 0.18, farField) * (1.0 - shallowWaveDamping * 0.08) * rippleLod;
     float microNoiseMask = mix(1.0, 0.22, farField) * (1.0 - shallowWaveDamping * 0.22);
     vec2 p = waterPos.xz * 1.1;
     float waveHeight = waveFieldWithMasks(p, t, largeWaveMask, mediumWaveMask, rippleWaveMask);
 
     // НОРМАЛЬ ВОЛН
-    vec3 n = waveNormal(p, t, largeWaveMask, mediumWaveMask, rippleWaveMask);
+    vec3 n = waveNormal(p, t, largeWaveMask, mediumWaveMask, rippleWaveMask, viewDistance);
 
     // ИНТЕРАКТИВНАЯ РЯБЬ
     {
-        vec2 rUV = waterWorldToRippleUV(waterPos);
-        if (insideUnitSquare(rUV)) {
-            float rt  = u_rippleTexel;
-            float rxP = texture(u_rippleTex, clamp(rUV + vec2(rt, 0.0), 0.0, 1.0)).r;
-            float rxN = texture(u_rippleTex, clamp(rUV - vec2(rt, 0.0), 0.0, 1.0)).r;
-            float ryP = texture(u_rippleTex, clamp(rUV + vec2(0.0, rt), 0.0, 1.0)).r;
-            float ryN = texture(u_rippleTex, clamp(rUV - vec2(0.0, rt), 0.0, 1.0)).r;
-            vec2 rippleGrad = vec2(rxP - rxN, ryP - ryN);
-            vec2 rippleEdge = min(rUV, 1.0 - rUV);
-            float rippleFade = smoothstep(0.0, 0.065, min(rippleEdge.x, rippleEdge.y));
-            // AI: keep ripple perturbation in ripple-texture space, but soften the world-space coupling so interaction reads as water relief instead of crater-like reflection breaks.
-            n = normalize(n + vec3(-rippleGrad.x * 2.2, 0.0, -rippleGrad.y * 2.2) * rippleFade);
+        float rippleNormalLod = smoothstep(0.04, 0.40, rippleWaveMask);
+        if (rippleNormalLod > 0.0001) {
+            vec2 rUV = waterWorldToRippleUV(waterPos);
+            if (insideUnitSquare(rUV)) {
+                float rt  = u_rippleTexel;
+                float rxP = texture(u_rippleTex, clamp(rUV + vec2(rt, 0.0), 0.0, 1.0)).r;
+                float rxN = texture(u_rippleTex, clamp(rUV - vec2(rt, 0.0), 0.0, 1.0)).r;
+                float ryP = texture(u_rippleTex, clamp(rUV + vec2(0.0, rt), 0.0, 1.0)).r;
+                float ryN = texture(u_rippleTex, clamp(rUV - vec2(0.0, rt), 0.0, 1.0)).r;
+                vec2 rippleGrad = vec2(rxP - rxN, ryP - ryN);
+                vec2 rippleEdge = min(rUV, 1.0 - rUV);
+                float rippleFade = smoothstep(0.0, 0.065, min(rippleEdge.x, rippleEdge.y));
+                // AI: keep ripple perturbation in ripple-texture space, but soften the world-space coupling so interaction reads as water relief instead of crater-like reflection breaks.
+                n = normalize(
+                    n + vec3(-rippleGrad.x * 2.2, 0.0, -rippleGrad.y * 2.2) * rippleFade * rippleNormalLod
+                );
+            }
         }
     }
 
@@ -877,7 +942,7 @@ void main()
     // ОТРАЖЕНИЕ НЕБА + БЕРЕГА
     vec3 reflDir = normalize(reflect(-viewDir, n));
     reflDir.y = max(reflDir.y, 0.001);
-    vec3 skyRefl = shadeSkyDirection(reflDir, phase, sunCol, sunDir);
+    vec3 skyRefl = shadeSkyDirection(reflDir, phase, sunCol, sunDir, 0.0);
 
     {
         vec2 reflSkyUv = skyUvFromDirection(reflDir);
@@ -902,9 +967,8 @@ void main()
         vec3 reflDirTitle = normalize(reflect(-viewDir, nTitle));
         reflDirTitle.y = max(reflDirTitle.y, 0.001);
 
-        // AI: fix (2) — lime-green matching direct text color from hero-title.frag.
-        // Attenuated with ambient skyRefl (20%) for physical water-surface coherence.
-        const vec3 TITLE_LIME = vec3(0.788, 0.941, 0.541);
+        // AI: reflection uses same DayGlo base hue and blends with sky for water coherence.
+        vec3 titleLime = TITLE_DAYGLO_LINEAR;
 
         if (u_useTitleBillboard > 0.5) {
             float tTitleRefl;
@@ -920,16 +984,16 @@ void main()
                 titleReflAlpha
             );
             if (hasTitleRefl) {
-                titleReflAlpha = titleAboveWaterAlpha(titleReflHitPos, titleReflAlpha);
+                titleReflAlpha = titleAboveWaterAlpha(titleReflHitPos, titleReflAlpha) * titleReflectionRevealMask;
                 if (titleReflAlpha > 0.0005) {
                     // Depth-based attenuation: reflection fades with ray travel distance,
                     // reinforcing spatial depth of the world-space billboard.
                     float distFade = exp(-tTitleRefl * 0.28);
-                    vec3 titleReflCol = TITLE_LIME * 0.55 + skyRefl * 0.20;
+                    vec3 titleReflCol = titleLime * 0.55 + skyRefl * 0.20;
                     skyRefl = compositeTitle(skyRefl, titleReflCol, titleReflAlpha * 0.36 * distFade);
                 }
             }
-        } else if (u_useTitleAtlasReflection > 0.5) {
+        } else if (u_useTitlePhraseReflection > 0.5) {
             float tTitleRefl;
             vec3 titleReflHitPos;
             float titleReflAlpha;
@@ -944,8 +1008,8 @@ void main()
                 vec2 titleReflMetric = titleLocalMetricFromHitPos(titleReflHitPos);
                 float titleReflFill;
                 float titleReflHalo;
-                sampleTitleGlyphPhraseReflection(titleReflMetric, titleReflFill, titleReflHalo);
-                titleReflFill = titleAboveWaterAlpha(titleReflHitPos, titleReflFill);
+                sampleTitlePhraseReflectionCoverage(titleReflMetric, titleReflFill, titleReflHalo);
+                titleReflFill = titleAboveWaterAlpha(titleReflHitPos, titleReflFill) * titleReflectionRevealMask;
                 // AI: fix (1) — titleReflHalo NOT composited.
                 // sampleTitleAtlasReflectionCoverage: edgeBand=smoothstep(1.10,0.04,abs(screenDist))
                 // is maximal where signedDist≈0 — the glyph outline AND quad boundaries.
@@ -956,7 +1020,7 @@ void main()
                     // Suppress further when water is very agitated: secondary damping
                     // beyond normal smoothing above, guards against extreme ripple bursts.
                     float rippleAtten = 1.0 - smoothstep(0.0, 0.65, rippleStrength) * 0.38;
-                    vec3 titleReflCol = TITLE_LIME * 0.55 + skyRefl * 0.20;
+                    vec3 titleReflCol = titleLime * 0.55 + skyRefl * 0.20;
                     skyRefl = compositeTitle(skyRefl, titleReflCol,
                                             titleReflFill * 0.28 * distFade * rippleAtten);
                 }
@@ -985,7 +1049,10 @@ void main()
         0.58
     );
     float waterSharedBand = max(shorelineCore * 0.18, shallowReveal * 0.24);
-    float shelfBottomNoise = 0.92 + 0.08 * shoreFbm(waterPos.x * 1.05 + 9.0, 63.7);
+    float shelfBottomNoise = 0.92 + 0.08 * texture(
+        u_shoreProfileTex,
+        vec2(clamp(waterPos.x * 0.16 + 0.5, 0.0, 1.0), 0.5)
+    ).b;
     vec3 bankUnderwaterCol = bankMaterialBase(waterPos.x, max(bankSurfaceNorm, 0.05), phase) * vec3(0.78, 0.88, 0.97);
     vec3 shallowBottomCol = mix(
         shallowShelfTint * 0.80 + wetEdgeTint * 0.22 + skyRefl * 0.04,
@@ -1010,8 +1077,10 @@ void main()
     vec3 horizonLift = mix(horizonSky, skyRefl, 0.68);
     vec3 col = mix(waterCol, horizonLift, horizonMist * 0.10 * (1.0 - shorelineCore * 0.82));
     col = mix(col, sharedContactCol, waterSharedBand * 0.02);
+    col = applyMorningHeightFog(col, ro, rd, tWater, phase, horizonSky, sunCol, sunDir);
     if (hasTitle && tTitle < tWater && (!hasShore || tTitle < tShore)) {
         vec3 titleCol = titleHeroColor(rd, sunCol, sunDir);
+        titleCol = applyMorningHeightFog(titleCol, ro, rd, tTitle, phase, horizonSky, sunCol, sunDir);
         col = compositeTitle(col, titleCol, titleAlpha);
     }
 

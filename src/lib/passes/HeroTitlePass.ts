@@ -108,6 +108,7 @@ export class HeroTitlePass extends RenderPass {
 
     const gl = this.gl
 
+    this.bindOutputFramebuffer()
     gl.viewport(0, 0, this.width, this.height)
     gl.enable(gl.BLEND)
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
