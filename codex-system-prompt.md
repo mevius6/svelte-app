@@ -181,3 +181,4 @@ vec3 reflDirTitle = normalize(reflect(-viewDir, nTitle));
      - what changed;
      - what was verified (`bun run check`, `bun run build`, etc.).
   4. If baseline/invariants changed, sync this file and `README.md` in the same iteration.
+  5. When creating a git commit for the iteration, use a concise, factual commit message that states the concrete change scope.

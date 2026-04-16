@@ -76,7 +76,7 @@ void main() {
     v_worldY   = worldPos.y;
     v_passMode = u_passMode;
     // AI: pass camera-forward depth to fragment for atmospheric perspective fade.
-    // At title z≈-0.58 with camera at z≈2.78: viewZ≈3.36 world units.
-    // Fragment uses exp(-max(viewZ-1.2,0)*0.09) → ~14% opacity reduction at that distance.
+    // Current title anchor is near pond center (sceneCamera TITLE_WORLD_Z_NEAR=+0.35),
+    // so atmospheric fade remains subtle while preserving crisp near-camera readability.
     v_viewDist = viewZ;
 }

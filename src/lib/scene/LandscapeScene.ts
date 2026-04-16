@@ -170,7 +170,7 @@ export class LandscapeScene implements Scene {
 
     const rippleTex = this.ripple.render(time, null) ?? this.resources.rippleFallbackTexture
     const sceneFrame = computeSceneFrame(this.width, this.height)
-    const camera = computeSceneCamera(this.scrollNorm, this.width, this.height)
+    const camera = this.resolveCamera()
     const vegetationHorizon = computeVegetationHorizon(camera, this.width, this.height)
     const textTexSize = this.resources.textTextureSize
     const titleLayout = this.resources.heroTitleLayout
@@ -336,19 +336,7 @@ export class LandscapeScene implements Scene {
     const viewportWidth = window.innerWidth
     const viewportHeight = window.innerHeight
 
-    // AI: Phase C — recompute only on resize or scroll change.
-    if (
-      !this.cachedCamera ||
-      this.width    !== this.cameraWidth  ||
-      this.height   !== this.cameraHeight ||
-      this.scrollNorm !== this.cameraScroll
-    ) {
-      this.cachedCamera   = computeSceneCamera(this.scrollNorm, this.width, this.height)
-      this.cameraWidth    = this.width
-      this.cameraHeight   = this.height
-      this.cameraScroll   = this.scrollNorm
-    }
-    const camera = this.cachedCamera
+    const camera = this.resolveCamera()
 
     const direction = screenPointToWorldRay(
       camera,
@@ -364,6 +352,23 @@ export class LandscapeScene implements Scene {
 
     // AI: Phase 1 upgrades ripple input to the same world-water mapping used by the landscape shader, so interaction no longer depends on the screen's lower half.
     return waterWorldToRippleUV(waterHit)
+  }
+
+  private resolveCamera() {
+    // AI: Phase C — recompute only on resize or scroll change.
+    if (
+      !this.cachedCamera ||
+      this.width !== this.cameraWidth ||
+      this.height !== this.cameraHeight ||
+      this.scrollNorm !== this.cameraScroll
+    ) {
+      this.cachedCamera = computeSceneCamera(this.scrollNorm, this.width, this.height)
+      this.cameraWidth = this.width
+      this.cameraHeight = this.height
+      this.cameraScroll = this.scrollNorm
+    }
+
+    return this.cachedCamera
   }
 
 }

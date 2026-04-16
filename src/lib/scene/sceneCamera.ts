@@ -51,18 +51,18 @@ export const VEGETATION_WORLD_Z = SHORELINE_WORLD_Z - 0.035
 // Fix 2 — remove scroll-driven baseLift animation.
 //
 // Geometry context:
-//   Camera z at scroll=0: ≈ +2.61
+//   Camera z at scroll=0: ≈ +2.69
 //   Shore z (SHORELINE_WORLD_Z): -0.95
-//   Pond midpoint: (2.61 + (-0.95)) / 2 ≈ +0.83
+//   Pond midpoint: (2.69 + (-0.95)) / 2 ≈ +0.87
 //   → TITLE_WORLD_Z_NEAR = +0.35 places title in clear water, well in front of shore
 //
 // Width is scaled proportionally to maintain apparent screen size:
-//   old: width=2.44 at depth=3.19 (2.61-(-0.58))
-//   new: width=1.75 at depth=2.26 (2.61-0.35) → same angular size
+//   old: width=2.44 at depth=3.27 (2.69-(-0.58))
+//   new: width=1.75 at depth=2.34 (2.69-0.35) → same angular size
 // ══════════════════════════════════════════════════════════════════
 
 // AI: title anchor — middle of the pond, between camera and shore.
-// Camera z≈+2.61, shore z=-0.95 → z=+0.35 sits clearly over open water.
+// Camera z≈+2.69, shore z=-0.95 → z=+0.35 sits clearly over open water.
 // Widths scaled to preserve apparent screen size at the new depth.
 const TITLE_WORLD_Z_NEAR = 0.35
 const TITLE_WORLD_Z_FAR = -0.20
@@ -83,13 +83,13 @@ export const RIPPLE_WORLD_RECT: RippleWorldRect = {
 
 // AI: Phase 2 — named anchor for the world-space title billboard.
 // Describes where the title billboard sits at scroll=0:
-//   z: between camera (z≈+2.8) and shoreline (z=-0.95), close to shore side
+//   z: between camera and shoreline, over open water near pond center
 //   y: just above water level (actual center y also depends on text aspect)
-// computeTitleHeroState() uses TITLE_WORLD_Z_NEAR/FAR for scroll animation;
+// computeTitleHeroState() keeps z fixed (no scroll-driven z animation);
 // HERO_TITLE_ANCHOR_Z is the scroll=0 reference used by intersectTitleAtlas
 // in landscape.frag (same value as TITLE_WORLD_Z_NEAR).
 // Ref: landscape.frag intersectTitleAtlas, HeroTitlePass.ts u_titleWorldCenter
-export const HERO_TITLE_ANCHOR_Z = TITLE_WORLD_Z_NEAR   // -0.58
+export const HERO_TITLE_ANCHOR_Z = TITLE_WORLD_Z_NEAR   //  0.35
 export const HERO_TITLE_ANCHOR_Y_BASE = WATER_LEVEL     //  0.0 (text center lifts above this)
 
 function clamp(value: number, min: number, max: number) {
