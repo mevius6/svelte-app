@@ -1,7 +1,5 @@
 import {
-  STRAPI_CACHE_TTL_MS,
-  STRAPI_HEADERS,
-  STRAPI_TIMEOUT_MS,
+  getStrapiRuntimeConfig,
   buildArticlesUrl
 } from './config';
 
@@ -11,12 +9,18 @@ import {
  * @type {Map<string, { expiresAt: number; payload: any }>}
  */
 const responseCache = new Map();
+/**
+ * In-flight dedupe for concurrent identical requests.
+ * @type {Map<string, Promise<{ payload: any; error: string }>>}
+ */
+const inFlightRequests = new Map();
 
 /**
  * @param {string} key
+ * @param {number} cacheTtlMs
  */
-const readFromCache = (key) => {
-  if (STRAPI_CACHE_TTL_MS === 0) {
+const readFromCache = (key, cacheTtlMs) => {
+  if (cacheTtlMs === 0) {
     return null;
   }
 
@@ -30,22 +34,40 @@ const readFromCache = (key) => {
     return null;
   }
 
+  // Promote entry to MRU position.
+  responseCache.delete(key);
+  responseCache.set(key, entry);
+
   return entry.payload;
 };
 
 /**
  * @param {string} key
  * @param {any} payload
+ * @param {number} cacheTtlMs
+ * @param {number} cacheMaxEntries
  */
-const writeToCache = (key, payload) => {
-  if (STRAPI_CACHE_TTL_MS === 0) {
+const writeToCache = (key, payload, cacheTtlMs, cacheMaxEntries) => {
+  if (cacheTtlMs === 0) {
     return;
+  }
+
+  if (responseCache.has(key)) {
+    responseCache.delete(key);
   }
 
   responseCache.set(key, {
     payload,
-    expiresAt: Date.now() + STRAPI_CACHE_TTL_MS
+    expiresAt: Date.now() + cacheTtlMs
   });
+
+  while (responseCache.size > cacheMaxEntries) {
+    const oldestKey = responseCache.keys().next().value;
+    if (!oldestKey) {
+      break;
+    }
+    responseCache.delete(oldestKey);
+  }
 };
 
 /**
@@ -101,52 +123,83 @@ export const isInvalidQueryKeyError = (error) => {
  * @returns {Promise<{ payload: any; error: string }>}
  */
 export const fetchArticlesPayload = async (fetch, queryString, cacheKey) => {
-  const cachedPayload = readFromCache(cacheKey);
+  let runtime;
+  try {
+    runtime = getStrapiRuntimeConfig();
+  } catch (caughtError) {
+    const message = caughtError instanceof Error ? caughtError.message : 'Strapi config is invalid';
+    console.error('[strapi] configuration error', { message });
+    return {
+      payload: null,
+      error: 'Strapi API не настроен. Проверьте серверную конфигурацию.'
+    };
+  }
+
+  const cachedPayload = readFromCache(cacheKey, runtime.cacheTtlMs);
   if (cachedPayload) {
     return { payload: cachedPayload, error: '' };
   }
 
-  const url = buildArticlesUrl(queryString);
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), STRAPI_TIMEOUT_MS);
+  const inFlight = inFlightRequests.get(cacheKey);
+  if (inFlight) {
+    return inFlight;
+  }
 
+  const requestPromise = (async () => {
+    const url = buildArticlesUrl(queryString, runtime.origin);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), runtime.timeoutMs);
+
+    try {
+      const response = await fetch(url, {
+        signal: controller.signal,
+        headers: runtime.headers
+      });
+
+      if (!response.ok) {
+        const details = await parseErrorDetails(response);
+
+        return {
+          payload: null,
+          error: toStatusError(response.status, details)
+        };
+      }
+
+      const payload = await response.json();
+      writeToCache(cacheKey, payload, runtime.cacheTtlMs, runtime.cacheMaxEntries);
+
+      return {
+        payload,
+        error: ''
+      };
+    } catch (caughtError) {
+      if (caughtError instanceof DOMException && caughtError.name === 'AbortError') {
+        return {
+          payload: null,
+          error: `Превышено время ожидания ответа Strapi (${runtime.timeoutMs} ms).`
+        };
+      }
+
+      const message = caughtError instanceof Error ? caughtError.message : 'Unknown network error';
+      console.error('[strapi] request failed', {
+        url,
+        message,
+        cacheKey
+      });
+
+      return {
+        payload: null,
+        error: `API недоступен: ${message}`
+      };
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  })();
+
+  inFlightRequests.set(cacheKey, requestPromise);
   try {
-    const response = await fetch(url, {
-      signal: controller.signal,
-      headers: STRAPI_HEADERS
-    });
-
-    if (!response.ok) {
-      const details = await parseErrorDetails(response);
-
-      return {
-        payload: null,
-        error: toStatusError(response.status, details)
-      };
-    }
-
-    const payload = await response.json();
-    writeToCache(cacheKey, payload);
-
-    return {
-      payload,
-      error: ''
-    };
-  } catch (caughtError) {
-    if (caughtError instanceof DOMException && caughtError.name === 'AbortError') {
-      return {
-        payload: null,
-        error: `Превышено время ожидания ответа Strapi (${STRAPI_TIMEOUT_MS} ms).`
-      };
-    }
-
-    const message = caughtError instanceof Error ? caughtError.message : 'Unknown network error';
-
-    return {
-      payload: null,
-      error: `API недоступен (${url}): ${message}`
-    };
+    return await requestPromise;
   } finally {
-    clearTimeout(timeoutId);
+    inFlightRequests.delete(cacheKey);
   }
 };

@@ -1,29 +1,70 @@
 import { env } from '$env/dynamic/private';
 
-const rawOrigin = env.STRAPI_API_ORIGIN?.trim();
-const rawToken = env.STRAPI_API_TOKEN?.trim();
-const parsedTimeoutMs = Number(env.STRAPI_API_TIMEOUT_MS ?? 15000);
-const parsedCacheTtlMs = Number(env.STRAPI_API_CACHE_TTL_MS ?? 60000);
+const DEFAULT_TIMEOUT_MS = 15000;
+const DEFAULT_CACHE_TTL_MS = 60000;
+const DEFAULT_CACHE_MAX_ENTRIES = 128;
 
-if (!rawOrigin) {
-  throw new Error('STRAPI_API_ORIGIN is not set');
-}
+/**
+ * @param {unknown} value
+ * @param {number} fallback
+ * @returns {number}
+ */
+const toNumber = (value, fallback) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
 
-if (!Number.isFinite(parsedTimeoutMs) || parsedTimeoutMs <= 0) {
-  throw new Error('STRAPI_API_TIMEOUT_MS must be a positive number');
-}
+const parseTimeoutMs = () => {
+  const timeoutMs = toNumber(env.STRAPI_API_TIMEOUT_MS, DEFAULT_TIMEOUT_MS);
+  if (timeoutMs <= 0) {
+    throw new Error('STRAPI_API_TIMEOUT_MS must be a positive number');
+  }
+  return timeoutMs;
+};
 
-if (!Number.isFinite(parsedCacheTtlMs) || parsedCacheTtlMs < 0) {
-  throw new Error('STRAPI_API_CACHE_TTL_MS must be a non-negative number');
-}
+const parseCacheTtlMs = () => {
+  const cacheTtlMs = toNumber(env.STRAPI_API_CACHE_TTL_MS, DEFAULT_CACHE_TTL_MS);
+  if (cacheTtlMs < 0) {
+    throw new Error('STRAPI_API_CACHE_TTL_MS must be a non-negative number');
+  }
+  return cacheTtlMs;
+};
 
-export const STRAPI_ORIGIN = rawOrigin.replace(/\/+$/, '');
-export const STRAPI_HEADERS = rawToken ? { Authorization: `Bearer ${rawToken}` } : undefined;
-export const STRAPI_TIMEOUT_MS = parsedTimeoutMs;
-export const STRAPI_CACHE_TTL_MS = parsedCacheTtlMs;
+const parseCacheMaxEntries = () => {
+  const cacheMaxEntries = Math.floor(
+    toNumber(env.STRAPI_API_CACHE_MAX_ENTRIES, DEFAULT_CACHE_MAX_ENTRIES)
+  );
+  if (cacheMaxEntries <= 0) {
+    throw new Error('STRAPI_API_CACHE_MAX_ENTRIES must be a positive integer');
+  }
+  return cacheMaxEntries;
+};
+
+export const STRAPI_ORIGIN = env.STRAPI_API_ORIGIN?.trim().replace(/\/+$/, '') ?? '';
 export const ARTICLES_ENDPOINT = '/api/articles';
+
+export const getStrapiRuntimeConfig = () => {
+  const rawOrigin = env.STRAPI_API_ORIGIN?.trim();
+  if (!rawOrigin) {
+    throw new Error('STRAPI_API_ORIGIN is not set');
+  }
+
+  const origin = rawOrigin.replace(/\/+$/, '');
+  const token = env.STRAPI_API_TOKEN?.trim();
+
+  return {
+    origin,
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    timeoutMs: parseTimeoutMs(),
+    cacheTtlMs: parseCacheTtlMs(),
+    cacheMaxEntries: parseCacheMaxEntries()
+  };
+};
 
 /**
  * @param {string} queryString
+ * @param {string} [origin]
  */
-export const buildArticlesUrl = (queryString) => `${STRAPI_ORIGIN}${ARTICLES_ENDPOINT}?${queryString}`;
+export const buildArticlesUrl = (queryString, origin = STRAPI_ORIGIN) => {
+  return `${origin}${ARTICLES_ENDPOINT}?${queryString}`;
+};
