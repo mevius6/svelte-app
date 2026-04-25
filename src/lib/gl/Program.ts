@@ -50,7 +50,7 @@ export class Program {
     const gl = this.gl
     const l = this.loc(name)
 
-    if (l === null || !tex) return
+    if (l === null) return
 
     gl.activeTexture(gl.TEXTURE0 + unit)
     gl.bindTexture(gl.TEXTURE_2D, tex)

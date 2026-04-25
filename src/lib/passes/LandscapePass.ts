@@ -45,7 +45,7 @@ function injectShaderDefines(source: string, defines: string[]) {
 
 export class LandscapePass extends RenderPass {
 
-  private program: Program
+  private programs: Record<LandscapeDebugMode, Program>
   private quad: FullscreenQuad
   private debugMode: LandscapeDebugMode = "beauty"
   private scroll = 0
@@ -75,7 +75,12 @@ export class LandscapePass extends RenderPass {
 
   constructor(gl: WebGL2RenderingContext) {
     super(gl)
-    this.program = this.createProgram("beauty")
+    this.programs = {
+      beauty: this.createProgram("beauty"),
+      ripple: this.createProgram("ripple"),
+      normals: this.createProgram("normals"),
+      reflection: this.createProgram("reflection"),
+    }
     this.quad = new FullscreenQuad(gl)
   }
 
@@ -97,13 +102,6 @@ export class LandscapePass extends RenderPass {
   }
 
   setDebugMode(mode: LandscapeDebugMode) {
-    if (mode === this.debugMode) {
-      return
-    }
-
-    // AI: compile isolated debug shader variants behind explicit defines so debug views stay off by default.
-    this.program.dispose()
-    this.program = this.createProgram(mode)
     this.debugMode = mode
   }
 
@@ -117,91 +115,92 @@ export class LandscapePass extends RenderPass {
     this.bindOutputFramebuffer()
     gl.viewport(0, 0, this.width, this.height)
 
-    this.program.use()
+    const program = this.programs[this.debugMode]
+    program.use()
 
     // AI: move fullscreen landscape shading behind LandscapePass so the component only feeds frame state. No behavior change intended.
-    this.program.setFloat("u_time", time)
-    this.program.setFloat("u_scroll", this.scroll)
-    this.program.setVec2("u_resolution", this.width, this.height)
-    this.program.setVec2("u_sceneScale", this.sceneScale.x, this.sceneScale.y)
+    program.setFloat("u_time", time)
+    program.setFloat("u_scroll", this.scroll)
+    program.setVec2("u_resolution", this.width, this.height)
+    program.setVec2("u_sceneScale", this.sceneScale.x, this.sceneScale.y)
     // AI: Phase 1 passes orbital camera state into the fullscreen shader so depth can come from world rays instead of only screen UV composition.
-    this.program.setVec3(
+    program.setVec3(
       "u_cameraPos",
       this.camera.position.x,
       this.camera.position.y,
       this.camera.position.z
     )
-    this.program.setVec3(
+    program.setVec3(
       "u_cameraRight",
       this.camera.right.x,
       this.camera.right.y,
       this.camera.right.z
     )
-    this.program.setVec3(
+    program.setVec3(
       "u_cameraUp",
       this.camera.up.x,
       this.camera.up.y,
       this.camera.up.z
     )
-    this.program.setVec3(
+    program.setVec3(
       "u_cameraForward",
       this.camera.forward.x,
       this.camera.forward.y,
       this.camera.forward.z
     )
     // AI: Phase C — tanHalfFovY pre-computed in computeSceneCamera.
-    this.program.setFloat("u_cameraTanHalfFovY", this.camera.tanHalfFovY)
-    this.program.setTexture("u_textTex", this.textTexture, 0)
-    this.program.setFloat("u_useTitleBillboard", this.useTitleBillboard ? 1 : 0)
-    this.program.setFloat("u_useTitlePhraseReflection", this.titleAtlasRenderData?.phraseTexture ? 1 : 0)
-    this.program.setVec3(
+    program.setFloat("u_cameraTanHalfFovY", this.camera.tanHalfFovY)
+    program.setTexture("u_textTex", this.textTexture, 0)
+    program.setFloat("u_useTitleBillboard", this.useTitleBillboard ? 1 : 0)
+    program.setFloat("u_useTitlePhraseReflection", this.titleAtlasRenderData?.phraseTexture ? 1 : 0)
+    program.setVec3(
       "u_titleWorldCenter",
       this.titleHero.center.x,
       this.titleHero.center.y,
       this.titleHero.center.z
     )
-    this.program.setVec2(
+    program.setVec2(
       "u_titleWorldSize",
       this.titleHero.size.w,
       this.titleHero.size.h
     )
-    this.program.setVec4(
+    program.setVec4(
       "u_titleTexRect",
       this.titleHero.uvRect.x,
       this.titleHero.uvRect.y,
       this.titleHero.uvRect.w,
       this.titleHero.uvRect.h
     )
-    this.program.setFloat(
+    program.setFloat(
       "u_titleAtlasPxRange",
       this.titleAtlasRenderData?.atlas.font.atlas.distanceRange ?? 4
     )
-    this.program.setVec2(
+    program.setVec2(
       "u_titleLayoutSize",
       this.titleAtlasRenderData?.gpuLayout.phraseLayout.width ?? 1,
       this.titleAtlasRenderData?.gpuLayout.phraseLayout.height ?? 1
     )
-    this.program.setTexture("u_titlePhraseTex", this.titleAtlasRenderData?.phraseTexture ?? null, 4)
-    this.program.setVec2(
+    program.setTexture("u_titlePhraseTex", this.titleAtlasRenderData?.phraseTexture ?? null, 4)
+    program.setVec2(
       "u_titlePhraseTexSize",
       this.titleAtlasRenderData?.phraseTextureSize.width ?? 1,
       this.titleAtlasRenderData?.phraseTextureSize.height ?? 1
     )
 
-    this.program.setTexture("u_rippleTex", rippleTex, 1)
-    this.program.setFloat("u_rippleTexel", this.rippleTexelSize)
+    program.setTexture("u_rippleTex", rippleTex, 1)
+    program.setFloat("u_rippleTexel", this.rippleTexelSize)
     // AI: texture units:
     // 0=textTex, 1=ripple, 3=shoreProfile, 4=titlePhraseTex (2 currently free).
-    this.program.setTexture("u_shoreProfileTex", this.shoreProfileTexture, 3)
-    this.program.setVec4(
+    program.setTexture("u_shoreProfileTex", this.shoreProfileTexture, 3)
+    program.setVec4(
       "u_rippleWorldRect",
       this.rippleWorldRect.x,
       this.rippleWorldRect.z,
       this.rippleWorldRect.w,
       this.rippleWorldRect.depth
     )
-    this.program.setFloat("u_shorePlaneZ", this.shorePlaneZ)
-    this.program.setFloat("u_waterLevel", this.waterLevel)
+    program.setFloat("u_shorePlaneZ", this.shorePlaneZ)
+    program.setFloat("u_waterLevel", this.waterLevel)
 
     this.quad.draw()
 
@@ -209,7 +208,10 @@ export class LandscapePass extends RenderPass {
   }
 
   dispose() {
-    this.program.dispose()
+    const uniquePrograms = new Set(Object.values(this.programs))
+    uniquePrograms.forEach((program) => {
+      program.dispose()
+    })
     this.quad.dispose()
   }
 
