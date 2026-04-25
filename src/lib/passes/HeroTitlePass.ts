@@ -9,6 +9,7 @@ import type { SceneCameraState, TitleHeroState } from "../scene/sceneCamera"
 type HeroTitleFrameState = {
   camera: SceneCameraState
   phase: number
+  waterLevel: number
   titleHero: TitleHeroState
   atlas: HeroTitleAtlasResource | null
   gpuLayout: HeroTitlePhraseGpuLayout | null
@@ -24,6 +25,7 @@ export class HeroTitlePass extends RenderPass {
   private phraseLayout: HeroTitlePhraseGpuLayout["phraseLayout"] | null = null
   private instanceCount = 0
   private currentLayoutKey = ""
+  private readonly layoutSignatureCache = new WeakMap<HeroTitlePhraseGpuLayout, string>()
   private currentAtlas: HeroTitleAtlasResource | null = null
   private camera: SceneCameraState = {
     position: { x: 0, y: 0, z: 1 },
@@ -34,6 +36,7 @@ export class HeroTitlePass extends RenderPass {
     tanHalfFovY: Math.tan(Math.PI / 8),
   }
   private phase = 0
+  private waterLevel = 0
   private titleHero: TitleHeroState = {
     center: { x: 0, y: 0, z: 0 },
     size: { w: 1, h: 1 },
@@ -97,11 +100,12 @@ export class HeroTitlePass extends RenderPass {
   setFrameState(state: HeroTitleFrameState) {
     this.camera = state.camera
     this.phase = state.phase
+    this.waterLevel = state.waterLevel
     this.titleHero = state.titleHero
     this.syncAtlas(state.atlas, state.gpuLayout)
   }
 
-  render(time: number, input: WebGLTexture | null) {
+  render(_time: number, input: WebGLTexture | null) {
     if (!this.currentAtlas?.texture || !this.phraseLayout || this.instanceCount === 0) {
       return input
     }
@@ -162,12 +166,10 @@ export class HeroTitlePass extends RenderPass {
     )
     this.program.setFloat("u_titleAtlasPxRange", this.currentAtlas.font.atlas.distanceRange)
     this.program.setFloat("u_phase", this.phase)
-    this.program.setFloat("u_waterLevel", 0)
-    this.program.setFloat("u_time", time)
+    this.program.setFloat("u_waterLevel", this.waterLevel)
     this.program.setTexture("u_titleAtlas", this.currentAtlas.texture, 0)
 
     gl.bindVertexArray(this.vao)
-    this.program.setFloat("u_passMode", 0)
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.instanceCount)
     gl.bindVertexArray(null)
     gl.disable(gl.BLEND)
@@ -188,7 +190,7 @@ export class HeroTitlePass extends RenderPass {
     gpuLayout: HeroTitlePhraseGpuLayout | null
   ) {
     const nextKey = atlas?.imageUrl && gpuLayout
-      ? `${this.text}:${atlas.imageUrl}:${gpuLayout.phraseLayout.glyphs.length}`
+      ? `${this.text}:${atlas.imageUrl}:${this.getGpuLayoutSignature(gpuLayout)}`
       : ""
     if (nextKey === this.currentLayoutKey) {
       this.currentAtlas = atlas
@@ -213,6 +215,35 @@ export class HeroTitlePass extends RenderPass {
 
     this.phraseLayout = gpuLayout.phraseLayout
     this.instanceCount = gpuLayout.phraseLayout.glyphs.length
+  }
+
+  private getGpuLayoutSignature(gpuLayout: HeroTitlePhraseGpuLayout) {
+    const cachedSignature = this.layoutSignatureCache.get(gpuLayout)
+    if (cachedSignature) {
+      return cachedSignature
+    }
+
+    const phraseLayout = gpuLayout.phraseLayout
+    const signature = [
+      phraseLayout.width.toFixed(6),
+      phraseLayout.height.toFixed(6),
+      phraseLayout.glyphs.length,
+      this.hashFloat32(gpuLayout.glyphBoundsData),
+      this.hashFloat32(gpuLayout.glyphAtlasData),
+    ].join(":")
+    this.layoutSignatureCache.set(gpuLayout, signature)
+    return signature
+  }
+
+  private hashFloat32(values: Float32Array) {
+    const uintView = new Uint32Array(values.buffer, values.byteOffset, values.length)
+    let hash = 2166136261
+    for (let i = 0; i < uintView.length; i++) {
+      hash ^= uintView[i]
+      hash = Math.imul(hash, 16777619)
+    }
+
+    return (hash >>> 0).toString(16)
   }
 
 }

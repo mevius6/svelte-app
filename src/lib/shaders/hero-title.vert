@@ -14,13 +14,9 @@ uniform float u_cameraTanHalfFovY;
 uniform vec3  u_titleWorldCenter;
 uniform vec2  u_titleWorldSize;
 uniform vec2  u_titleLayoutSize;
-uniform float u_waterLevel;
-uniform float u_time;
-uniform float u_passMode;
 
 out vec2  v_uvAtlas;
 out float v_worldY;
-out float v_passMode;
 // AI: Phase 2 atmospheric perspective — camera-space depth for fragment distance fog.
 // viewZ = dot(worldPos - cameraPos, cameraForward): positive forward, increases with depth.
 out float v_viewDist;
@@ -49,14 +45,6 @@ void main() {
                   + titleRight * (localNorm.x * u_titleWorldSize.x)
                   + titleUp * (localNorm.y * u_titleWorldSize.y);
 
-    if (u_passMode > 0.5) {
-        float wobbleA = sin(worldPos.x * 8.4 + worldPos.y * 3.2 + u_time * 1.6);
-        float wobbleB = sin(worldPos.x * 14.2 - worldPos.y * 4.8 - u_time * 2.1);
-        worldPos.y = 2.0 * u_waterLevel - worldPos.y;
-        worldPos.x += wobbleA * 0.016 + wobbleB * 0.006;
-        worldPos.z += wobbleB * 0.018;
-    }
-
     vec3 relative = worldPos - u_cameraPos;
     float viewX = dot(relative, u_cameraRight);
     float viewY = dot(relative, u_cameraUp);
@@ -74,7 +62,6 @@ void main() {
 
     v_uvAtlas  = a_atlasRect.xy + a_position * a_atlasRect.zw;
     v_worldY   = worldPos.y;
-    v_passMode = u_passMode;
     // AI: pass camera-forward depth to fragment for atmospheric perspective fade.
     // Current title anchor is near pond center (sceneCamera TITLE_WORLD_Z_NEAR=+0.35),
     // so atmospheric fade remains subtle while preserving crisp near-camera readability.
