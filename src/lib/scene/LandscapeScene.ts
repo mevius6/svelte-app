@@ -61,7 +61,6 @@ export class LandscapeScene implements Scene {
   private cachedCamera: SceneCameraState | null = null
   private cameraWidth = 0
   private cameraHeight = 0
-  private cameraScroll = -1
   private lastDropMs = 0
   private initialized = false
   private passView: PassDebugView = "final"
@@ -205,6 +204,7 @@ export class LandscapeScene implements Scene {
     this.heroTitle.setFrameState({
       camera,
       phase: this.scrollNorm,
+      waterLevel: WATER_LEVEL,
       titleHero,
       atlas: heroTitleAtlas,
       gpuLayout: heroTitleAtlasRenderData?.gpuLayout ?? null,
@@ -355,17 +355,17 @@ export class LandscapeScene implements Scene {
   }
 
   private resolveCamera() {
-    // AI: Phase C — recompute only on resize or scroll change.
+    // AI: Phase C — recompute only when viewport size changes.
+    // If cinematic camera motion is introduced later, include that motion phase/revision
+    // in this cache invalidation key.
     if (
       !this.cachedCamera ||
       this.width !== this.cameraWidth ||
-      this.height !== this.cameraHeight ||
-      this.scrollNorm !== this.cameraScroll
+      this.height !== this.cameraHeight
     ) {
-      this.cachedCamera = computeSceneCamera(this.scrollNorm, this.width, this.height)
+      this.cachedCamera = computeSceneCamera(this.width, this.height)
       this.cameraWidth = this.width
       this.cameraHeight = this.height
-      this.cameraScroll = this.scrollNorm
     }
 
     return this.cachedCamera

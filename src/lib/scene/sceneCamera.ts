@@ -247,11 +247,10 @@ export function computeTitleHeroState(
 
 // AI: Phase 1.5 retunes the orbital framing from open-water scale toward a compact city-pond read: nearer opposite bank, lower eye height, less "sea horizon".
 export function computeSceneCamera(
-  scroll: number,
   width: number,
   height: number
 ): SceneCameraState {
-  // AI: scroll drives time-of-day, not camera orbit.
+  // AI: time-of-day scroll does not affect camera orbit.
   // Camera is fixed at a static angle looking over the pond.
   // Small constants chosen so: horizon sits at ~45% screen height,
   // title is fully over water, shore visible behind it.
@@ -301,7 +300,7 @@ export function screenPointToWorldRay(
   const ndcX = screenX * 2 - 1
   const ndcY = screenY * 2 - 1
   const aspect = safeWidth / safeHeight
-  const tanHalfFovY = Math.tan(camera.fovY * 0.5)
+  const tanHalfFovY = camera.tanHalfFovY
 
   return normalize({
     x:
@@ -355,7 +354,7 @@ export function projectWorldToScreenUV(
   const safeWidth = Math.max(viewportWidth, 1)
   const safeHeight = Math.max(viewportHeight, 1)
   const aspect = safeWidth / safeHeight
-  const tanHalfFovY = Math.tan(camera.fovY * 0.5)
+  const tanHalfFovY = camera.tanHalfFovY
   const relative = subtract(point, camera.position)
   const viewX = dot(relative, camera.right)
   const viewY = dot(relative, camera.up)
