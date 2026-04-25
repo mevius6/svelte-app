@@ -143,7 +143,7 @@ vec3 reflDirTitle = normalize(reflect(-viewDir, nTitle));
 - **No new `shoreFbm` calls in shaders.** Use `u_shoreProfileTex` texture lookup.
 - **No `Math.tan(camera.fovY * 0.5)` in passes.** Use `camera.tanHalfFovY`.
 - **No glyph uniform upload in LandscapePass reflection path.** Reflection uses precomposed phrase texture.
-- **Camera recompute only on change.** Check width/height/scroll before calling `computeSceneCamera`.
+- **Camera recompute only on change.** Check width/height before calling `computeSceneCamera`.
 - When adding new per-pixel static noise: consider baking to texture first.
 
 ## 8. Style of edits

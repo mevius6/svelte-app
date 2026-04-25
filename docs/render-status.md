@@ -1,6 +1,6 @@
 # Render Status Log
 
-Last updated: 2026-04-04
+Last updated: 2026-04-25
 
 ## Current Vector
 
@@ -23,6 +23,30 @@ Last updated: 2026-04-04
 | Vegetation PoC | Shoreline full-coverage grass strip | In Progress | `BushesPass` now tests dense shoreline grass (1080 cards total) with seeded placement. |
 
 ## Change Log
+
+### 2026-04-25
+
+- Render/runtime safety and maintenance cleanup:
+  - Removed dead reflection-only branch from `HeroTitlePass` shaders:
+    - deleted `u_passMode`/`u_time` uniforms and mirrored-wobble reflection branch from `hero-title.vert`,
+    - deleted reflection tint/reveal branch from `hero-title.frag`;
+    - direct title rendering path stays unchanged in intent, while reflection remains in `landscape.frag` (Phase E path).
+  - `HeroTitlePass` now receives `waterLevel` via frame state (`LandscapeScene` -> `HeroTitlePass`) instead of hardcoded `0`.
+  - `HeroTitlePass` atlas/layout sync key strengthened:
+    - replaced `glyphCount`-only key with signature including phrase size and hashes of GPU layout buffers.
+- Camera/maths cleanup:
+  - `computeSceneCamera` no longer accepts `scroll`; camera cache in `LandscapeScene` now invalidates by viewport size only.
+  - Added explicit note in `LandscapeScene.resolveCamera()` for future cinematic motion: include motion phase/revision in cache key when camera animation is introduced.
+  - Replaced repeated `Math.tan(camera.fovY * 0.5)` in ray/projection helpers with cached `camera.tanHalfFovY`.
+- Dev UX and GL state hygiene:
+  - `LandscapePass` now precompiles debug shader variants (`beauty/ripple/normals/reflection`) once; debug mode switch no longer recompiles/disposes programs at runtime.
+  - `Program.setTexture` now handles `null` textures explicitly (bind + uniform), preventing potential stale texture state.
+- Docs sync:
+  - Updated `README.md` and `codex-system-prompt.md` camera-cache wording (`resize`-only recompute baseline).
+  - Added explicit instruction to keep git commit messages concise and factual.
+- Validation:
+  - `bun run check` passed.
+  - `bun run build` passed.
 
 ### 2026-04-04
 

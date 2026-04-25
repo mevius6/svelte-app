@@ -81,7 +81,7 @@ FinalColorPass (single linear → sRGB transfer)
 - **Title reflection fixes:** убрана белая рамка (`haloAlpha` не композируется), базовый цвет тайтла зафиксирован как DayGlo `#c9f08a` (в shader как linear-эквивалент), нормаль воды сглаживается перед reflection ray для title (`nTitle = mix(n, vec3(0,1,0), rippleStrength*0.70)`).
 - **Phase A — shore 1D texture:** `shoreFbm` (≈90 vnoise/пиксель воды) заменён на 1 texture fetch из `u_shoreProfileTex`. Новый файл: `src/lib/scene/shoreProfileBaker.ts`.
 - **Phase B — cloud reflection LOD:** `cloudDensity` принимает `detailLOD` флаг. Reflection path: `detailLOD=0.0` (экономия 3 vnoise/пиксель).
-- **Phase C — CPU caches:** `tanHalfFovY` перенесён в `SceneCameraState` (считается один раз в `computeSceneCamera`). Камера кэшируется в `LandscapeScene`, пересчёт только при resize/scroll.
+- **Phase C — CPU caches:** `tanHalfFovY` перенесён в `SceneCameraState` (считается один раз в `computeSceneCamera`). Камера кэшируется в `LandscapeScene`, пересчёт только при resize.
 - **Phase D (D1, in progress) — Wave normal LOD:** ripple-слой плавно затухает и отключается к `farField=0.75`; в `waveFieldWithMasks` добавлен ранний выход без `ripples`, `waveNormal` использует distance-based `eps`, interactive ripple-sampling пропускается при нулевой ripple-маске.
 - **Phase D tuning (визуальное сглаживание):** окно затухания `rippleLod` смещено на `smoothstep(0.66, 0.75, farField)`, а сила interactive ripple-normal теперь масштабируется `rippleNormalLod` от `rippleWaveMask` — меньше выраженный mid-distance ripple lane при сохранении ближней детализации.
 - **Phase E (E1, in progress) — Title glyph loop isolation:** для reflection-path добавлена предсобранная `phrase MSDF` texture; `landscape.frag` перешёл с 32-итерационного цикла по глифам на single-texture lookup по `localMetric`.
@@ -121,7 +121,7 @@ FinalColorPass (single linear → sRGB transfer)
 | `shoreFbm` на водный пиксель | ≈90 vnoise | 3 texture fetch |
 | Cloud reflection | 7 vnoise | 4 vnoise (detail пропущен) |
 | `tanHalfFovY` | `Math.tan()` 3× per frame | 1× в `computeSceneCamera` |
-| Camera recompute | каждый RAF | только при resize/scroll |
+| Camera recompute | каждый RAF | только при resize |
 | Title reflection glyph path | 32-глиф loop в `landscape.frag` | precomposed phrase MSDF texture + single lookup |
 
 ## Asset workflow
