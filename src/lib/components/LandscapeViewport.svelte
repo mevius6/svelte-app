@@ -16,11 +16,13 @@
   let scene: LandscapeScene | null = null
   let passView: PassDebugView = "final"
   let landscapeMode: SceneDebugState["landscapeMode"] = "beauty"
+  let glowEnabled: SceneDebugState["glowEnabled"] = true
 
   function applyDebugState() {
     scene?.setDebugState({
       passView,
       landscapeMode,
+      glowEnabled,
     })
   }
 
@@ -33,6 +35,11 @@
   function handleLandscapeModeChange(event: Event) {
     const nextValue = (event.currentTarget as HTMLSelectElement).value as SceneDebugState["landscapeMode"]
     landscapeMode = nextValue
+    applyDebugState()
+  }
+
+  function handleGlowEnabledChange(event: Event) {
+    glowEnabled = (event.currentTarget as HTMLInputElement).checked
     applyDebugState()
   }
 
@@ -82,6 +89,7 @@
         <option value="landscape">Landscape</option>
         <option value="vegetation">Vegetation</option>
         <option value="fog">Fog</option>
+        <option value="glow">Glow</option>
       </select>
     </label>
 
@@ -96,6 +104,15 @@
         <option value="normals">Normals</option>
         <option value="reflection">Reflection</option>
       </select>
+    </label>
+
+    <label class="debug-field debug-toggle">
+      <span>Title Glow</span>
+      <input
+        type="checkbox"
+        checked={glowEnabled}
+        on:change={handleGlowEnabledChange}
+      />
     </label>
   </div>
 {/if}
@@ -156,5 +173,17 @@
 
   .debug-field select:disabled {
     opacity: 0.5;
+  }
+
+  .debug-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .debug-toggle input {
+    inline-size: 1.1rem;
+    block-size: 1.1rem;
+    accent-color: #c9f08a;
   }
 </style>

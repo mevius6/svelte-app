@@ -20,6 +20,7 @@ Last updated: 2026-04-25
 | Phase E | Title glyph loop isolation from `landscape.frag` | In Progress | E1 landed: reflection path uses precomposed phrase MSDF texture (no per-pixel glyph loop). |
 | Phase F | Morning fog pass (dawn atmosphere) | In Progress | F1 landed: analytic height fog in `landscape.frag` + secondary fullscreen wisps pass. |
 | Phase G | Linear color pipeline + final display transfer | Done | `sceneColor` offscreen composition + `FinalColorPass` (`linear -> sRGB` once per frame). |
+| Phase H | Title glow pass (sunset bloom layer) | In Progress | `TitleGlowPass` added after `HeroTitlePass`; glow can be toggled from debug panel. |
 | Vegetation PoC | Shoreline full-coverage grass strip | In Progress | `BushesPass` now tests dense shoreline grass (1080 cards total) with seeded placement. |
 
 ## Change Log
@@ -47,6 +48,37 @@ Last updated: 2026-04-25
 - Validation:
   - `bun run check` passed.
   - `bun run build` passed.
+
+- Phase H started (title glow pass):
+  - Added `src/lib/shaders/title-glow.frag`:
+    - fullscreen world-ray projection onto title billboard;
+    - MSDF phrase-based halo layers (core/mid/outer) in linear space;
+    - reveal gate synced with title (`0.62 → 0.88`) + water emergence mask.
+  - Added `src/lib/passes/TitleGlowPass.ts`:
+    - additive blend mode (`SRC_ALPHA, ONE`) for final composition;
+    - debug isolate blend mode for `Pass=Glow`;
+    - consumes `u_titlePhraseTex` + atlas pxRange metadata.
+  - Updated `LandscapeScene` pipeline/order:
+    - `LandscapePass → BushesPass → MorningFogPass → HeroTitlePass → TitleGlowPass → FinalColorPass`.
+    - Added debug state fields: `passView="glow"` and `glowEnabled`.
+  - Updated debug UI in `LandscapeViewport.svelte`:
+    - new `Pass=Glow` mode;
+    - new `Title Glow` toggle.
+  - Phase H hotfixes (glow mask correctness + visibility):
+    - rectangular slab artifact fixed: glow mask now derives glyph influence from blurred MSDF coverage
+      (median RGB distance), so glow follows letter shapes instead of filling billboard rectangle;
+    - low-visibility regression fixed: removed dependence on atlas alpha for occupancy, increased halo radii
+      and composition weights in `title-glow.frag` to restore visible evening glow.
+  - Phase H quality refactor (anti-jagged glow):
+    - replaced single-pass pseudo blur with multi-pass bloom-style chain inside `TitleGlowPass`:
+      - source generation (`title-glow.frag`) from MSDF phrase coverage;
+      - separable gaussian blur (`post/title-glow-blur.frag`) with multiple radii in ping-pong buffers;
+      - layered additive composite (`post/title-glow-composite.frag`).
+    - moved blur into dedicated internal low-res buffers (0.75 scale) to improve smoothness/quality ratio.
+  - Synced baseline docs (`README.md`, `codex-system-prompt.md`) for new pass order.
+  - Validation:
+    - `bun run check` passed.
+    - `bun run build` passed.
 
 ### 2026-04-04
 

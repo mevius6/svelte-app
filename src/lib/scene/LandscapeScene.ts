@@ -3,6 +3,7 @@ import { LandscapePass, type LandscapeDebugMode } from "../passes/LandscapePass"
 import { BushesPass } from "../passes/BushesPass"
 import { HeroTitlePass } from "../passes/HeroTitlePass"
 import { MorningFogPass } from "../passes/MorningFogPass"
+import { TitleGlowPass } from "../passes/TitleGlowPass"
 import { FinalColorPass } from "../passes/FinalColorPass"
 import { FBO } from "../gl/FBO"
 import { LandscapeResources, type FoliageAtlasSourceSet } from "./LandscapeResources"
@@ -31,11 +32,12 @@ const DEFAULT_FOLIAGE_ATLAS_SOURCES: FoliageAtlasSourceSet = {
 const DROP_THROTTLE_MS = 45
 const VEGETATION_DEBUG_CLEAR: [number, number, number, number] = [0.03, 0.04, 0.06, 1.0]
 
-export type PassDebugView = "final" | "ripple" | "landscape" | "vegetation" | "fog"
+export type PassDebugView = "final" | "ripple" | "landscape" | "vegetation" | "fog" | "glow"
 
 export type SceneDebugState = {
   passView: PassDebugView
   landscapeMode: Exclude<LandscapeDebugMode, "ripple">
+  glowEnabled: boolean
 }
 
 export class LandscapeScene implements Scene {
@@ -49,6 +51,7 @@ export class LandscapeScene implements Scene {
   private bushes: BushesPass
   private morningFog: MorningFogPass
   private heroTitle: HeroTitlePass
+  private titleGlow: TitleGlowPass
   private finalColor: FinalColorPass
   private resources: LandscapeResources
   private sceneColor: FBO | null = null
@@ -65,6 +68,7 @@ export class LandscapeScene implements Scene {
   private initialized = false
   private passView: PassDebugView = "final"
   private landscapeMode: Exclude<LandscapeDebugMode, "ripple"> = "beauty"
+  private glowEnabled = true
 
   private readonly scrollHandler = () => {
     const max = document.body.scrollHeight - window.innerHeight
@@ -110,6 +114,7 @@ export class LandscapeScene implements Scene {
     this.bushes = new BushesPass(gl)
     this.morningFog = new MorningFogPass(gl)
     this.heroTitle = new HeroTitlePass(gl, projectName)
+    this.titleGlow = new TitleGlowPass(gl)
     this.finalColor = new FinalColorPass(gl)
     this.resources = new LandscapeResources(gl)
   }
@@ -141,6 +146,7 @@ export class LandscapeScene implements Scene {
     this.bushes.resize(width, height)
     this.morningFog.resize(width, height)
     this.heroTitle.resize(width, height)
+    this.titleGlow.resize(width, height)
     this.finalColor.resize(width, height)
 
     this.sceneColor?.dispose()
@@ -154,6 +160,10 @@ export class LandscapeScene implements Scene {
 
     if (state.landscapeMode) {
       this.landscapeMode = state.landscapeMode
+    }
+
+    if (state.glowEnabled !== undefined) {
+      this.glowEnabled = state.glowEnabled
     }
   }
 
@@ -209,6 +219,17 @@ export class LandscapeScene implements Scene {
       atlas: heroTitleAtlas,
       gpuLayout: heroTitleAtlasRenderData?.gpuLayout ?? null,
     })
+    this.titleGlow.setFrameState({
+      enabled: this.glowEnabled && useGlyphTitle,
+      debugIsolate: this.passView === "glow",
+      camera,
+      phase: this.scrollNorm,
+      waterLevel: WATER_LEVEL,
+      titleHero,
+      phraseTexture: heroTitleAtlasRenderData?.phraseTexture ?? null,
+      phraseTextureSize: heroTitleAtlasRenderData?.phraseTextureSize ?? { width: 1, height: 1 },
+      titleAtlasPxRange: heroTitleAtlasRenderData?.atlas.font.atlas.distanceRange ?? 4,
+    })
 
     if (this.passView === "ripple") {
       this.landscape.setDebugMode("ripple")
@@ -245,10 +266,18 @@ export class LandscapeScene implements Scene {
       return
     }
 
+    if (this.passView === "glow") {
+      this.gl.clearColor(0.0, 0.0, 0.0, 1.0)
+      this.gl.clear(this.gl.COLOR_BUFFER_BIT)
+      this.titleGlow.render(time, null)
+      return
+    }
+
     const shouldRenderHeroTitle =
       useGlyphTitle &&
       (this.passView === "final" ||
         (this.passView === "landscape" && this.landscapeMode === "beauty"))
+    const shouldRenderTitleGlow = this.glowEnabled && shouldRenderHeroTitle
 
     if (this.passView === "landscape" && this.landscapeMode !== "beauty") {
       this.landscape.setDebugMode(this.landscapeMode)
@@ -269,7 +298,7 @@ export class LandscapeScene implements Scene {
     this.gl.clear(this.gl.COLOR_BUFFER_BIT)
 
     // AI: renderer uses painter's algorithm (depth test disabled), so pass order defines layering.
-    // Final chain: landscape → bushes → morningFog → heroTitle.
+    // Final chain: landscape → bushes → morningFog → heroTitle → titleGlow.
     this.landscape.setDebugMode("beauty")
     this.landscape.render(time, rippleTex)
 
@@ -298,6 +327,9 @@ export class LandscapeScene implements Scene {
     if (shouldRenderHeroTitle) {
       this.heroTitle.render(time, null)
     }
+    if (shouldRenderTitleGlow) {
+      this.titleGlow.render(time, null)
+    }
 
     this.setSceneOutputFramebuffer(null)
     this.finalColor.setOutputFramebuffer(null)
@@ -316,6 +348,7 @@ export class LandscapeScene implements Scene {
     this.bushes.dispose()
     this.morningFog.dispose()
     this.heroTitle.dispose()
+    this.titleGlow.dispose()
     this.finalColor.dispose()
     this.ripple.dispose()
     this.resources.dispose()
@@ -330,6 +363,7 @@ export class LandscapeScene implements Scene {
     this.bushes.setOutputFramebuffer(framebuffer)
     this.morningFog.setOutputFramebuffer(framebuffer)
     this.heroTitle.setOutputFramebuffer(framebuffer)
+    this.titleGlow.setOutputFramebuffer(framebuffer)
   }
 
   private pointerToRippleUV(clientX: number, clientY: number) {

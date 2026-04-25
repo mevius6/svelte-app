@@ -15,7 +15,7 @@
 - resource layer: `src/lib/scene/LandscapeResources.ts` — владеет загрузкой и жизненным циклом GPU-ресурсов: title-texture, foliage PBR atlas, fallback ripple texture, **shore profile 1D texture**.
 - baker layer: `src/lib/scene/shoreProfileBaker.ts` — **новый файл.** Запекает `shoreFbm` (5 октав, 3 seed-набора) в 512×1 RGBA32F текстуру при старте. R=baselineSilhouette, G=bankNoise, B=shelfNoiseSrc.
 - framing layer: `src/lib/scene/sceneFraming.ts` — общая scene-space framing-модель.
-- pass layer: `RipplePass` → `LandscapePass` → `BushesPass` → `MorningFogPass` → `HeroTitlePass` → `FinalColorPass`.
+- pass layer: `RipplePass` → `LandscapePass` → `BushesPass` → `MorningFogPass` → `HeroTitlePass` → `TitleGlowPass` → `FinalColorPass`.
 - GL layer: `src/lib/gl/` — `Program`, `FullscreenQuad`, `FBO`, `DoubleFBO`, `Context`.
 
 ## Активный render pipeline
@@ -25,13 +25,13 @@ Simulation:
 RipplePass
 
 Linear scene composition (offscreen sceneColor FBO):
-LandscapePass → BushesPass → MorningFogPass → HeroTitlePass
+LandscapePass → BushesPass → MorningFogPass → HeroTitlePass → TitleGlowPass
 
 Display output:
 FinalColorPass (single linear → sRGB transfer)
 ```
 
-**Важно:** depth test отключён (painter's algorithm), поэтому порядок слоёв внутри `sceneColor` фиксирован: `landscape → bushes → morningFog → heroTitle`.
+**Важно:** depth test отключён (painter's algorithm), поэтому порядок слоёв внутри `sceneColor` фиксирован: `landscape → bushes → morningFog → heroTitle → titleGlow`.
 `FinalColorPass` выполняется последним и только переводит линейный цвет в display-space.
 
 ## Архитектурные принципы
@@ -40,7 +40,7 @@ FinalColorPass (single linear → sRGB transfer)
 - `Renderer` — runtime lifecycle, не содержит scene-специфичной логики.
 - `LandscapeScene` — координатор input, frame state, порядка проходов. Не контейнер GPU-ресурсов.
 - `LandscapeResources` — владение созданием, загрузкой и освобождением GPU-ресурсов.
-- Один pass — одна роль: simulation, landscape shading, vegetation, atmosphere, title.
+- Один pass — одна роль: simulation, landscape shading, vegetation, atmosphere, title, glow.
 - Ripple влияет на нормали воды, не на цвет напрямую.
 - **scroll = время суток**, а не движение камеры или тайтла.
 
@@ -90,6 +90,8 @@ FinalColorPass (single linear → sRGB transfer)
 - **Phase F (F1) — Analytic height fog:** в `landscape.frag` добавлен экспоненциальный height fog через оптическую толщину `tau` и трансмиттанс `T=exp(-tau)`, с корректным композитингом `scene*T + fog*(1-T)`; тайтл туманится по своему `tTitle`.
   Важный нюанс для non-constant density: фактор тумана должен быть `1 - exp(-tau)`, а не сырое `tau`.
 - **Phase G — Linear color pipeline:** финальная сцена теперь композится в линейном `sceneColor` FBO, после чего единоразово проходит через `FinalColorPass` (`linear -> sRGB`). Ранняя display-gamma удалена из `landscape.frag` (`tonemap` остался в linear).
+- **Phase H (in progress) — Title glow pass:** добавлен отдельный fullscreen post-pass `TitleGlowPass` после `HeroTitlePass` (до `FinalColorPass`), glow строится по precomposed phrase MSDF (`u_titlePhraseTex`) и включается/отключается из dev debug panel.
+  Внутри pass применена схема `source -> separable blur (multi-pass) -> layered additive composite` (по мотивам GM Mini Bloom/Blur Philosophy) для устранения рваного/гребенчатого свечения.
 - **Vegetation PoC refinement:** береговая трава переведена с равномерной полосы на кластерную раскладку с просветами и центральным readability-коридором за тайтлом; в `bushes.frag` добавлен horizon/distance fade (меньше “пилы” на горизонте).
 - **Vegetation + fog integration:** трава теперь дополнительно туманится в `bushes.frag` (phase + distance + height), а `MorningFogPass` получил сглаживание horizon-core, чтобы убрать белую линию на переходе горизонт/берег.
 
@@ -101,7 +103,7 @@ FinalColorPass (single linear → sRGB transfer)
 2. **Phase E — Title glyph loop isolation (finish):** довести E1 до stable baseline: проверить визуальный паритет reflection-path и при необходимости подстроить резкость/pxRange для `u_titlePhraseTex`.
 3. **Vegetation quality:** atlas silhouette variety, density clustering, layering. Текущий PoC baseline: один atlas region `grass-clump-main`, shoreline strip `90` колонок × `4` ряда × `3` карточки (seeded RNG).
 4. **Phase F — Morning fog tuning:** откалибровать вертикальный профиль/контраст и точку dissipation по арт-референсам, не ухудшая читаемость тайтла.
-5. **Bloom/post-process pass:** если title потребует свечение — отдельный pass, не shader halo.
+5. **Title glow tuning:** откалибровать интенсивность/радиусы/палитру `TitleGlowPass` по арт-референсам, проверить паритет в режимах `Final` и `Pass=Glow`.
 6. **Phase 3 selective SDF/volumetrics:** только после стабилизации всего выше.
 
 ## Трекинг статуса фаз
@@ -164,6 +166,7 @@ src/lib/
     BushesPass.ts
     MorningFogPass.ts
     HeroTitlePass.ts
+    TitleGlowPass.ts
     FinalColorPass.ts
 
   shaders/
@@ -175,7 +178,10 @@ src/lib/
     morning-fog.frag
     hero-title.vert
     hero-title.frag
+    title-glow.frag
     post/
+      title-glow-blur.frag
+      title-glow-composite.frag
       final-color.frag
 
 scripts/

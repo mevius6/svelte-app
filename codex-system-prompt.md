@@ -38,7 +38,7 @@ You are an AI pair-programmer working in a WebGL2 creative-coding project built 
 src/lib/
   gl/           Program.ts, FullscreenQuad.ts, FBO.ts, DoubleFBO.ts, Context.ts, texture.ts
   render/       Renderer.ts, RenderPass.ts
-  passes/       RipplePass.ts, LandscapePass.ts, BushesPass.ts, MorningFogPass.ts, HeroTitlePass.ts, FinalColorPass.ts
+  passes/       RipplePass.ts, LandscapePass.ts, BushesPass.ts, MorningFogPass.ts, HeroTitlePass.ts, TitleGlowPass.ts, FinalColorPass.ts
   scene/        LandscapeScene.ts, sceneCamera.ts, LandscapeResources.ts,
                 sceneFraming.ts, shoreProfileBaker.ts
 ```
@@ -50,13 +50,13 @@ Simulation:
 RipplePass
 
 Linear composition (offscreen sceneColor FBO):
-LandscapePass → BushesPass → MorningFogPass → HeroTitlePass
+LandscapePass → BushesPass → MorningFogPass → HeroTitlePass → TitleGlowPass
 
 Display output:
 FinalColorPass (single linear → sRGB transfer)
 ```
 
-**Order is intentional.** Depth test is disabled (painter's algorithm). `MorningFogPass` stays before `HeroTitlePass` so title remains crisp over atmosphere, then `FinalColorPass` runs last for display transfer.
+**Order is intentional.** Depth test is disabled (painter's algorithm). `MorningFogPass` stays before `HeroTitlePass` so title remains crisp over atmosphere; `TitleGlowPass` runs right after title in linear space, then `FinalColorPass` handles display transfer.
 
 ## 4. Current scene baseline (April 2026)
 
@@ -76,6 +76,8 @@ FinalColorPass (single linear → sRGB transfer)
 - **Phase A:** `shoreFbm` (~90 vnoise/water-pixel) → `u_shoreProfileTex` (512×1 RGBA32F, 3 texture fetches). New file: `src/lib/scene/shoreProfileBaker.ts`.
 - **Phase B:** `cloudDensity(detailLOD)` — reflection path uses `detailLOD=0.0`, saving 3 vnoise/pixel. Direct sky: `detailLOD=1.0`.
 - **Phase C:** `tanHalfFovY` in `SceneCameraState` (computed once). Camera cached in `LandscapeScene`. Glyph uniforms (256 floats) upload only on atlas change.
+- **Phase H (in progress):** `TitleGlowPass` added as separate fullscreen glow layer after `HeroTitlePass`, sampling precomposed phrase MSDF texture (`u_titlePhraseTex`), with debug toggle support.
+  Quality baseline: inside `TitleGlowPass`, use `source -> separable blur (multi-pass) -> layered additive composite` to avoid jagged/comb-like glow artifacts.
 - **Title reflection fixes:** no haloAlpha compositing (white border eliminated), title base hue locked to DayGlo `#c9f08a` (stored in shaders as linear equivalent), normal smoothed before reflection ray: `nTitle = mix(n, vec3(0,1,0), rippleStrength*0.70)`.
 - **Vegetation strip PoC:** `BushesPass` now builds shoreline-wide grass coverage (`90` columns × `4` rows × `3` cards = `1080` instances) with seeded RNG for deterministic hot-reloads.
 - **Vegetation + fog integration:** grass now applies phase/distance/height fog in `bushes.frag`; fullscreen fog horizon core in `morning-fog.frag` is smoothed to avoid bright shoreline seam.
@@ -92,7 +94,7 @@ FinalColorPass (single linear → sRGB transfer)
 3. **`SceneCameraState` must include `tanHalfFovY`** — all three default camera literals in `BushesPass.ts`, `HeroTitlePass.ts`, `LandscapePass.ts` must include `tanHalfFovY: Math.tan(Math.PI / 8)`.
 4. **`cloudDensity` signature:** `(uv, t, phase01, out base, detailLOD)` — 5 parameters. Direct sky calls: `detailLOD=1.0`. Reflection calls: `detailLOD=0.0`.
 5. **`shadeSkyDirection` signature:** `(dir, phase01, sunCol, sunDir, cloudDetail)` — 5 parameters.
-6. **Render order:** `landscape → bushes → morningFog → heroTitle`. Do not reorder.
+6. **Render order:** `landscape → bushes → morningFog → heroTitle → titleGlow`. Do not reorder.
 7. **No baseLift in title:** `computeTitleHeroState` Y is fixed: `WATER_LEVEL + height * 0.5 + 0.06`.
 8. **Texture units in LandscapePass:** 0=textTex, 1=rippleTex, 3=shoreProfileTex, 4=titlePhraseTex (unit 2 currently free).
 9. **Landscape title reflection path:** use `u_titlePhraseTex` sampling by local metric; do not reintroduce per-fragment glyph loops in `landscape.frag`.
@@ -163,11 +165,11 @@ vec3 reflDirTitle = normalize(reflect(-viewDir, nTitle));
 
 ## 10. What NOT to do
 
-- Do not add new full-screen passes beyond `MorningFogPass` and `FinalColorPass` without explicit request.
+- Do not add new full-screen passes beyond `MorningFogPass`, `TitleGlowPass`, and `FinalColorPass` without explicit request.
 - Do not reintroduce `shoreFbm` inline in `landscape.frag`.
 - Do not add `Math.tan()` calls per-frame in render passes.
 - Do not set `cloudDetail=1.0` in reflection paths.
-- Do not change render order (landscape → bushes → morningFog → heroTitle).
+- Do not change render order (landscape → bushes → morningFog → heroTitle → titleGlow).
 - Do not add `baseLift` animation back to title.
 - Do not use scroll to drive camera orbit.
 
