@@ -1,6 +1,6 @@
 # Render Status Log
 
-Last updated: 2026-04-25
+Last updated: 2026-04-26
 
 ## Current Vector
 
@@ -16,14 +16,131 @@ Last updated: 2026-04-25
 | Phase A | Shore profile baking (`u_shoreProfileTex`) instead of `shoreFbm` | Done | `landscape.frag` switched to texture lookups (R/G/B channels). |
 | Phase B | Cloud reflection LOD (`detailLOD`) + solar drift | Done | Reflection path uses low detail (`0.0`), sky path full detail (`1.0`). |
 | Phase C | CPU-side caching and redundant upload removal | Done | Camera/tanHalfFovY caches are active. |
-| Phase D | Wave normal LOD for far field | In Progress | D1 landed: ripple far-field cutoff + distance-based normal `eps`; visual tuning continues. |
+| Phase D | Wave normal LOD for far field | In Progress | D2 landed: wider ripple fade window, far-field-stabilized `eps`, decoupled interactive ripple mask, `Wave LOD` debug overlay. |
 | Phase E | Title glyph loop isolation from `landscape.frag` | In Progress | E1 landed: reflection path uses precomposed phrase MSDF texture (no per-pixel glyph loop). |
 | Phase F | Morning fog pass (dawn atmosphere) | In Progress | F1 landed: analytic height fog in `landscape.frag` + secondary fullscreen wisps pass. |
 | Phase G | Linear color pipeline + final display transfer | Done | `sceneColor` offscreen composition + `FinalColorPass` (`linear -> sRGB` once per frame). |
 | Phase H | Title glow pass (sunset bloom layer) | In Progress | `TitleGlowPass` added after `HeroTitlePass`; glow can be toggled from debug panel. |
 | Vegetation PoC | Shoreline full-coverage grass strip | In Progress | `BushesPass` now tests dense shoreline grass (1080 cards total) with seeded placement. |
 
+## Phase D Visual QA
+
+Use this quick checklist to decide when Phase D can be moved from `In Progress` to `Done`.
+
+- Required debug views:
+  - `Pass=Landscape`, cycle: `Beauty -> Wave LOD -> Normals -> Reflection`.
+  - In `Wave LOD` view validate channel meaning:
+    - `R=farField`,
+    - `G=rippleLod`,
+    - `B=interactiveRippleMask`.
+- Required scroll checkpoints:
+  - `phase=0.00`, `0.25`, `0.50`, `0.75`, `1.00`.
+- Required spatial checks (each checkpoint):
+  - Near water (lower screen): interaction remains responsive and detailed.
+  - Mid water (screen center): no visible "ripple lane" band.
+  - Far water/horizon band: no hard cutoff stripe, calm transition is smooth.
+- Interactive ripple checks:
+  - Trigger 3-5 pointer drops in near/mid/far reachable water.
+  - Expectation:
+    - near = strong readable perturbation,
+    - mid = soft attenuation without abrupt stop,
+    - far = stable, non-noisy response (no horizon shimmer bursts).
+- Reflection/normal stability checks:
+  - `Normals`: no high-frequency shimmer or crawling noise near horizon.
+  - `Reflection`: sun track/title reflection remain stable without jagged temporal flicker.
+- Regression guard checks:
+  - Shoreline contact still reads correctly (no new gap/lip artifacts).
+  - Shallow calm-band behavior remains intact.
+  - Title reflection readability is not degraded by D-phase tuning.
+  - Morning fog layering remains visually unchanged.
+
+### Phase D Done Criteria
+
+Mark Phase D as `Done` only if all criteria hold across all required checkpoints:
+
+- No visible mid-distance ripple lane in `Beauty`.
+- No noticeable horizon shimmer in `Normals`/`Reflection`.
+- `Wave LOD` debug channels transition continuously (no step-like bands).
+- Interactive ripple attenuation is distance-consistent (no abrupt mid-pond dropout).
+- No regressions in shoreline contact, title reflection readability, or fog layering.
+
 ## Change Log
+
+### 2026-04-26
+
+- Phase D tuning pass (minimal patch-set, no cross-phase changes):
+  - In `landscape.frag`, centralized Phase D controls into explicit constants:
+    - `WAVE_LOD_NEAR_DIST/FAR_DIST`,
+    - `RIPPLE_FADE_START/END`,
+    - `WAVENORMAL_EPS_NEAR/FAR`.
+  - Expanded ripple fade transition to reduce visible mid-distance lane:
+    - `rippleLod = 1.0 - smoothstep(0.58, 0.82, farField)`.
+  - Updated `waveNormal` finite-difference behavior:
+    - `eps` now grows toward far field (stability-oriented derivative sampling for horizon/reflection calmness).
+  - Decoupled interactive ripple-normal attenuation from base ripple-wave mask:
+    - introduced `interactiveRippleMask` and mapped `rippleNormalLod` to it.
+  - Added dedicated debug path for Phase D tuning:
+    - new shader define `DEBUG_WAVE_LOD`,
+    - `Landscape` debug mode now includes `Wave LOD` view (`R=farField`, `G=rippleLod`, `B=interactiveRippleMask`).
+  - Synced docs baseline:
+    - `README.md`,
+    - `codex-system-prompt.md`.
+- Validation:
+  - `bun run check` passed.
+  - `bun run build` passed.
+
+- Time-of-day extension + night glow coupling:
+  - Added explicit post-sunset night behavior in `landscape.frag`:
+    - `nightPhase(phase)` mask (`0.84..1.0`) now darkens sky and attenuates sun contribution after sunset.
+  - Retuned glow timing/intensity to night window:
+    - `title-glow.frag` now gates glow by `titleReveal * nightGlowReveal`,
+    - `post/title-glow-composite.frag` adds night-phase boost for glow energy/alpha.
+  - Added reflected title glow on water in `landscape.frag`:
+    - billboard and phrase reflection paths now include a night-only glow contribution blended into `skyRefl`.
+  - Synced baseline docs:
+    - `README.md`,
+    - `codex-system-prompt.md`.
+- Validation:
+  - `bun run check` passed.
+  - `bun run build` passed.
+
+- Night regression hotfix (reflection framing + sunset shoreline palette):
+  - Removed rectangular/contour framing artifact in reflected glow path:
+    - in `sampleTitlePhraseReflectionCoverage`, added phrase-UV edge fade (`uvEdgeFade`) and contour-only halo shaping;
+    - phrase reflection night-glow now uses halo-only mask (no fill-driven rectangle contribution).
+  - Delayed night onset to preserve late sunset shoreline/underwater tones:
+    - `nightPhase` and glow night boosts moved from `~0.84..1.0` to `~0.92..1.0`.
+  - Synced docs wording to new thresholds and anti-frame behavior:
+    - `README.md`,
+    - `codex-system-prompt.md`.
+- Validation:
+  - `bun run check` passed.
+  - `bun run build` passed.
+
+- Night shoreline color hotfix (visual water-retreat regression):
+  - In `landscape.frag`, added `applyNightGrade(...)` helper and applied it to:
+    - `bankMaterialBase(...)`,
+    - shoreline contact palette (`bankShadow`, `shallowShelfTint`, `wetEdgeTint`) in shore path,
+    - underwater shelf/edge palette in water path.
+  - Goal: remove bright sandy shoreline carry-over in night phase and restore shoreline-water continuity.
+- Validation:
+  - `bun run check` passed.
+  - `bun run build` passed.
+
+- Night reflection/glow + moonlight pass tuning:
+  - In `landscape.frag`, refined reflected title glow composition:
+    - billboard path now uses edge-weighted glow alpha (less flat fill),
+    - phrase path boosts contour-halo contribution while keeping UV-edge suppression.
+  - Added dedicated moonlight water track (night-gated):
+    - `moonDirection(...)` helper,
+    - cool moon reflection/specular terms parallel to sun-track model,
+    - shoreline attenuation preserved to avoid bright contact seams.
+  - Synced baseline docs:
+    - `README.md`,
+    - `codex-system-prompt.md`.
+- Validation:
+  - `bun run check` passed.
+  - `bun run build` passed.
 
 ### 2026-04-25
 

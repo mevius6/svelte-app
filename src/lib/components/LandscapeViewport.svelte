@@ -103,6 +103,7 @@
         <option value="beauty">Beauty</option>
         <option value="normals">Normals</option>
         <option value="reflection">Reflection</option>
+        <option value="waveLod">Wave LOD</option>
       </select>
     </label>
 

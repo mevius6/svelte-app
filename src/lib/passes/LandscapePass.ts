@@ -6,7 +6,7 @@ import type { HeroTitleAtlasRenderData } from "../scene/LandscapeResources"
 import landscapeVert from "../shaders/landscape.vert?raw"
 import landscapeFrag from "../shaders/landscape.frag?raw"
 
-export type LandscapeDebugMode = "beauty" | "ripple" | "normals" | "reflection"
+export type LandscapeDebugMode = "beauty" | "ripple" | "normals" | "reflection" | "waveLod"
 
 type LandscapeFrameState = {
   camera: SceneCameraState
@@ -80,6 +80,7 @@ export class LandscapePass extends RenderPass {
       ripple: this.createProgram("ripple"),
       normals: this.createProgram("normals"),
       reflection: this.createProgram("reflection"),
+      waveLod: this.createProgram("waveLod"),
     }
     this.quad = new FullscreenQuad(gl)
   }
@@ -224,6 +225,9 @@ export class LandscapePass extends RenderPass {
       defines.push("DEBUG_NORMALS")
     } else if (mode === "reflection") {
       defines.push("DEBUG_REFLECTION")
+    } else if (mode === "waveLod") {
+      // AI: Phase D debug mode to inspect distance-based water LOD masks.
+      defines.push("DEBUG_WAVE_LOD")
     }
 
     return new Program(this.gl, landscapeVert, injectShaderDefines(landscapeFrag, defines))

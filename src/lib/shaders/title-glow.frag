@@ -44,6 +44,11 @@ float titleReveal(float phase01) {
     return smoothstep(0.62, 0.88, clamp(phase01, 0.0, 1.0));
 }
 
+float nightGlowReveal(float phase01) {
+    // AI: glow becomes visible after sunset and reaches full intensity in night phase.
+    return smoothstep(0.92, 1.0, clamp(phase01, 0.0, 1.0));
+}
+
 float titlePhraseScreenPxRange(vec2 phraseUv) {
     vec2 unitRange = vec2(u_titleAtlasPxRange) / max(u_titlePhraseTexSize, vec2(1.0));
     vec2 screenTexSize = vec2(1.0) / max(fwidth(phraseUv), vec2(1e-5));
@@ -97,7 +102,7 @@ void main() {
     float sdPx = signedDistance * pxRange; // >0 inside, <0 outside
     float fill = clamp(sdPx + 0.5, 0.0, 1.0);
 
-    float reveal = titleReveal(u_phase);
+    float reveal = titleReveal(u_phase) * nightGlowReveal(u_phase);
     float emergence = smoothstep(u_waterLevel - 0.012, u_waterLevel + 0.034, hitPos.y);
     float mask = reveal * emergence;
     if (mask <= 0.001) {
@@ -112,6 +117,7 @@ void main() {
     float outerBand = (1.0 - smoothstep(-0.34, -0.08, signedDistance)) * exp(min(sdPx, 0.0) * 0.85);
     float edge = clamp(edgeBand + outerBand * 0.5, 0.0, 1.0);
     float sunsetT = smoothstep(0.70, 1.0, u_phase);
+    float nightT = nightGlowReveal(u_phase);
     vec3 coreCol = LIME_LINEAR;
     vec3 warmCol = mix(
         LIME_LINEAR * vec3(0.90, 0.96, 0.78),
@@ -119,10 +125,11 @@ void main() {
         sunsetT
     );
     vec3 rimCol = mix(coreCol * 0.76, SKY_COOL * 0.78 + AMBER_LINEAR * 0.22, edge * 0.72);
-    vec3 seedCol = mix(coreCol * 0.86, warmCol * 0.92, 0.30 + edge * 0.42) * 0.64 + rimCol * 0.36;
-    float coreSeed = pow(fill, 3.1) * 0.020;
-    float rimSeed = edgeBand * 0.34;
-    float outerSeed = outerBand * 0.16;
+    vec3 seedCol = mix(coreCol * 0.84, warmCol * 0.96, 0.34 + edge * 0.44) * 0.60 + rimCol * 0.40;
+    seedCol = mix(seedCol, warmCol * 0.86 + AMBER_LINEAR * 0.14, nightT * 0.62);
+    float coreSeed = pow(fill, 3.1) * mix(0.018, 0.026, nightT);
+    float rimSeed = edgeBand * mix(0.32, 0.46, nightT);
+    float outerSeed = outerBand * mix(0.16, 0.28, nightT);
     float seedAlpha = clamp((coreSeed + rimSeed + outerSeed) * nearGlyph * mask, 0.0, 0.42);
     fragColor = vec4(seedCol * seedAlpha, clamp(seedAlpha, 0.0, 1.0));
 }

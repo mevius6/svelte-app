@@ -62,6 +62,7 @@ FinalColorPass (single linear → sRGB transfer)
 
 ### Scene model
 - `scroll` = time of day (0=dawn, 1=dusk). Clouds and sun move together via `solarDrift = vec2(phase01 * 0.42, phase01 * 0.06)` in `cloudDensity`.
+- Time-of-day scroll now includes post-sunset night window (`phase ~0.92..1.0`) for darker sky/sun attenuation and nocturnal title glow behavior, while preserving late-sunset palette.
 - Title reveal is sunset-driven: direct fade window `0.62→0.88`, reflection `0.67→0.93`.
 - Morning fog POC is dawn-driven and dissipates before title reveal: `FOG_DISSIPATE_START=0.38`, `FOG_DISSIPATE_END=0.58`.
 - Morning fog F1 uses analytic exponential height fog in `landscape.frag` (`tau` + `T=exp(-tau)`), with title fogged at `tTitle` (not shoreline depth).
@@ -78,13 +79,15 @@ FinalColorPass (single linear → sRGB transfer)
 - **Phase C:** `tanHalfFovY` in `SceneCameraState` (computed once). Camera cached in `LandscapeScene`. Glyph uniforms (256 floats) upload only on atlas change.
 - **Phase H (in progress):** `TitleGlowPass` added as separate fullscreen glow layer after `HeroTitlePass`, sampling precomposed phrase MSDF texture (`u_titlePhraseTex`), with debug toggle support.
   Quality baseline: inside `TitleGlowPass`, use `source -> separable blur (multi-pass) -> layered additive composite` to avoid jagged/comb-like glow artifacts.
+- Night glow baseline: title glow reveal is night-gated (`smoothstep(0.92, 1.0, phase)`), and water reflection in `landscape.frag` receives a dedicated night glow component tied to title reflection masks with phrase-UV edge suppression to avoid rectangular framing artifacts.
+- Night water-light baseline: keep a separate moon specular contribution in water shading (reflection + glint terms), gated by night phase and attenuated near shoreline contact, so nocturnal highlights read as a cool light track rather than warm sunset carry-over.
 - **Title reflection fixes:** no haloAlpha compositing (white border eliminated), title base hue locked to DayGlo `#c9f08a` (stored in shaders as linear equivalent), normal smoothed before reflection ray: `nTitle = mix(n, vec3(0,1,0), rippleStrength*0.70)`.
 - **Vegetation strip PoC:** `BushesPass` now builds shoreline-wide grass coverage (`90` columns × `4` rows × `3` cards = `1080` instances) with seeded RNG for deterministic hot-reloads.
 - **Vegetation + fog integration:** grass now applies phase/distance/height fog in `bushes.frag`; fullscreen fog horizon core in `morning-fog.frag` is smoothed to avoid bright shoreline seam.
 - **Phase F (in progress):** `MorningFogPass` added as separate fullscreen atmosphere layer with explicit tuning constants in `morning-fog.frag`.
 
 ### Pending optimizations (do not regress)
-- **Phase D (in progress):** wave normal LOD — ripple fades via `smoothstep(0.66, 0.75, farField)` and reaches zero by `farField=0.75`; `waveNormal` uses distance-based `eps`; interactive ripple-normal is scaled by ripple LOD.
+- **Phase D (in progress):** wave normal LOD — tuning anchors are centralized in shader constants (`WAVE_LOD_*`, `RIPPLE_FADE_*`, `WAVENORMAL_EPS_*`); ripple fades via wider `smoothstep(0.58, 0.82, farField)`; `waveNormal` increases finite-difference `eps` toward far field for stability; interactive ripple-normal uses dedicated `interactiveRippleMask`.
 - **Phase E (in progress):** reflection path moved to precomposed phrase MSDF texture (`u_titlePhraseTex`) in `landscape.frag`; continue visual parity tuning and cleanup.
 
 ## 5. Key invariants — never break these
@@ -116,7 +119,7 @@ Shore data now comes from `u_shoreProfileTex` — do NOT reintroduce inline `sho
 
 Cloud reflection uses `detailLOD=0.0` — do NOT restore `cloudDetailFbm` in reflection path.
 
-Phase D baseline now includes ripple LOD in far field and distance-based `eps` for `waveNormal` — keep transitions smooth to avoid horizon popping.
+Phase D baseline now includes ripple LOD in far field, distance-based `eps` for `waveNormal`, and a dedicated `DEBUG_WAVE_LOD` view (`R=farField`, `G=rippleLod`, `B=interactiveRippleMask`) — keep transitions smooth to avoid horizon popping.
 
 Phase E baseline: title reflection in `landscape.frag` samples precomposed phrase MSDF texture (`u_titlePhraseTex`) by local metric; no inline per-glyph loops.
 
