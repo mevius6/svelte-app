@@ -38,10 +38,17 @@ uniform float     u_shorePlaneZ;
 // Scene is composed in linear space; this constant is pre-converted linear.
 const vec3 TITLE_DAYGLO_LINEAR = vec3(0.584078418, 0.871367119, 0.254152094);
 const vec3 TITLE_GLOW_AMBER_LINEAR = vec3(0.86, 0.50, 0.20);
+const vec3 MOONLIGHT_LINEAR = vec3(0.58, 0.66, 0.92);
 
 float nightPhase(float phase01) {
     // AI: keep late-sunset palette intact; enter night only in the final scroll tail.
     return smoothstep(0.92, 1.0, clamp(phase01, 0.0, 1.0));
+}
+
+float moonPhase(float phase01) {
+    // AI: moon appears a touch later than generic night grade and ramps more gently.
+    float gate = smoothstep(0.945, 1.0, clamp(phase01, 0.0, 1.0));
+    return smoothstep(0.0, 1.0, gate);
 }
 
 vec3 applyNightGrade(vec3 color, float nightMask, vec3 tint) {
@@ -94,13 +101,20 @@ vec3 sunDirection(float phase01)
 
 vec3 moonDirection(float phase01) {
     // AI: night companion light direction for water specular track.
-    float azimuth = mix(0.58, -0.62, clamp(phase01, 0.0, 1.0));
-    float elevation = mix(0.16, 0.26, nightPhase(phase01));
+    // Keep moon closer to view-forward so it is readable in the current camera framing.
+    float azimuth = mix(0.24, -0.10, clamp(phase01, 0.0, 1.0));
+    float elevation = mix(0.22, 0.34, nightPhase(phase01));
     return normalize(vec3(
         sin(azimuth) * cos(elevation),
         sin(elevation),
         -cos(azimuth) * cos(elevation)
     ));
+}
+
+vec3 moonColor(float phase01) {
+    float moonMask = moonPhase(phase01);
+    // AI: cooler dusk moon -> cleaner moonlight tint in full-night tail.
+    return mix(vec3(0.48, 0.57, 0.82), vec3(0.66, 0.74, 0.98), moonMask);
 }
 
 // ----------------------------------------------------
@@ -395,7 +409,13 @@ float sampleTitlePhraseAlpha(vec2 localMetric) {
     }
     vec3 msdf = texture(u_titlePhraseTex, phraseUv).rgb;
     float signedDistance = median3(msdf) - 0.5;
-    return clamp(titlePhraseScreenPxRange(phraseUv) * signedDistance + 0.5, 0.0, 1.0);
+    // AI: reflection hit-test must not depend on fwidth(phraseUv):
+    // grazing-angle derivatives are unstable and create comb-like early-out artifacts.
+    const float REFL_MSDF_HIT_SOFT_RADIUS = 2.8;
+    float screenDistance = signedDistance * REFL_MSDF_HIT_SOFT_RADIUS;
+    float fillAlpha = clamp(screenDistance + 0.5, 0.0, 1.0);
+    float glyphProximity = smoothstep(-0.38, 0.0, signedDistance);
+    return fillAlpha * glyphProximity;
 }
 
 void sampleTitlePhraseReflectionCoverage(vec2 localMetric, out float fillAlpha, out float haloAlpha) {
@@ -409,17 +429,27 @@ void sampleTitlePhraseReflectionCoverage(vec2 localMetric, out float fillAlpha, 
     }
     vec3 msdf = texture(u_titlePhraseTex, phraseUv).rgb;
     float signedDistance = median3(msdf) - 0.5;
-    float pxRange = titlePhraseScreenPxRange(phraseUv) * 0.58;
-    float screenDistance = signedDistance * pxRange;
+
+    // AI: in reflection contexts fwidth(phraseUv) is unstable:
+    // at grazing angles phrase UV changes rapidly -> derivatives inflate
+    // -> pxRange collapses -> MSDF turns into a hard step() -> comb-like aliasing.
+    // Fixed soft radius gives stable smoothing without reflection artifacts.
+    const float REFL_MSDF_SOFT_RADIUS = 2.8;
+    float screenDistance = signedDistance * REFL_MSDF_SOFT_RADIUS;
     fillAlpha = clamp(screenDistance + 0.5, 0.0, 1.0);
 
-    // AI: suppress phrase-rect boundary artifacts in reflection by fading glow near UV edges.
+    // AI: wider UV edge fade removes thin phrase-rect frame.
     float edgeUv = min(min(phraseUv.x, phraseUv.y), min(1.0 - phraseUv.x, 1.0 - phraseUv.y));
-    float uvEdgeFade = smoothstep(0.010, 0.045, edgeUv);
-    // AI: contour-focused glow mask around glyph edges (not rectangle fill).
+    float uvEdgeFade = smoothstep(0.025, 0.090, edgeUv);
+
     float contourBand = smoothstep(0.85, 0.06, abs(screenDistance));
     float interiorSuppress = 1.0 - smoothstep(0.20, 0.82, fillAlpha);
-    haloAlpha = contourBand * interiorSuppress * uvEdgeFade;
+
+    // AI: glyphProximity suppresses halo in background space between letters
+    // inside phrase-rect. Without it contourBand ~= 1.0 even where no glyph exists
+    // -> rectangular glow field between symbols.
+    float glyphProximity = smoothstep(-0.38, 0.0, signedDistance);
+    haloAlpha = contourBand * interiorSuppress * uvEdgeFade * glyphProximity;
 }
 
 float saturate(float v) {
@@ -468,12 +498,24 @@ vec3 shadeSkyDirection(vec3 dir, float phase01, vec3 sunCol, vec3 sunDir, float 
     vec2 skyUv = skyUvFromDirection(dir);
     float skyY = skyUv.y;
     vec3 sky = skyColor(skyY, phase01);
+    float night = nightPhase(phase01);
+    float moonMask = moonPhase(phase01);
 
     float sunAmount = max(dot(dir, sunDir), 0.0);
     float sunCore = pow(sunAmount, 1024.0);
     float sunGlow = pow(sunAmount, 64.0);
     float sunWash = pow(sunAmount, 14.0);
     vec3 sunLight = sunCol * (sunCore * 4.0 + sunGlow * 0.85 + sunWash * 0.22);
+
+    vec3 moonDir = moonDirection(phase01);
+    vec3 moonCol = moonColor(phase01);
+    float moonAmount = max(dot(dir, moonDir), 0.0);
+    float moonAA = max(fwidth(moonAmount), 1e-5);
+    // AI: explicit moon disk + halo so night sky reads as intentional, not just darkened sunset.
+    float moonDisk = smoothstep(0.99860 - moonAA * 2.2, 0.99860 + moonAA * 2.2, moonAmount);
+    float moonHalo = pow(moonAmount, 48.0);
+    float moonAura = pow(moonAmount, 8.0);
+    vec3 moonLight = moonCol * (moonDisk * 1.60 + moonHalo * 0.55 + moonAura * 0.14) * moonMask;
 
     float cloudBase;
     float density = cloudDensity(skyUv, u_time, phase01, cloudBase, cloudDetail);
@@ -482,8 +524,16 @@ vec3 shadeSkyDirection(vec3 dir, float phase01, vec3 sunCol, vec3 sunDir, float 
     vec3 warmCloudLight = sunCol * 1.3 + vec3(0.25);
     vec3 cloudLight = mix(vec3(1.0, 1.0, 1.05), warmCloudLight, sunWash);
     cloudLight *= mix(0.72, 1.0, cloudBaseLight);
+    float moonClear = smoothstep(0.55, 0.92, moonAmount) * moonMask;
+    float moonCloudLift = moonClear * (moonHalo * 0.30 + moonAura * 0.18);
+    vec3 moonCloudCol = moonCol * (0.28 + 0.18 * cloudBaseLight);
+    float cloudMix = density * (1.0 - moonClear * 0.68);
 
-    return mix(sky + sunLight, cloudLight + sunLight * sunLitCloud, density);
+    return mix(
+        sky + sunLight + moonLight,
+        cloudLight + sunLight * sunLitCloud + moonCloudCol * moonCloudLift,
+        cloudMix
+    );
 }
 
 vec3 titleBillboardRight() {
@@ -573,7 +623,7 @@ bool intersectTitleAtlas(
     vec2 localMetric = titleLocalMetricFromHitPos(hitPos);
 
     alpha = sampleTitlePhraseAlpha(localMetric);
-    return alpha > 0.012;
+    return alpha > 0.001;
 }
 
 float titleAboveWaterAlpha(vec3 hitPos, float alpha) {
@@ -736,6 +786,7 @@ void main()
     // AI: Phase 1 keeps the fullscreen pass, but moves the landscape into orbital camera/world-ray space so depth no longer depends only on a screen-space horizon split.
     float phase = clamp(u_scroll, 0.0, 1.0);
     float nightMask = nightPhase(phase);
+    float moonMask = moonPhase(phase);
     float titleRevealMask = titleReveal(phase);
     float titleReflectionRevealMask = titleReflectionReveal(phase);
     vec3 sunCol = sunColor(phase);
@@ -1012,12 +1063,12 @@ void main()
     }
 
     {
-        // AI: fix (3) — smooth water normal for title reflection ray.
-        // rippleStrength = 1.0 - n.y: 0 for flat water, increases with wave tilt.
-        // Strong ripples (> 0.5) pull nTitle toward vertical, stopping the reflected
-        // ray from scanning multiple glyph rows and creating columnar repetition.
-        // Ref: IQ "Water Shader" — specular normal smoothing for stability
-        float titleNormBlend = smoothstep(0.0, 0.48, rippleStrength) * 0.70;
+        // AI: base blend 0.30 smooths nTitle even on calm water.
+        // Without base: flat water -> rippleStrength ~= 0 -> titleNormBlend ~= 0 ->
+        // nTitle = n with full wave normals, so reflection ray scans MSDF at angles
+        // that produce comb-like artifacts.
+        // Range: 0.30 (calm water) -> 0.72 (max wave activity).
+        float titleNormBlend = 0.30 + smoothstep(0.0, 0.48, rippleStrength) * 0.42;
         vec3 nTitle = normalize(mix(n, vec3(0.0, 1.0, 0.0), titleNormBlend));
         vec3 reflDirTitle = normalize(reflect(-viewDir, nTitle));
         reflDirTitle.y = max(reflDirTitle.y, 0.001);
@@ -1046,11 +1097,7 @@ void main()
                     float distFade = exp(-tTitleRefl * 0.28);
                     vec3 titleReflCol = titleLime * 0.55 + skyRefl * 0.20;
                     skyRefl = compositeTitle(skyRefl, titleReflCol, titleReflAlpha * 0.36 * distFade);
-                    // AI: night-only reflected glow contribution (post-sunset), kept glyph-bound.
-                    float glowEdge = smoothstep(0.08, 0.84, 1.0 - titleReflAlpha);
-                    vec3 nightGlowCol = mix(titleLime, TITLE_GLOW_AMBER_LINEAR, 0.30) * 0.82 + skyRefl * 0.18;
-                    float nightGlowAlpha = (0.06 + 0.12 * glowEdge) * titleReflAlpha * distFade * nightMask;
-                    skyRefl = compositeTitle(skyRefl, nightGlowCol, nightGlowAlpha);
+                    // AI: reflected title glow disabled to avoid contour/halo artifacts in water reflection.
                 }
             }
         } else if (u_useTitlePhraseReflection > 0.5) {
@@ -1067,14 +1114,9 @@ void main()
             if (hasTitleRefl) {
                 vec2 titleReflMetric = titleLocalMetricFromHitPos(titleReflHitPos);
                 float titleReflFill;
-                float titleReflHalo;
-                sampleTitlePhraseReflectionCoverage(titleReflMetric, titleReflFill, titleReflHalo);
+                float unusedTitleReflHalo;
+                sampleTitlePhraseReflectionCoverage(titleReflMetric, titleReflFill, unusedTitleReflHalo);
                 titleReflFill = titleAboveWaterAlpha(titleReflHitPos, titleReflFill) * titleReflectionRevealMask;
-                // AI: fix (1) — titleReflHalo NOT composited.
-                // sampleTitleAtlasReflectionCoverage: edgeBand=smoothstep(1.10,0.04,abs(screenDist))
-                // is maximal where signedDist≈0 — the glyph outline AND quad boundaries.
-                // Mixing with titleHaloCol (near-white) produces a bright ring around every
-                // glyph quad edge, visible as white border in the water reflection.
                 if (titleReflFill > 0.0005) {
                     float distFade = exp(-tTitleRefl * 0.28);
                     // Suppress further when water is very agitated: secondary damping
@@ -1082,12 +1124,8 @@ void main()
                     float rippleAtten = 1.0 - smoothstep(0.0, 0.65, rippleStrength) * 0.38;
                     vec3 titleReflCol = titleLime * 0.55 + skyRefl * 0.20;
                     skyRefl = compositeTitle(skyRefl, titleReflCol,
-                                            titleReflFill * 0.28 * distFade * rippleAtten);
-                    // AI: reflected night glow follows contour halo only, avoiding phrase-rect framing.
-                    float glowHaloMask = titleReflHalo;
-                    float nightGlowAlpha = glowHaloMask * 0.30 * distFade * rippleAtten * nightMask;
-                    vec3 nightGlowCol = mix(titleLime, TITLE_GLOW_AMBER_LINEAR, 0.26) * 0.88 + skyRefl * 0.12;
-                    skyRefl = compositeTitle(skyRefl, nightGlowCol, nightGlowAlpha);
+                                            titleReflFill * 0.18 * distFade * rippleAtten);
+                    // AI: reflected title glow disabled to avoid contour/halo artifacts in water reflection.
                 }
             }
         }
@@ -1103,10 +1141,15 @@ void main()
     vec3 sunLight = sunCol * (pow(sunMirror, 180.0) * 4.5 + pow(sunMirror, 42.0) * 0.7);
     sunLight *= (1.0 - shorelineCore * 0.72);
     vec3 moonDir = moonDirection(phase);
-    vec3 moonCol = vec3(0.58, 0.66, 0.92);
+    vec3 moonCol = moonColor(phase);
     float moonMirror = max(dot(reflDir, moonDir), 0.0);
-    vec3 moonLight = moonCol * (pow(moonMirror, 220.0) * 1.8 + pow(moonMirror, 54.0) * 0.34);
-    moonLight *= nightMask * (1.0 - shorelineCore * 0.78);
+    // AI: add a wider low-frequency lobe for a longer atmospheric moon path.
+    vec3 moonLight = moonCol * (
+        pow(moonMirror, 180.0) * 1.34 +
+        pow(moonMirror, 34.0) * 0.38 +
+        pow(moonMirror, 8.0) * 0.10
+    );
+    moonLight *= moonMask * (1.0 - shorelineCore * 0.78);
 
     // ЦВЕТ ВОДЫ
     vec3 waterDeep = mix(vec3(0.03,0.10,0.16), skyRefl*0.6, 0.3);
@@ -1148,9 +1191,9 @@ void main()
                     rippleStrength * 0.28 * mix(0.26, 1.0, nearField));
     waterCol += pow(max(dot(n,halfDir),0.0),52.0) * 0.9 * mix(0.46, 1.0, nearField) * (sunCol*1.5+vec3(0.1));
     float moonGlint = pow(max(dot(n, moonDir), 0.0), 96.0) * rippleStrength * mix(0.26, 0.82, nearField);
-    moonGlint *= nightMask * (1.0 - shorelineCore * 0.90);
-    waterCol += moonGlint * moonCol * 0.82;
-    waterCol += pow(max(dot(n, halfMoonDir), 0.0), 68.0) * 0.34 * nightMask * mix(0.38, 0.88, nearField) * moonCol;
+    moonGlint *= moonMask * (1.0 - shorelineCore * 0.90);
+    waterCol += moonGlint * moonCol * 0.92;
+    waterCol += pow(max(dot(n, halfMoonDir), 0.0), 68.0) * 0.38 * moonMask * mix(0.38, 0.88, nearField) * moonCol;
 
     vec3 horizonLift = mix(horizonSky, skyRefl, 0.68);
     vec3 col = mix(waterCol, horizonLift, horizonMist * 0.10 * (1.0 - shorelineCore * 0.82));

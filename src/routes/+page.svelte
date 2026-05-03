@@ -74,7 +74,9 @@ MARK: Scene I. Intro
   :global(main:where(:has(> .wrapper))) {
     /* height: 10000vh; */
 
-    --scroll-drama: 700;
+    /* AI: longer scroll runway for smoother/even phase pacing (dawn/day/night),
+       so late-night cues (moon + moon-track) do not pop in abruptly at the very end. */
+    --scroll-drama: 1000;
     block-size: calc(var(--scroll-drama, 300) * 1svb);
   }
 

@@ -115,6 +115,7 @@
         on:change={handleGlowEnabledChange}
       />
     </label>
+
   </div>
 {/if}
 

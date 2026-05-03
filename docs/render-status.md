@@ -1,6 +1,6 @@
 # Render Status Log
 
-Last updated: 2026-04-26
+Last updated: 2026-05-03
 
 ## Current Vector
 
@@ -65,6 +65,28 @@ Mark Phase D as `Done` only if all criteria hold across all required checkpoints
 - No regressions in shoreline contact, title reflection readability, or fog layering.
 
 ## Change Log
+
+### 2026-05-03
+
+- Night phase sky/water polish:
+  - In `landscape.frag`, added explicit moon rendering in `shadeSkyDirection(...)`:
+    - moon disk + halo/aura terms (night-gated via `nightPhase(phase)`),
+    - subtle moon-cloud lift to keep the moon readable under cloud density.
+  - Rebalanced moonlight track on water:
+    - widened low-frequency lobe in `moonLight` reflection term for longer atmospheric streaks,
+    - kept shoreline attenuation and night-only gating intact.
+  - Follow-up micro-tuning:
+    - added dedicated `moonPhase(phase)` gate (`~0.945..1.0`) for delayed/smoother moon and moon-track emergence,
+    - reduced wide moon-track energy by ~10–15% to avoid over-bright final frame.
+  - Scroll pacing tweak:
+    - increased CSS runway `--scroll-drama` in `src/routes/+page.svelte` from `700` to `1000` to distribute dawn/day/night transitions more evenly and reduce abrupt end-of-scroll night pop-in.
+  - Kept reflected title-glow disabled in water reflection paths (billboard + phrase) as stability baseline.
+- Docs sync:
+  - `README.md`,
+  - `codex-system-prompt.md`.
+- Validation:
+  - `npm run check` passed.
+  - `npm run build` passed.
 
 ### 2026-04-26
 

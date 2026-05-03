@@ -165,6 +165,7 @@ export class LandscapeScene implements Scene {
     if (state.glowEnabled !== undefined) {
       this.glowEnabled = state.glowEnabled
     }
+
   }
 
   update(_dt: number) {}

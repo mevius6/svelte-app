@@ -79,9 +79,9 @@ FinalColorPass (single linear → sRGB transfer)
 - **Phase C:** `tanHalfFovY` in `SceneCameraState` (computed once). Camera cached in `LandscapeScene`. Glyph uniforms (256 floats) upload only on atlas change.
 - **Phase H (in progress):** `TitleGlowPass` added as separate fullscreen glow layer after `HeroTitlePass`, sampling precomposed phrase MSDF texture (`u_titlePhraseTex`), with debug toggle support.
   Quality baseline: inside `TitleGlowPass`, use `source -> separable blur (multi-pass) -> layered additive composite` to avoid jagged/comb-like glow artifacts.
-- Night glow baseline: title glow reveal is night-gated (`smoothstep(0.92, 1.0, phase)`), and water reflection in `landscape.frag` receives a dedicated night glow component tied to title reflection masks with phrase-UV edge suppression to avoid rectangular framing artifacts.
-- Night water-light baseline: keep a separate moon specular contribution in water shading (reflection + glint terms), gated by night phase and attenuated near shoreline contact, so nocturnal highlights read as a cool light track rather than warm sunset carry-over.
-- **Title reflection fixes:** no haloAlpha compositing (white border eliminated), title base hue locked to DayGlo `#c9f08a` (stored in shaders as linear equivalent), normal smoothed before reflection ray: `nTitle = mix(n, vec3(0,1,0), rippleStrength*0.70)`.
+- Night glow baseline: title glow reveal is night-gated (`smoothstep(0.92, 1.0, phase)`), while reflected title glow in water stays disabled to avoid contour/rect framing artifacts.
+- Night water-light baseline: `moonDirection(...)` + `moonColor(...)` drive nocturnal lighting (visible moon disk/halo in sky + separate moon reflection/glint terms on water), gated by dedicated `moonPhase(phase)` (`~0.945..1.0`) so moon cues ramp later and smoother than generic night-grade.
+- **Title reflection fixes:** no haloAlpha compositing (white border eliminated), title base hue locked to DayGlo `#c9f08a` (stored in shaders as linear equivalent), normal smoothed before reflection ray: `nTitle = mix(n, vec3(0,1,0), 0.30 + smoothstep(0.0, 0.48, rippleStrength) * 0.42)`.
 - **Vegetation strip PoC:** `BushesPass` now builds shoreline-wide grass coverage (`90` columns × `4` rows × `3` cards = `1080` instances) with seeded RNG for deterministic hot-reloads.
 - **Vegetation + fog integration:** grass now applies phase/distance/height fog in `bushes.frag`; fullscreen fog horizon core in `morning-fog.frag` is smoothed to avoid bright shoreline seam.
 - **Phase F (in progress):** `MorningFogPass` added as separate fullscreen atmosphere layer with explicit tuning constants in `morning-fog.frag`.
@@ -135,12 +135,12 @@ n = normalize(n + vec3(-rippleGrad.x * 2.2, 0.0, -rippleGrad.y * 2.2) * rippleFa
 
 ### Title reflection pattern
 ```glsl
-float titleNormBlend = smoothstep(0.0, 0.48, rippleStrength) * 0.70;
+float titleNormBlend = 0.30 + smoothstep(0.0, 0.48, rippleStrength) * 0.42;
 vec3 nTitle = normalize(mix(n, vec3(0.0, 1.0, 0.0), titleNormBlend));
 vec3 reflDirTitle = normalize(reflect(-viewDir, nTitle));
 // ... intersectTitleAtlas with reflDirTitle, not reflDir
 // Color target: DayGlo #c9f08a (stored in linear space constant)
-// No haloAlpha compositing
+// No haloAlpha compositing; reflected title glow stays disabled
 ```
 
 ## 7. Performance rules
@@ -175,6 +175,7 @@ vec3 reflDirTitle = normalize(reflect(-viewDir, nTitle));
 - Do not change render order (landscape → bushes → morningFog → heroTitle → titleGlow).
 - Do not add `baseLift` animation back to title.
 - Do not use scroll to drive camera orbit.
+- Do not composite `haloAlpha` directly into reflection fill paths (causes bright contour/white frame artifacts).
 
 ## 11. Status tracking protocol
 

@@ -90,12 +90,12 @@ FinalColorPass (single linear → sRGB transfer)
 - **Night phase (post-sunset):** scroll-цикл теперь включает выраженную ночную фазу после заката (`phase ~ 0.92..1.0`) с затемнением неба/солнца и снижением солнечного вклада (без поломки late-sunset палитры).
 - **Phase F (POC) — Morning fog pass:** добавлен отдельный fullscreen pass утреннего тумана (`MorningFogPass`) с fade-out до появления тайтла. Базовые ручки тюнинга в shader-константах: `FOG_DISSIPATE_START`, `FOG_DISSIPATE_END`, `FOG_DENSITY`.
 - **Phase F (F1) — Analytic height fog:** в `landscape.frag` добавлен экспоненциальный height fog через оптическую толщину `tau` и трансмиттанс `T=exp(-tau)`, с корректным композитингом `scene*T + fog*(1-T)`; тайтл туманится по своему `tTitle`.
-  Важный нюанс для non-constant density: фактор тумана должен быть `1 - exp(-tau)`, а не сырое `tau`.
+  - Важный нюанс для non-constant density: фактор тумана должен быть `1 - exp(-tau)`, а не сырое `tau`.
 - **Phase G — Linear color pipeline:** финальная сцена теперь композится в линейном `sceneColor` FBO, после чего единоразово проходит через `FinalColorPass` (`linear -> sRGB`). Ранняя display-gamma удалена из `landscape.frag` (`tonemap` остался в linear).
 - **Phase H (in progress) — Title glow pass:** добавлен отдельный fullscreen post-pass `TitleGlowPass` после `HeroTitlePass` (до `FinalColorPass`), glow строится по precomposed phrase MSDF (`u_titlePhraseTex`) и включается/отключается из dev debug panel.
-  Внутри pass применена схема `source -> separable blur (multi-pass) -> layered additive composite` (по мотивам GM Mini Bloom/Blur Philosophy) для устранения рваного/гребенчатого свечения.
-- **Night title glow + water reflection coupling:** glow-источник и composite усилены в ночной фазе (`smoothstep(0.92, 1.0)`), а в `landscape.frag` добавлен ночной glow-компонент в отражение тайтла на воде (для billboard и phrase-path) с UV-edge подавлением рамки фразового прямоугольника.
-- **Night reflection/glow polish:** отражённый glow тайтла дополнительно стабилизирован edge/halo масками (меньше плоской заливки в отражении), а в водном шейдинге добавлена отдельная холодная лунная дорожка (moon specular track) по аналогии с солнечной.
+  - Внутри pass применена схема `source -> separable blur (multi-pass) -> layered additive composite` (по мотивам GM Mini Bloom/Blur Philosophy) для устранения рваного/гребенчатого свечения.
+- **Night title glow baseline:** glow в `TitleGlowPass` включается только в ночном хвосте (`nightPhase ~ 0.92..1.0`); отражённый glow тайтла в воде отключён из-за артефактов контура/рамки.
+- **Night sky/water lighting:** в `landscape.frag` добавлена читаемая луна в небе (диск + мягкий ореол) и отдельный `moonPhase` gate (`~0.945..1.0`) для более позднего/плавного включения луны и лунной дорожки; широкая часть дорожки приглушена примерно на 10–15% для более атмосферного финального кадра.
 - **Vegetation PoC refinement:** береговая трава переведена с равномерной полосы на кластерную раскладку с просветами и центральным readability-коридором за тайтлом; в `bushes.frag` добавлен horizon/distance fade (меньше “пилы” на горизонте).
 - **Vegetation + fog integration:** трава теперь дополнительно туманится в `bushes.frag` (phase + distance + height), а `MorningFogPass` получил сглаживание horizon-core, чтобы убрать белую линию на переходе горизонт/берег.
 
@@ -122,13 +122,15 @@ FinalColorPass (single linear → sRGB transfer)
 
 ## Кэширование и производительность — текущий baseline
 
-| Что | До | После |
-|-----|----|-------|
-| `shoreFbm` на водный пиксель | ≈90 vnoise | 3 texture fetch |
-| Cloud reflection | 7 vnoise | 4 vnoise (detail пропущен) |
-| `tanHalfFovY` | `Math.tan()` 3× per frame | 1× в `computeSceneCamera` |
-| Camera recompute | каждый RAF | только при resize |
-| Title reflection glyph path | 32-глиф loop в `landscape.frag` | precomposed phrase MSDF texture + single lookup |
+
+| Что                          | До                              | После                                           |
+| ---------------------------- | ------------------------------- | ----------------------------------------------- |
+| `shoreFbm` на водный пиксель | ≈90 vnoise                      | 3 texture fetch                                 |
+| Cloud reflection             | 7 vnoise                        | 4 vnoise (detail пропущен)                      |
+| `tanHalfFovY`                | `Math.tan()` 3× per frame       | 1× в `computeSceneCamera`                       |
+| Camera recompute             | каждый RAF                      | только при resize                               |
+| Title reflection glyph path  | 32-глиф loop в `landscape.frag` | precomposed phrase MSDF texture + single lookup |
+
 
 ## Asset workflow
 
