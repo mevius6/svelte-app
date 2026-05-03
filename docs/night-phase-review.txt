@@ -1,0 +1,47 @@
+Ревью: фикс отражённого свечения тайтла
+Billboard-path (edge-weighted glow)
+glslfloat glowEdge = smoothstep(0.08, 0.84, 1.0 - titleReflAlpha);
+float nightGlowAlpha = (0.06 + 0.12 * glowEdge) * titleReflAlpha * distFade * nightMask;
+Логика работает, но есть тонкость. titleReflAlpha из sampleTitleTextureAlpha уже прошёл через smoothstep(0.42, 0.82) — граница глифа очень резкая. Это значит, что зона, где glowEdge даёт ненулевой вклад одновременно с ненулевым titleReflAlpha, крайне узкая. На практике свечение будет тонким кольцом, что хорошо. Но: базовый 0.06 * titleReflAlpha не гейтится через glowEdge — он даёт слабый, но постоянный fill внутри глифа. Это не ошибка, но нужно сознательно принять: либо это желаемое едва заметное "внутреннее сияние", либо стоит сделать 0.06 * glowEdge.
+Проблема с повторным чтением skyRefl:
+glslskyRefl = compositeTitle(skyRefl, titleReflCol, titleReflAlpha * 0.36 * distFade);
+// skyRefl уже модифицирован ↓
+vec3 nightGlowCol = mix(titleLime, TITLE_GLOW_AMBER_LINEAR, 0.30) * 0.82 + skyRefl * 0.18;
+Цвет ночного гло подмешивает уже окрашенный skyRefl. В большинстве случаев это незначительно, но если отражение тайтла яркое, цвет nightGlowCol немного смещается в сторону DayGlo. Стоит зафиксировать значение до первого composite если это критично:
+glslvec3 skyReflPreTitle = skyRefl; // сохранить до обоих compositeTitle
+
+Phrase-path (contour-halo boost)
+glslfloat contourBand = smoothstep(0.85, 0.06, abs(screenDistance));
+float interiorSuppress = 1.0 - smoothstep(0.20, 0.82, fillAlpha);
+haloAlpha = contourBand * interiorSuppress * uvEdgeFade;
+Скрытая проблема: при типичных значениях pxRange * 0.58 для отражения (где fwidth больше из-за перспективы), abs(screenDistance) большинства пикселей попадает ниже порога 0.85 → contourBand ≈ 1.0 почти везде. Реальное ограничение делает interiorSuppress, который обнуляется только внутри глифа. Это значит, что haloAlpha остаётся высоким в промежутках между буквами в пределах phrase-текстуры — по сути создаётся прямоугольное поле свечения между символами.
+uvEdgeFade гасит только внешние края UV-пространства, но не фоновое пространство внутри phrase-ректа.
+Phase rect:
+[ бук ] [ здесь halo высокий ] [ ва ]
+Это не баг, а компромисс: в динамичной воде с волнами прямоугольность растворяется. Но при nightMask=1 и спокойной воде близко к тайтлу (rippleAtten=1, distFade≈1) при 0.30 * 0.96 ≈ 0.29 — вклад может быть заметен. Рекомендация: добавить мягкое ограничение через близость к MSDF-краю:
+glsl// Ограничить halo по расстоянию до ближайшего глифа в MSDF-пространстве
+float glyphProximity = smoothstep(-0.35, 0.0, signedDistance); // высокий у глифа
+haloAlpha = contourBand * interiorSuppress * uvEdgeFade * glyphProximity;
+
+Ревью: лунная дорожка
+moonDirection — корректно
+Азимут движется против солнца (реалистично), высота поднимается только в ночной фазе через nightPhase(phase01). Нет нареканий.
+Структура вклада в воду
+glslvec3 moonLight = moonCol * (pow(moonMirror, 220.0) * 1.8 + pow(moonMirror, 54.0) * 0.34);
+moonLight *= nightMask * (1.0 - shorelineCore * 0.78);
+Паттерн зеркалит солнечную дорожку — это правильный подход. Экспоненты (220/54 для луны vs 180/42 для солнца) дают более острый трек.
+Потенциальная яркость: moonCol = vec3(0.58, 0.66, 0.92) с коэффициентом 1.8 — это довольно яркая луна в HDR-пространстве до тонмаппинга. ACES-подобный tonemap() сожмёт экстремальные значения, но рекомендую проверить в debug-режиме Reflection при phase=1.0, чтобы убедиться, что трек не пересвечен.
+moonGlint — несогласованность аргумента
+glslfloat moonGlint = pow(max(dot(n, moonDir), 0.0), 96.0) * rippleStrength * ...;
+Это diffuse-like термин (нормаль к направлению источника), а не specular. Солнце использует то же самое:
+glslfloat glint = pow(max(dot(n, sunDir), 0.0), 80.0) * rippleStrength * ...;
+Паттерн консистентен. Но стоит понимать, что этот термин даёт блик когда гребень волны смотрит на луну, а не на камеру — это специфическая визуальная идея. Отдельно добавлен корректный Blinn-Phong через halfMoonDir. Оба вклада складываются — это двойной вклад. Для солнца это создаёт реалистичную "блестящую дорожку", для луны должно работать аналогично.
+Один реальный баг: порядок вычисления halfMoonDir:
+glslvec3 halfDir     = normalize(sunDir + viewDir);
+vec3 halfMoonDir = normalize(moonDir + viewDir);
+viewDir = normalize(ro - waterPos) вычислен раньше — всё правильно. Нет проблем.
+Gatekeeping через nightMask
+glslmoonLight *= nightMask * (1.0 - shorelineCore * 0.78);
+moonGlint *= nightMask * (1.0 - shorelineCore * 0.90);
+waterCol += pow(max(dot(n, halfMoonDir), 0.0), 68.0) * 0.34 * nightMask * ...;
+Все три вклада правильно гейтятся через nightMask. Берег ослабляет луну немного сильнее чем солнце (0.78/0.90 vs 0.72/0.88) — разумно.
