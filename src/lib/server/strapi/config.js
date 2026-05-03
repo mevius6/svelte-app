@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { env } from '$env/dynamic/private';
 
 const DEFAULT_TIMEOUT_MS = 15000;
