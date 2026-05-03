@@ -1,24 +1,10 @@
 import { createShoreProfileTexture } from "$lib/scene/ShoreProfileBaker"
 import { TitleResources, type HeroTitleAtlasRenderData, type HeroTitleAtlasResource } from "./TitleResources"
+import { loadFoliageAtlas, type FoliageAtlasSourceSet, type FoliageAtlasTextureSet } from "./loaders/foliageAtlasLoader"
 import type { HeroTitleLayoutMetrics } from "../text/heroTitleAtlas"
 
-export type FoliageAtlasSourceSet = {
-  albedo: string
-  alpha: string
-  normal: string
-  roughness: string
-  translucency: string
-}
-
-export type FoliageAtlasTextureSet = {
-  albedo: WebGLTexture | null
-  alpha: WebGLTexture | null
-  normal: WebGLTexture | null
-  roughness: WebGLTexture | null
-  translucency: WebGLTexture | null
-}
-
 export type { HeroTitleAtlasRenderData, HeroTitleAtlasResource }
+export type { FoliageAtlasSourceSet, FoliageAtlasTextureSet } from "./loaders/foliageAtlasLoader"
 
 type LoadLandscapeResourcesOptions = {
   projectName: string
@@ -90,7 +76,7 @@ export class LandscapeResources {
     }
 
     // AI: the new grass atlas ships as a small PBR bundle, so keep the bundle load owned here instead of pushing that into the scene.
-    this.foliageAtlasRef = await this.loadFoliageAtlas(atlasSources)
+    this.foliageAtlasRef = await loadFoliageAtlas(this.gl, atlasSources)
 
     if (needsRippleFallback) {
       this.rippleFallbackTextureRef = this.createDummyRippleTexture()
@@ -158,52 +144,6 @@ export class LandscapeResources {
       contentRect: { x: 0, y: 0, w: 1, h: 1 },
       layout: DEFAULT_HERO_TITLE_LAYOUT,
     }
-  }
-
-  private async loadFoliageAtlas(sources: FoliageAtlasSourceSet): Promise<FoliageAtlasTextureSet> {
-    const [albedo, alpha, normal, roughness, translucency] = await Promise.all([
-      this.loadTexture(sources.albedo),
-      this.loadTexture(sources.alpha),
-      this.loadTexture(sources.normal),
-      this.loadTexture(sources.roughness),
-      this.loadTexture(sources.translucency),
-    ])
-
-    return {
-      albedo,
-      alpha,
-      normal,
-      roughness,
-      translucency,
-    }
-  }
-
-  private loadTexture(url: string): Promise<WebGLTexture | null> {
-    return new Promise((resolve) => {
-      const img = new Image()
-
-      img.onload = () => {
-        const tex = this.gl.createTexture()
-        if (!tex) {
-          resolve(null)
-          return
-        }
-
-        this.gl.bindTexture(this.gl.TEXTURE_2D, tex)
-        this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true)
-        this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, img)
-        this.gl.generateMipmap(this.gl.TEXTURE_2D)
-        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR_MIPMAP_LINEAR)
-        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR)
-        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_S, this.gl.CLAMP_TO_EDGE)
-        this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_WRAP_T, this.gl.CLAMP_TO_EDGE)
-        this.gl.bindTexture(this.gl.TEXTURE_2D, null)
-        resolve(tex)
-      }
-
-      img.onerror = () => resolve(null)
-      img.src = url
-    })
   }
 
   private createDummyRippleTexture() {
