@@ -1,6 +1,6 @@
 /**
  * Phase 3: Foliage atlas loader — extracted from LandscapeResources.
- * 
+ *
  * Responsible for loading individual PBR texture maps (albedo, alpha, normal, roughness, translucency)
  * and assembling them into a FoliageAtlasTextureSet for use in the BushesPass.
  */
