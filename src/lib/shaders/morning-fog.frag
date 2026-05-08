@@ -8,13 +8,13 @@ uniform float u_debugDensity;
 
 out vec4 fragColor;
 
-// AI: POC tuning notes:
-// - Keep fog mostly in early day and fully dissipated before title reveal starts (0.62).
-// - Physical/base dawn fog now lives in landscape.frag (analytic height fog).
-// - This pass is a secondary artistic wisp layer; keep density conservative.
-// - For denser dawn mood: lower FOG_DISSIPATE_START and/or increase FOG_DENSITY.
-const float FOG_DISSIPATE_START = 0.38;
-const float FOG_DISSIPATE_END = 0.58;
+// AI: POC tuning notes (Phase 6):
+// - Fog appears at dawn (phase 0.18) and dissipates by day (0.36)
+// - This pass is a secondary artistic wisp layer; keep density conservative
+// - Physical/base dawn fog now lives in landscape.frag (analytic height fog)
+// - For denser dawn mood: lower FOG_DISSIPATE_START and/or increase FOG_DENSITY
+const float FOG_DISSIPATE_START = 0.18;
+const float FOG_DISSIPATE_END = 0.36;
 const float FOG_DENSITY = 0.05;
 const float FOG_HORIZON_Y = 0.50;
 const float FOG_HORIZON_WIDTH = 0.17;

@@ -25,7 +25,7 @@ export function glslIncludePlugin(): Plugin {
     load(id: string) {
       const cleanId = id.split('?')[0]
       const hasRawQuery = id.includes('?raw')
-      
+
       if (!isShaderFile(cleanId)) return null
 
       // Only process if the file exists and is absolute path (from Rollup)

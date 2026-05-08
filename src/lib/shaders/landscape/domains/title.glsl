@@ -1,5 +1,5 @@
 // ============================================================
-// Title  hero text rendering, billboarding, MSDF samplingdomain 
+// Title  hero text rendering, billboarding, MSDF samplingdomain
 // Depends on constants.glsl (TITLE_*)
 // ============================================================
 
@@ -186,10 +186,11 @@ vec3 compositeTitle(vec3 baseCol, vec3 titleCol, float alpha) {
 }
 
 float titleReveal(float phase01) {
-    return smoothstep(0.62, 0.88, clamp(phase01, 0.0, 1.0));
+    // Phase 6: title appears at dusk (phase 0.78), fully visible by 0.94
+    return smoothstep(0.78, 0.94, clamp(phase01, 0.0, 1.0));
 }
 
 float titleReflectionReveal(float phase01) {
-    // AI: keep reflection emergence a touch later than direct title.
-    return smoothstep(0.67, 0.93, clamp(phase01, 0.0, 1.0));
+    // Reflection emerges slightly after direct text (phase 0.82-0.98)
+    return smoothstep(0.82, 0.98, clamp(phase01, 0.0, 1.0));
 }

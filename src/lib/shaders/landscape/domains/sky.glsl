@@ -5,8 +5,12 @@
 vec3 skyColor(float y, float phase01)
 {
     float night = nightPhase(phase01);
-    vec3 topBase = mix(vec3(0.08,0.18,0.45), vec3(0.02,0.02,0.08), phase01);
-    vec3 bottomBase = mix(vec3(0.85,0.52,0.38), vec3(1.00,0.35,0.22), phase01);
+    // Phase 6: day-sky at top is blue, fades to deep night blue
+    // Bottom: warm day horizon, dims toward black at night
+    vec3 topBase = mix(vec3(0.08,0.18,0.45), vec3(0.02,0.02,0.08), night);
+    // Warm horizon in day, fades through dusk, goes deep at night
+    vec3 bottomBase = mix(vec3(0.85,0.52,0.38), vec3(1.00,0.35,0.22),
+                          smoothstep(0.65, 1.0, phase01));  // warm up toward sunset
     vec3 top = mix(topBase, vec3(0.010, 0.016, 0.040), night);
     vec3 bottom = mix(bottomBase, vec3(0.020, 0.022, 0.050), night);
     return mix(bottom, top, pow(clamp(y,0.0,1.0), 1.3));
@@ -28,10 +32,15 @@ vec3 sunColor(float phase01)
 
 vec3 sunDirection(float phase01)
 {
-    float azimuth = mix(-0.78, 0.78, phase01);
+    // Phase 6: sun path during day phase (0.15 - 1.0)
+    // phase=0-0.15: night, sun below horizon
+    // phase=0.15-0.5: dawn to noon, sun rises
+    // phase=0.5-1.0: afternoon to dusk, sun sets
+    float dayT = clamp((phase01 - 0.15) / 0.85, 0.0, 1.0);  // normalize day window
+    float azimuth = mix(-0.78, 0.78, dayT);  // left to right
     float night = nightPhase(phase01);
-    float elevation = mix(0.08, 0.34, sin(phase01 * PI));
-    elevation = mix(elevation, -0.10, night);
+    float elevation = mix(0.08, 0.34, sin(dayT * PI));  // arc path
+    elevation = mix(elevation, -0.12, night);  // below horizon at night
     return normalize(vec3(
         sin(azimuth) * cos(elevation),
         sin(elevation),

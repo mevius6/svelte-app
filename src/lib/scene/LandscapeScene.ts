@@ -93,6 +93,17 @@ export class LandscapeScene implements Scene {
     this.scrollNorm = max > 0 ? Math.min(Math.max(window.scrollY / max, 0), 1) : 0
   }
 
+  /**
+   * Phase 6: Convert scroll position to phase (0-1) with new semantics.
+   * New mapping: 0=night, 0.2=dawn, 0.5=day, 0.8=dusk, 1.0=late-sunset
+   * This is the single point of control for day-night cycle ordering.
+   */
+  private scrollToPhase(scroll: number): number {
+    // Currently identity mapping; shader functions interpret phase semantics.
+    // Future: can add easing (slow dawn, fast sunset) here without changing shaders.
+    return Math.max(0, Math.min(scroll, 1.0))
+  }
+
   private readonly onPointerDown = (event: PointerEvent) => {
     const uv = this.pointerToRippleUV(event.clientX, event.clientY)
     if (!uv) return
@@ -262,7 +273,7 @@ export class LandscapeScene implements Scene {
     this.bushes.setFrameState({
       camera: frame.camera,
       horizon: frame.vegetationHorizon,
-      phase: this.scrollNorm,
+      phase: this.scrollToPhase(this.scrollNorm),
       debugView: true,
       atlasTextures: this.resources.foliageAtlas,
       sceneScale: {
@@ -278,7 +289,7 @@ export class LandscapeScene implements Scene {
     this.gl.clearColor(0.02, 0.03, 0.05, 1.0)
     this.gl.clear(this.gl.COLOR_BUFFER_BIT)
     this.morningFog.setFrameState({
-      phase: this.scrollNorm,
+      phase: this.scrollToPhase(this.scrollNorm),
       debugDensity: true,
     })
     this.morningFog.render(frame.time, null)
@@ -341,7 +352,7 @@ export class LandscapeScene implements Scene {
   private setupLandscapeState(frame: FrameState) {
     this.landscape.setFrameState({
       camera: frame.camera,
-      scroll: this.scrollNorm,
+      scroll: this.scrollToPhase(this.scrollNorm),
       textTexture: this.resources.textTexture!,
       titleHero: frame.titleHero,
       useTitleBillboard: !frame.useGlyphTitle,
@@ -362,7 +373,7 @@ export class LandscapeScene implements Scene {
     this.bushes.setFrameState({
       camera: frame.camera,
       horizon: frame.vegetationHorizon,
-      phase: this.scrollNorm,
+      phase: this.scrollToPhase(this.scrollNorm),
       debugView: false,
       atlasTextures: this.resources.foliageAtlas,
       sceneScale: {
@@ -374,7 +385,7 @@ export class LandscapeScene implements Scene {
 
   private setupMorningFogState(frame: FrameState) {
     this.morningFog.setFrameState({
-      phase: this.scrollNorm,
+      phase: this.scrollToPhase(this.scrollNorm),
       debugDensity: false,
     })
   }
@@ -382,7 +393,7 @@ export class LandscapeScene implements Scene {
   private setupHeroTitleState(frame: FrameState) {
     this.heroTitle.setFrameState({
       camera: frame.camera,
-      phase: this.scrollNorm,
+      phase: this.scrollToPhase(this.scrollNorm),
       waterLevel: WATER_LEVEL,
       titleHero: frame.titleHero,
       atlas: frame.heroTitleAtlas,
@@ -395,7 +406,7 @@ export class LandscapeScene implements Scene {
       enabled: this.glowEnabled && frame.useGlyphTitle,
       debugIsolate: this.passView === "glow",
       camera: frame.camera,
-      phase: this.scrollNorm,
+      phase: this.scrollToPhase(this.scrollNorm),
       waterLevel: WATER_LEVEL,
       titleHero: frame.titleHero,
       phraseTexture: frame.heroTitleAtlasRenderData?.phraseTexture ?? null,

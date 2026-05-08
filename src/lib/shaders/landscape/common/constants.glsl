@@ -10,10 +10,11 @@ const vec3 TITLE_GLOW_AMBER_LINEAR = vec3(0.86, 0.50, 0.20);
 const vec3 MOONLIGHT_LINEAR = vec3(0.58, 0.66, 0.92);
 
 // Morning fog (analytic height fog)
+// Phase 6: fog appears at dawn (phase 0.18) and dissipates by 0.36 (full daylight)
 // Ref: https://forwardscattering.org/post/72
 // Ref: https://iquilezles.org/articles/fog/
-const float MORNING_FOG_DISSIPATE_START = 0.38;
-const float MORNING_FOG_DISSIPATE_END = 0.58;
+const float MORNING_FOG_DISSIPATE_START = 0.18;
+const float MORNING_FOG_DISSIPATE_END = 0.36;
 const float MORNING_FOG_DENSITY = 0.10;
 const float MORNING_FOG_HEIGHT_FALLOFF = 3.6;
 const float MORNING_FOG_SKY_DISTANCE = 12.0;

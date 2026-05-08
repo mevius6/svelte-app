@@ -41,12 +41,13 @@ vec3 glowBillboardRight() {
 }
 
 float titleReveal(float phase01) {
-    return smoothstep(0.62, 0.88, clamp(phase01, 0.0, 1.0));
+    // Phase 6: title appears at dusk (phase 0.78), fully visible by 0.94
+    return smoothstep(0.78, 0.94, clamp(phase01, 0.0, 1.0));
 }
 
 float nightGlowReveal(float phase01) {
-    // AI: glow becomes visible after sunset and reaches full intensity in night phase.
-    return smoothstep(0.92, 1.0, clamp(phase01, 0.0, 1.0));
+    // Phase 6: glow becomes visible in very late sunset (phase 0.94-1.0)
+    return smoothstep(0.94, 1.0, clamp(phase01, 0.0, 1.0));
 }
 
 float titlePhraseScreenPxRange(vec2 phraseUv) {

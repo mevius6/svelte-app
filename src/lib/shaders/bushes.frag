@@ -21,8 +21,9 @@ uniform sampler2D u_foliageTranslucency;
 out vec4 fragColor;
 
 #define PI 3.14159265359
-const float VEGETATION_FOG_DISSIPATE_START = 0.38;
-const float VEGETATION_FOG_DISSIPATE_END = 0.58;
+// Phase 6: vegetation fog appears at dawn (0.18) and dissipates by day (0.36)
+const float VEGETATION_FOG_DISSIPATE_START = 0.18;
+const float VEGETATION_FOG_DISSIPATE_END = 0.36;
 const float VEGETATION_FOG_DENSITY = 0.085;
 const float VEGETATION_FOG_HEIGHT_FALLOFF = 3.2;
 

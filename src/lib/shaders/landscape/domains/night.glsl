@@ -1,16 +1,17 @@
 // ============================================================
 // Night cycle helpers — no dependencies
 // Used widely: needed in sky, clouds, fog, shore
+// Phase 6 semantics: 0.0=night, 0.2=dawn, 0.5=day, 0.8=dusk, 1.0=late-sunset
 // ============================================================
 
 float nightPhase(float phase01) {
-    // AI: keep late-sunset palette intact; enter night only in the final scroll tail.
-    return smoothstep(0.92, 1.0, clamp(phase01, 0.0, 1.0));
+    // Night is strong at phase=0, fades out by phase=0.12 (dawn begins)
+    return smoothstep(0.12, 0.0, clamp(phase01, 0.0, 1.0));
 }
 
 float moonPhase(float phase01) {
-    // AI: moon appears a touch later than generic night grade and ramps more gently.
-    float gate = smoothstep(0.945, 1.0, clamp(phase01, 0.0, 1.0));
+    // Moon appears only in deep night (phase < 0.10), gateable for smooth appearance
+    float gate = smoothstep(0.10, 0.0, clamp(phase01, 0.0, 1.0));
     return smoothstep(0.0, 1.0, gate);
 }
 

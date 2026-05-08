@@ -5,6 +5,7 @@
 // AI: Phase A+B cloudDensity:
 //   detailLOD=1.0 for direct sky, 0.0 for water reflection (saves 3 vnoise/pix).
 //   solarDrift: clouds follow sun across day — phase01*0.42 ≈ 1/8 tile per cycle.
+//   Phase 6: phaseFade — more clouds day/dusk, less clouds night/dawn
 // Ref: Book of Shaders ch.13 fBM, IQ "Outdoors Lighting"
 float cloudDensity(vec2 uv, float t, float phase01, out float base, float detailLOD) {
     vec2 solarDrift = vec2(phase01 * 0.42, phase01 * 0.06);
@@ -12,7 +13,12 @@ float cloudDensity(vec2 uv, float t, float phase01, out float base, float detail
     vec2 baseUv = uv * vec2(3.2, 5.5) + wind;
     base = cloudBaseFbm(baseUv);
     float cloud = base + cloudDetailFbm(uv * vec2(6.5, 9.0) + wind * 1.4) * 0.38 * detailLOD;
-    float phaseFade    = 1.0 - min(phase01 * 1.4, 1.0) * 0.5;
+    // Phase 6: cloud density: low at night/dawn (0.15), high at day/dusk (1.0), slightly less at very end
+    float phaseFade = mix(
+        0.55,  // night/dawn — fewer clouds
+        1.0,   // day/dusk — more clouds
+        smoothstep(0.15, 0.55, phase01)
+    ) * (1.0 - smoothstep(0.80, 1.0, phase01) * 0.3);  // slight fade toward end
     float verticalFade = smoothstep(1.0, 0.52, uv.y);
     return cloud * verticalFade * phaseFade * 0.55;
 }
