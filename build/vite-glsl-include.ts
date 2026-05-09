@@ -19,7 +19,7 @@ interface IncludeContext {
 export function glslIncludePlugin(): Plugin {
   return {
     name: 'vite-glsl-include',
-    apply: 'build',
+    apply: ['serve', 'build'],
     enforce: 'pre',
 
     load(id: string) {

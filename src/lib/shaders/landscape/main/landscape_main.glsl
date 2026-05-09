@@ -425,3 +425,5 @@ void main()
         titleCol = applyMorningHeightFog(titleCol, ro, rd, tTitle, phase, horizonSky, sunCol, sunDir);
         col = compositeTitle(col, titleCol, titleAlpha);
     }
+    fragColor = vec4(tonemap(col), 1.0);
+}
