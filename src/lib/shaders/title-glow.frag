@@ -25,6 +25,7 @@ uniform float u_waterLevel;
 
 out vec4 fragColor;
 
+// Phase 6 semantics: 0.0=night, 0.2=dawn, 0.5=day, 1.0=late-sunset.
 // DayGlo NightGlo NG200 #c9f08a -> linear.
 const vec3 LIME_LINEAR = vec3(0.584078418, 0.871367119, 0.254152094);
 const vec3 AMBER_LINEAR = vec3(1.0, 0.552, 0.212);

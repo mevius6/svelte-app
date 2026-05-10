@@ -1,6 +1,6 @@
 # Render Status Log
 
-Last updated: 2026-05-03
+Last updated: 2026-05-10
 
 ## Current Vector
 
@@ -21,6 +21,8 @@ Last updated: 2026-05-03
 | Phase F | Morning fog pass (dawn atmosphere) | In Progress | F1 landed: analytic height fog in `landscape.frag` + secondary fullscreen wisps pass. |
 | Phase G | Linear color pipeline + final display transfer | Done | `sceneColor` offscreen composition + `FinalColorPass` (`linear -> sRGB` once per frame). |
 | Phase H | Title glow pass (sunset bloom layer) | In Progress | `TitleGlowPass` added after `HeroTitlePass`; glow can be toggled from debug panel. |
+| Phase 6 | Day/night phase semantics | Done | Intentional inversion: old `0=dawn → 1=night`, new `0=night`, `0.2=dawn`, `0.5=day`, `1.0=late-sunset`; fog `0.18→0.36`, title reveal `0.78→0.94`, night/moon gate `0.0→0.10`. |
+| Refactor Phases 1–5 | `LandscapeScene` dispatcher, title/foliage resources, GLSL include plugin, shader chunk split | In Progress | Active shader entry is `src/lib/shaders/landscape/_entry.frag`; include plugin runs in dev/build; old scratch `landscape-chunks` moved to `_wip/`. |
 | Vegetation PoC | Shoreline full-coverage grass strip | In Progress | `BushesPass` now tests dense shoreline grass (1080 cards total) with seeded placement. |
 
 ## Phase D Visual QA
@@ -65,6 +67,31 @@ Mark Phase D as `Done` only if all criteria hold across all required checkpoints
 - No regressions in shoreline contact, title reflection readability, or fog layering.
 
 ## Change Log
+
+### 2026-05-10
+
+- Refactor stabilization fixes from `landscape-refactor-guide.md` checklist:
+  - Confirmed `src/lib/shaders/landscape/main/landscape_main.glsl` ends with final `fragColor = vec4(tonemap(col), 1.0);`.
+  - Updated `build/vite-glsl-include.ts`:
+    - removed invalid `apply` restriction,
+    - kept `load(...)` for raw shader imports,
+    - added `transform(...)` so `#include` resolution also works in dev transforms.
+  - Fixed active chunk include order in `src/lib/shaders/landscape/_entry.frag` so `cloudDensity(...)` is declared before `shadeSkyDirection(...)` calls it.
+  - Moved stale scratch chunks from `src/lib/shaders/landscape-chunks/` to `src/lib/shaders/_wip/landscape-chunks/`, along with the old `landscape-test.frag` include smoke-test.
+- Phase 6 docs sync:
+  - documented intentional phase inversion:
+    - old baseline: `0=dawn → 0.5=day → 0.92..1.0=night`,
+    - new baseline: `0=night → 0.2=dawn → 0.5=day → 1.0=late-sunset`;
+  - synced constants:
+    - `MORNING_FOG_DISSIPATE_START/END = 0.18/0.36`,
+    - title reveal `0.78→0.94`, reflection `0.82→0.98`,
+    - `nightPhase = smoothstep(0.12, 0.0, phase)`.
+- Validation:
+  - `bun run check` passed.
+  - `bun run build` passed.
+  - `bun run dev` started at `http://127.0.0.1:4173/`; root route returned HTTP 200.
+  - Dev shader module import (`_entry.frag?import&raw`) returned expanded GLSL with includes resolved.
+  - Existing environment warning remains: `STRAPI_API_ORIGIN is not set`.
 
 ### 2026-05-03
 

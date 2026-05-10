@@ -1,5 +1,6 @@
 // ============================================================
 // Clouds domain — depends on noise.glsl
+// Phase 6 semantics: 0.0=night, 0.2=dawn, 0.5=day, 1.0=late-sunset.
 // ============================================================
 
 // AI: Phase A+B cloudDensity:

@@ -1,5 +1,6 @@
 // ============================================================
 // Sky domain — depends on night.glsl, noise.glsl, constants.glsl
+// Phase 6 semantics: 0.0=night, 0.2=dawn, 0.5=day, 1.0=late-sunset.
 // ============================================================
 
 vec3 skyColor(float y, float phase01)

@@ -19,7 +19,6 @@ interface IncludeContext {
 export function glslIncludePlugin(): Plugin {
   return {
     name: 'vite-glsl-include',
-    apply: ['serve', 'build'],
     enforce: 'pre',
 
     load(id: string) {
@@ -41,7 +40,7 @@ export function glslIncludePlugin(): Plugin {
             visited: new Set(),
             stack: [],
           }
-          resolved = resolveIncludes(content, cleanId, context)
+          resolved = resolveIncludes(content, dirname(cleanId), context, cleanId)
         }
 
         // If ?raw query, return as JavaScript export for Vite to handle
@@ -61,6 +60,19 @@ export function glslIncludePlugin(): Plugin {
         return null
       }
     },
+
+    transform(code: string, id: string) {
+      const cleanId = id.split('?')[0]
+      if (!isShaderFile(cleanId) || !code.includes('#include')) return null
+
+      try {
+        const context: IncludeContext = { visited: new Set(), stack: [] }
+        const resolved = resolveIncludes(code, dirname(cleanId), context, cleanId)
+        return { code: resolved, map: null }
+      } catch (e) {
+        this.error(String(e))
+      }
+    },
   }
 }
 
@@ -68,8 +80,12 @@ function isShaderFile(path: string): boolean {
   return path.endsWith('.glsl') || path.endsWith('.vert') || path.endsWith('.frag')
 }
 
-function resolveIncludes(content: string, filePath: string, context: IncludeContext): string {
-  const dir = dirname(filePath)
+function resolveIncludes(
+  content: string,
+  baseDir: string,
+  context: IncludeContext,
+  sourceLabel = baseDir
+): string {
   const lines = content.split('\n')
 
   return lines
@@ -80,13 +96,13 @@ function resolveIncludes(content: string, filePath: string, context: IncludeCont
       }
 
       const includePath = match[1]
-      const fullPath = resolve(dir, includePath)
+      const fullPath = resolve(baseDir, includePath)
 
       // Detect circular includes
       if (context.stack.includes(fullPath)) {
         const cycle = [...context.stack, fullPath].join(' -> ')
         throw new Error(
-          `[glsl-include] Circular include detected:\n${cycle}\nfrom: ${filePath}:${lineNum + 1}`
+          `[glsl-include] Circular include detected:\n${cycle}\nfrom: ${sourceLabel}:${lineNum + 1}`
         )
       }
 
@@ -100,7 +116,7 @@ function resolveIncludes(content: string, filePath: string, context: IncludeCont
         context.visited.add(fullPath)
         context.stack.push(fullPath)
 
-        const resolved = resolveIncludes(includedContent, fullPath, context)
+        const resolved = resolveIncludes(includedContent, dirname(fullPath), context, fullPath)
 
         context.stack.pop()
         return resolved
@@ -109,7 +125,7 @@ function resolveIncludes(content: string, filePath: string, context: IncludeCont
           throw new Error(
             `[glsl-include] Include file not found: "${includePath}"\n` +
             `Resolved to: ${fullPath}\n` +
-            `From: ${filePath}:${lineNum + 1}`
+            `From: ${sourceLabel}:${lineNum + 1}`
           )
         }
         throw e
