@@ -60,6 +60,14 @@ void main() {
     float phase = clamp(u_phase, 0.0, 1.0);
 
     float dawnMask = 1.0 - smoothstep(FOG_DISSIPATE_START, FOG_DISSIPATE_END, phase);
+    
+    // Early exit: skip expensive noise calculations when fog is inactive
+    // FOG_DISSIPATE_START=0.18, FOG_DISSIPATE_END=0.36, so dawnMask≈0 after phase=0.36
+    if (dawnMask <= 0.001) {
+        fragColor = vec4(0.0);
+        return;
+    }
+    
     float horizonBand = exp(-pow((uv.y - FOG_HORIZON_Y) / FOG_HORIZON_WIDTH, 2.0));
     // AI: suppress narrow bright ridge exactly at horizon center, while keeping
     // broad atmospheric band around it.
