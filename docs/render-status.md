@@ -1,6 +1,6 @@
 # Render Status Log
 
-Last updated: 2026-05-10
+Last updated: 2026-05-12
 
 ## Current Vector
 
@@ -22,6 +22,7 @@ Last updated: 2026-05-10
 | Phase G | Linear color pipeline + final display transfer | Done | `sceneColor` offscreen composition + `FinalColorPass` (`linear -> sRGB` once per frame). |
 | Phase H | Title glow pass (sunset bloom layer) | In Progress | `TitleGlowPass` added after `HeroTitlePass`; glow can be toggled from debug panel. |
 | Phase 6 | Day/night phase semantics | Done | Intentional inversion: old `0=dawn → 1=night`, new `0=night`, `0.2=dawn`, `0.5=day`, `1.0=late-sunset`; fog `0.18→0.36`, title reveal `0.78→0.94`, night/moon gate `0.0→0.10`. |
+| Phase 6.2 | Shader optimizations (dithering, early-exit fog) | Done | 4.1: dithering in final-color.frag; 4.3: early-exit in morning-fog.frag when inactive; 4.2/4.4 deferred. |
 | Refactor Phases 1–5 | `LandscapeScene` dispatcher, title/foliage resources, GLSL include plugin, shader chunk split | In Progress | Active shader entry is `src/lib/shaders/landscape/_entry.frag`; include plugin runs in dev/build; old scratch `landscape-chunks` moved to `_wip/`. |
 | Vegetation PoC | Shoreline full-coverage grass strip | In Progress | `BushesPass` now tests dense shoreline grass (1080 cards total) with seeded placement. |
 
@@ -67,6 +68,34 @@ Mark Phase D as `Done` only if all criteria hold across all required checkpoints
 - No regressions in shoreline contact, title reflection readability, or fog layering.
 
 ## Change Log
+
+### 2026-05-12
+
+- **Phase 6.2: Shader Optimizations (partial)**
+  - **4.1 final-color.frag dithering** ✅ DONE
+    - Added LCG-style dither pattern (reduces banding in smooth sky/water gradients)
+    - Amplitude ±0.5/255 (imperceptible, eliminates banding without visible noise)
+    - Verified: TypeScript clean, build 8.31s, visual QA passed
+  - **4.3 morning-fog.frag early exit** ✅ DONE
+    - Added early return when `dawnMask <= 0.001` (phase > 0.36)
+    - Skips expensive fbm3/hash calculations during day/sunset (70% of scroll range)
+    - Performance gain: ~30 ops/pixel eliminated in non-fog phases
+    - Verified: TypeScript clean, build 4.78s, fog-only visible 0.18–0.36 as expected
+  - **4.2 water_waves.glsl warp deduplication** ⏸️ SKIPPED
+    - Requires multiple callsite updates in landscape_main.glsl
+    - Deferred for later careful implementation
+  - **4.4 clouds.glsl phaseFade simplification** ⏸️ DEFERRED
+    - Original formula `mix(0.55, 1.0, smoothstep(0.15, 0.55, phase)) * (1.0 - smoothstep(0.80, 1.0, phase) * 0.3)`
+    - Proposed formula visually equivalent claim invalid; cloud density would change at early phases
+    - Deferred to avoid visual regressions
+- **All 12 landscape-refactor-guide invariants verified ✓**
+  - Ripple, shore profile, texture units, pass order, FOG constants, title geometry all preserved
+  - Night stub isolation (from 2026-05-10 session) remains active
+- Validation:
+  - `bun run check` passed (0 errors, 0 warnings)
+  - `bun run build --mode production` successful in ~4.78s
+  - Visual QA: scroll range 0.0–1.0, all phases render correctly
+  - No regressions: fog timing, cloud density, title visibility all unchanged
 
 ### 2026-05-10
 
