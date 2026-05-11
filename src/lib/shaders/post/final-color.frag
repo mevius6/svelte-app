@@ -26,5 +26,10 @@ void main() {
         ? linearToSrgbExact(linearCol)
         : linearToSrgbFast(linearCol);
 
+    // Dither: eliminates banding in smooth sky/water gradients
+    // Uses LCG-style pattern based on screen position
+    float dither = fract(dot(gl_FragCoord.xy, vec2(0.75487766, 0.56984027)) * 43758.5453);
+    displayCol += (dither - 0.5) / 255.0;
+
     fragColor = vec4(displayCol, 1.0);
 }
