@@ -104,7 +104,7 @@ void main() {
     float sdPx = signedDistance * pxRange; // >0 inside, <0 outside
     float fill = clamp(sdPx + 0.5, 0.0, 1.0);
 
-    float reveal = titleReveal(u_phase) * nightGlowReveal(u_phase);
+    float reveal = titleReveal(u_phase);  // nightGlowReveal now always returns 0 (stub)
     float emergence = smoothstep(u_waterLevel - 0.012, u_waterLevel + 0.034, hitPos.y);
     float mask = reveal * emergence;
     if (mask <= 0.001) {
@@ -119,7 +119,7 @@ void main() {
     float outerBand = (1.0 - smoothstep(-0.34, -0.08, signedDistance)) * exp(min(sdPx, 0.0) * 0.85);
     float edge = clamp(edgeBand + outerBand * 0.5, 0.0, 1.0);
     float sunsetT = smoothstep(0.70, 1.0, u_phase);
-    float nightT = nightGlowReveal(u_phase);
+    float nightT = 0.0;  // nightGlowReveal stub = 0, glow disabled
     vec3 coreCol = LIME_LINEAR;
     vec3 warmCol = mix(
         LIME_LINEAR * vec3(0.90, 0.96, 0.78),
