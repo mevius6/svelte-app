@@ -17,6 +17,7 @@
   let passView: PassDebugView = "final"
   let landscapeMode: SceneDebugState["landscapeMode"] = "beauty"
   let glowEnabled: SceneDebugState["glowEnabled"] = true
+  let fps = 0
 
   function applyDebugState() {
     scene?.setDebugState({
@@ -45,6 +46,7 @@
 
   onMount(() => {
     let cancelled = false
+    let fpsInterval: NodeJS.Timeout | null = null
 
     ;(async () => {
       const nextRenderer = new Renderer(canvas)
@@ -57,6 +59,13 @@
       try {
         // AI: keep LandscapeViewport as a thin scene host while Renderer + LandscapeScene own runtime orchestration.
         await nextRenderer.mount(nextScene)
+
+        // Start FPS polling (update every 200ms for smooth display)
+        if (!cancelled && isDev) {
+          fpsInterval = setInterval(() => {
+            fps = nextRenderer.getFPS()
+          }, 200)
+        }
       } catch (error) {
         console.error("LandscapeViewport: failed to initialize scene", error)
 
@@ -70,6 +79,10 @@
 
     return () => {
       cancelled = true
+      if (fpsInterval) {
+        clearInterval(fpsInterval)
+        fpsInterval = null
+      }
       renderer?.dispose()
       renderer = null
       scene = null
@@ -116,6 +129,10 @@
       />
     </label>
 
+    <div class="debug-field debug-fps">
+      <span>FPS</span>
+      <span class="fps-value">{fps}</span>
+    </div>
   </div>
 {/if}
 
@@ -187,5 +204,17 @@
     inline-size: 1.1rem;
     block-size: 1.1rem;
     accent-color: #c9f08a;
+  }
+
+  .debug-fps {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .fps-value {
+    font-weight: 700;
+    color: #c9f08a;
+    font-variant-numeric: tabular-nums;
   }
 </style>

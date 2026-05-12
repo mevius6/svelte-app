@@ -14,6 +14,11 @@ export class Renderer {
   private width = 0
   private height = 0
 
+  // FPS tracking
+  private frameCount = 0
+  private lastSecondTime = 0
+  private fps = 0
+
   constructor(canvas: HTMLCanvasElement) {
 
     this.canvas = canvas
@@ -52,6 +57,14 @@ export class Renderer {
     const time = timeMs * 0.001
     const dt = this.lastTime === 0 ? 0 : time - this.lastTime
     this.lastTime = time
+
+    // Update FPS counter
+    this.frameCount++
+    if (time - this.lastSecondTime >= 1.0) {
+      this.fps = this.frameCount
+      this.frameCount = 0
+      this.lastSecondTime = time
+    }
 
     this.scene.update(dt)
     this.scene.render(time)
@@ -97,6 +110,10 @@ export class Renderer {
 
     this.lastTime = 0
     this.disposeScene()
+  }
+
+  getFPS(): number {
+    return this.fps
   }
 
 }

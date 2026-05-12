@@ -31,6 +31,10 @@ void main()
         hasTitle = titleAlpha > 0.0005;
     }
     float shoreWaterEdgeZ = shorelineWaterEdgeZ();
+    float shoreRunupWave = max(
+        waveFieldWithMasks(vec2(shorePos.x, shoreWaterEdgeZ) * 1.1, u_time, 0.16, 0.26, 0.32),
+        0.0
+    );
     bool waterWithinPond = hasWater && waterPos.z > shoreWaterEdgeZ;
     float waterToShoreGap = (hasWater && hasShore && tShore > tWater) ? (tShore - tWater) : 1e5;
     float shoreToWaterGap = (hasWater && hasShore && tWater > tShore) ? (tWater - tShore) : 1e5;
@@ -41,11 +45,7 @@ void main()
         float shorelineSeatMaskPre = shorelineTransitionMask(shoreCrossPre, 0.050);
         float shoreContactMaskPre = contactGapMask(shorelineGap, 0.22);
         float shoreBottomCoveragePre = aaCoverage(shorePos.y - (u_waterLevel + SHORE_BANK_FOOT_OFFSET_Y));
-        float shoreRunupWavePre = max(
-            waveFieldWithMasks(vec2(shorePos.x, shoreWaterEdgeZ) * 1.1, u_time, 0.16, 0.26, 0.32),
-            0.0
-        );
-        float shoreFilmThicknessPre = max(0.0, (u_waterLevel + shoreRunupWavePre * 0.22 + shorelineSeatMaskPre * 0.007) - shorePos.y);
+        float shoreFilmThicknessPre = max(0.0, (u_waterLevel + shoreRunupWave * 0.22 + shorelineSeatMaskPre * 0.007) - shorePos.y);
         float shoreFilmMaskPre = smoothstep(0.0, 0.018, shoreFilmThicknessPre) * shorelineSeatMaskPre;
         shoreOverlapMask = max(
             shoreFilmMaskPre,
@@ -112,10 +112,6 @@ void main()
             shoreCol,
             bankShadow * 0.90 + shallowShelfTint * 0.18 + skyCol * 0.04,
             shorelineSeatMask * shoreContactMask * 0.05
-        );
-        float shoreRunupWave = max(
-            waveFieldWithMasks(vec2(shorePos.x, shoreWaterEdgeZ) * 1.1, u_time, 0.16, 0.26, 0.32),
-            0.0
         );
         float shoreFilmThickness = max(0.0, (u_waterLevel + shoreRunupWave * 0.22 + shorelineSeatMask * 0.007) - shorePos.y);
         float shoreFilmMask = smoothstep(0.0, 0.018, shoreFilmThickness) * shorelineSeatMask;
@@ -361,20 +357,10 @@ void main()
     float sunMirror = max(dot(reflDir, sunDir), 0.0);
     vec3 sunLight = sunCol * (pow(sunMirror, 180.0) * 4.5 + pow(sunMirror, 42.0) * 0.7);
     sunLight *= (1.0 - shorelineCore * 0.72);
-    vec3 moonDir = moonDirection(phase);
-    vec3 moonCol = moonColor(phase);
-    float moonMirror = max(dot(reflDir, moonDir), 0.0);
-    // AI: add a wider low-frequency lobe for a longer atmospheric moon path.
-    vec3 moonLight = moonCol * (
-        pow(moonMirror, 180.0) * 1.34 +
-        pow(moonMirror, 34.0) * 0.38 +
-        pow(moonMirror, 8.0) * 0.10
-    );
-    moonLight *= moonMask * (1.0 - shorelineCore * 0.78);
 
     // ЦВЕТ ВОДЫ
     vec3 waterDeep = mix(vec3(0.03,0.10,0.16), skyRefl*0.6, 0.3);
-    vec3 waterCol  = mix(waterDeep, skyRefl + sunLight + moonLight, fresnel);
+    vec3 waterCol  = mix(waterDeep, skyRefl + sunLight, fresnel);
     vec3 shallowShelfTint = mix(vec3(0.40, 0.31, 0.25), vec3(0.48, 0.28, 0.20), phase);
     vec3 wetEdgeTint = mix(vec3(0.18, 0.13, 0.11), vec3(0.20, 0.11, 0.09), phase);
     // AI: same night-grade for underwater shelf/edge to keep shoreline-water continuity.
@@ -404,17 +390,12 @@ void main()
 
     // СПЕКУЛЯР + ГЛИНТЫ
     vec3 halfDir  = normalize(sunDir + viewDir);
-    vec3 halfMoonDir = normalize(moonDir + viewDir);
     float glint = pow(max(dot(n,sunDir),0.0),80.0) * rippleStrength * mix(0.32, 1.0, nearField) * 3.5;
     glint *= (1.0 - shorelineCore * 0.88);
     waterCol += glint*sunCol*1.2;
     waterCol  = mix(waterCol, waterCol*vec3(0.88,0.93,1.05),
                     rippleStrength * 0.28 * mix(0.26, 1.0, nearField));
     waterCol += pow(max(dot(n,halfDir),0.0),52.0) * 0.9 * mix(0.46, 1.0, nearField) * (sunCol*1.5+vec3(0.1));
-    float moonGlint = pow(max(dot(n, moonDir), 0.0), 96.0) * rippleStrength * mix(0.26, 0.82, nearField);
-    moonGlint *= moonMask * (1.0 - shorelineCore * 0.90);
-    waterCol += moonGlint * moonCol * 0.92;
-    waterCol += pow(max(dot(n, halfMoonDir), 0.0), 68.0) * 0.38 * moonMask * mix(0.38, 0.88, nearField) * moonCol;
 
     vec3 horizonLift = mix(horizonSky, skyRefl, 0.68);
     vec3 col = mix(waterCol, horizonLift, horizonMist * 0.10 * (1.0 - shorelineCore * 0.82));
