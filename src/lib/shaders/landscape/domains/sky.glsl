@@ -78,24 +78,12 @@ vec3 shadeSkyDirection(vec3 dir, float phase01, vec3 sunCol, vec3 sunDir, float 
     vec2 skyUv = skyUvFromDirection(dir);
     float skyY = skyUv.y;
     vec3 sky = skyColor(skyY, phase01);
-    float night = nightPhase(phase01);
-    float moonMask = moonPhase(phase01);
 
     float sunAmount = max(dot(dir, sunDir), 0.0);
     float sunCore = pow(sunAmount, 1024.0);
     float sunGlow = pow(sunAmount, 64.0);
     float sunWash = pow(sunAmount, 14.0);
     vec3 sunLight = sunCol * (sunCore * 4.0 + sunGlow * 0.85 + sunWash * 0.22);
-
-    vec3 moonDir = moonDirection(phase01);
-    vec3 moonCol = moonColor(phase01);
-    float moonAmount = max(dot(dir, moonDir), 0.0);
-    float moonAA = max(fwidth(moonAmount), 1e-5);
-    // AI: explicit moon disk + halo so night sky reads as intentional, not just darkened sunset.
-    float moonDisk = smoothstep(0.99860 - moonAA * 2.2, 0.99860 + moonAA * 2.2, moonAmount);
-    float moonHalo = pow(moonAmount, 48.0);
-    float moonAura = pow(moonAmount, 8.0);
-    vec3 moonLight = moonCol * (moonDisk * 1.60 + moonHalo * 0.55 + moonAura * 0.14) * moonMask;
 
     float cloudBase;
     float density = cloudDensity(skyUv, u_time, phase01, cloudBase, cloudDetail);
@@ -104,14 +92,10 @@ vec3 shadeSkyDirection(vec3 dir, float phase01, vec3 sunCol, vec3 sunDir, float 
     vec3 warmCloudLight = sunCol * 1.3 + vec3(0.25);
     vec3 cloudLight = mix(vec3(1.0, 1.0, 1.05), warmCloudLight, sunWash);
     cloudLight *= mix(0.72, 1.0, cloudBaseLight);
-    float moonClear = smoothstep(0.55, 0.92, moonAmount) * moonMask;
-    float moonCloudLift = moonClear * (moonHalo * 0.30 + moonAura * 0.18);
-    vec3 moonCloudCol = moonCol * (0.28 + 0.18 * cloudBaseLight);
-    float cloudMix = density * (1.0 - moonClear * 0.68);
 
     return mix(
-        sky + sunLight + moonLight,
-        cloudLight + sunLight * sunLitCloud + moonCloudCol * moonCloudLift,
-        cloudMix
+        sky + sunLight,
+        cloudLight + sunLight * sunLitCloud,
+        density
     );
 }
