@@ -15,11 +15,8 @@ float cloudDensity(vec2 uv, float t, float phase01, out float base, float detail
     base = cloudBaseFbm(baseUv);
     float cloud = base + cloudDetailFbm(uv * vec2(6.5, 9.0) + wind * 1.4) * 0.38 * detailLOD;
     // Phase 6: cloud density: low at night/dawn (0.15), high at day/dusk (1.0), slightly less at very end
-    float phaseFade = mix(
-        0.55,  // night/dawn — fewer clouds
-        1.0,   // day/dusk — more clouds
-        smoothstep(0.15, 0.55, phase01)
-    ) * (1.0 - smoothstep(0.80, 1.0, phase01) * 0.3);  // slight fade toward end
+    float phaseFade = smoothstep(0.05, 0.60, phase01)
+        * mix(1.0, 0.72, smoothstep(0.80, 1.0, phase01));
     float verticalFade = smoothstep(1.0, 0.52, uv.y);
     return cloud * verticalFade * phaseFade * 0.55;
 }
