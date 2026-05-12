@@ -16,22 +16,29 @@ float ripples(vec2 p,float t,float depthMask){
     return(wave(p,DIR_R1,10.0,1.10,t)*0.018+wave(p,DIR_R2,14.0,1.30,t)*0.015
           +wave(p,DIR_R3,18.0,1.60,t)*0.011+wave(p,DIR_R4,11.5,0.95,t)*0.013)*depthMask;}
 
+// AI: Extract warp computation to avoid redundant sin() calls when sampling wave field multiple times.
+vec2 computeWarp(vec2 p, float t) {
+    return vec2(
+        sin(p.x*0.7 + t*0.15)*0.12 + sin(p.y*0.5 + t*0.11)*0.08,
+        sin(p.y*0.6 + t*0.13)*0.12 + sin(p.x*0.4 + t*0.09)*0.08
+    );
+}
+
+// AI: waveFieldWithMasks expects pw (already warped position), not raw p.
+// This allows warp computation to be amortized across multiple samples in waveNormal.
 float waveFieldWithMasks(
-    vec2 p,
+    vec2 pw,
     float t,
     float largeMask,
     float mediumMask,
     float rippleMask
 ) {
-    vec2 warp=vec2(sin(p.x*0.7+t*0.15)*0.12+sin(p.y*0.5+t*0.11)*0.08,
-                   sin(p.y*0.6+t*0.13)*0.12+sin(p.x*0.4+t*0.09)*0.08);
-    vec2 pw=p+warp;
-    float baseWaves = largeWaves(pw,t,largeMask)+mediumWaves(pw,t,mediumMask);
+    float baseWaves = largeWaves(pw, t, largeMask) + mediumWaves(pw, t, mediumMask);
     // AI: Phase D — skip high-frequency ripple trig when rippleMask is effectively zero in far field.
     if (rippleMask <= 0.0001) {
         return baseWaves;
     }
-    return baseWaves + ripples(pw*1.8,t,rippleMask)*0.8;
+    return baseWaves + ripples(pw*1.8, t, rippleMask)*0.8;
 }
 
 vec3 waveNormal(
@@ -47,11 +54,13 @@ vec3 waveNormal(
     float distanceLod = smoothstep(WAVE_LOD_NEAR_DIST, WAVE_LOD_FAR_DIST, viewDistance);
     // AI: slightly widen finite-diff step in the far field to reduce tiny derivative noise.
     float eps = mix(WAVENORMAL_EPS_NEAR, WAVENORMAL_EPS_FAR, distanceLod);
+    // AI: compute warp once and reuse for all four finite-difference samples.
+    vec2 pw = p + computeWarp(p, t);
     // AI: reuse the same depth attenuation across the four finite-difference wave samples; depth is constant for this fragment.
-    float waveXp = waveFieldWithMasks(p + vec2(eps, 0.0), t, largeMask, mediumMask, rippleMask);
-    float waveXn = waveFieldWithMasks(p - vec2(eps, 0.0), t, largeMask, mediumMask, rippleMask);
-    float waveYp = waveFieldWithMasks(p + vec2(0.0, eps), t, largeMask, mediumMask, rippleMask);
-    float waveYn = waveFieldWithMasks(p - vec2(0.0, eps), t, largeMask, mediumMask, rippleMask);
+    float waveXp = waveFieldWithMasks(pw + vec2(eps, 0.0), t, largeMask, mediumMask, rippleMask);
+    float waveXn = waveFieldWithMasks(pw - vec2(eps, 0.0), t, largeMask, mediumMask, rippleMask);
+    float waveYp = waveFieldWithMasks(pw + vec2(0.0, eps), t, largeMask, mediumMask, rippleMask);
+    float waveYn = waveFieldWithMasks(pw - vec2(0.0, eps), t, largeMask, mediumMask, rippleMask);
 
     return normalize(vec3(
         -(waveXp - waveXn) * 5.0,

@@ -201,7 +201,8 @@ void main()
     float interactiveRippleMask = rippleLod * (1.0 - shallowWaveDamping * 0.06);
     float microNoiseMask = mix(1.0, 0.22, farField) * (1.0 - shallowWaveDamping * 0.22);
     vec2 p = waterPos.xz * 1.1;
-    float waveHeight = waveFieldWithMasks(p, t, largeWaveMask, mediumWaveMask, rippleWaveMask);
+    vec2 pw = p + computeWarp(p, t);  // Compute warp once, reuse for both waveHeight and waveNormal
+    float waveHeight = waveFieldWithMasks(pw, t, largeWaveMask, mediumWaveMask, rippleWaveMask);
 
     // AI: Phase D debug overlay for LOD tuning.
     // R: farField, G: rippleLod, B: interactiveRippleMask
