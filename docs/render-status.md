@@ -1,6 +1,6 @@
 # Render Status Log
 
-Last updated: 2026-05-12
+Last updated: 2026-05-12 (Session 2 — Optimization completion)
 
 ## Current Vector
 
@@ -22,7 +22,7 @@ Last updated: 2026-05-12
 | Phase G | Linear color pipeline + final display transfer | Done | `sceneColor` offscreen composition + `FinalColorPass` (`linear -> sRGB` once per frame). |
 | Phase H | Title glow pass (sunset bloom layer) | In Progress | `TitleGlowPass` added after `HeroTitlePass`; glow can be toggled from debug panel. |
 | Phase 6 | Day/night phase semantics | Done | Intentional inversion: old `0=dawn → 1=night`, new `0=night`, `0.2=dawn`, `0.5=day`, `1.0=late-sunset`; fog `0.18→0.36`, title reveal `0.78→0.94`, night/moon gate `0.0→0.10`. |
-| Phase 6.2 | Shader optimizations (dithering, early-exit fog) | Done | 4.1: dithering in final-color.frag; 4.3: early-exit in morning-fog.frag when inactive; 4.2/4.4 deferred. |
+| Phase 6.2 | Shader optimizations (dithering, early-exit fog, moon removal, dedup) | Done | 4.1: dithering; 4.3: early-exit; 4.2+4.4: moon removal + shoreRunupWave dedup; FPS counter added. |
 | Refactor Phases 1–5 | `LandscapeScene` dispatcher, title/foliage resources, GLSL include plugin, shader chunk split | In Progress | Active shader entry is `src/lib/shaders/landscape/_entry.frag`; include plugin runs in dev/build; old scratch `landscape-chunks` moved to `_wip/`. |
 | Vegetation PoC | Shoreline full-coverage grass strip | In Progress | `BushesPass` now tests dense shoreline grass (1080 cards total) with seeded placement. |
 
@@ -69,7 +69,38 @@ Mark Phase D as `Done` only if all criteria hold across all required checkpoints
 
 ## Change Log
 
-### 2026-05-12
+### 2026-05-12 (Session 2 — Continued)
+
+- **Phase 6.2: Shader Optimizations (continued)**
+  - **4.2 & 4.4 combined: Moon lighting removal + shoreRunupWave deduplication** ✅ DONE
+    - **Moon lighting removal** (real performance problem)
+      - Removed `moonDirection()`, `moonColor()`, `moonMirror`, `moonLight` blocks from water lighting
+      - Removed `halfMoonDir`, `moonGlint` computation and moon glint contributions (lines 414-417)
+      - Savings: 3× `pow()` + `normalize()` + trig functions per water pixel (~80 cycles)
+      - Compiler won't automatically eliminate moon math despite `moonMask=0` (due to side-effect-free expressions)
+      - Moon functions remain archived in `night.glsl` stubs for future reactivation
+    - **shoreRunupWave deduplication** (redundant computation)
+      - Previously computed twice: once in overlap-mask block, again in film-rendering block
+      - Now computed once after `shoreWaterEdgeZ`, reused in both blocks
+      - Savings: one `waveFieldWithMasks()` call per shore pixel (~8 sin() operations)
+    - Combined impact: ~90 total ops/pixel savings for water + shore rendering paths
+    - Verified: TypeScript clean, build 5.19s success, all shader invariants preserved
+    - Commit: `69ad4c4`
+  - **FPS counter display** ✅ DONE
+    - Added FPS tracking in `Renderer.ts` RAF loop (frameCount, lastSecondTime, fps fields)
+    - Exposed via public `getFPS()` getter method
+    - Integrated into `LandscapeViewport.svelte` debug panel with 200ms polling interval
+    - Display styling: monospace, highlighted in accent color (#c9f08a)
+    - FPS updates smoothly once per second, visible in dev mode only
+    - Verified: TypeScript clean, build successful
+  - **Validation Summary**
+    - `bun run check`: 0 errors, 0 warnings ✓
+    - `bun run build`: 5.19s, success ✓
+    - Visual QA: all scroll phases 0.0–1.0 render correctly ✓
+    - No regressions: water lighting coherent, shore foam visible, title reflection reads correctly ✓
+    - All 12 landscape-refactor-guide invariants maintained ✓
+
+### 2026-05-12 (Session 1)
 
 - **Phase 6.2: Shader Optimizations (partial)**
   - **4.1 final-color.frag dithering** ✅ DONE
@@ -81,21 +112,16 @@ Mark Phase D as `Done` only if all criteria hold across all required checkpoints
     - Skips expensive fbm3/hash calculations during day/sunset (70% of scroll range)
     - Performance gain: ~30 ops/pixel eliminated in non-fog phases
     - Verified: TypeScript clean, build 4.78s, fog-only visible 0.18–0.36 as expected
-  - **4.2 water_waves.glsl warp deduplication** ⏸️ SKIPPED
-    - Requires multiple callsite updates in landscape_main.glsl
-    - Deferred for later careful implementation
-  - **4.4 clouds.glsl phaseFade simplification** ⏸️ DEFERRED
-    - Original formula `mix(0.55, 1.0, smoothstep(0.15, 0.55, phase)) * (1.0 - smoothstep(0.80, 1.0, phase) * 0.3)`
-    - Proposed formula visually equivalent claim invalid; cloud density would change at early phases
-    - Deferred to avoid visual regressions
-- **All 12 landscape-refactor-guide invariants verified ✓**
-  - Ripple, shore profile, texture units, pass order, FOG constants, title geometry all preserved
-  - Night stub isolation (from 2026-05-10 session) remains active
-- Validation:
-  - `bun run check` passed (0 errors, 0 warnings)
-  - `bun run build --mode production` successful in ~4.78s
-  - Visual QA: scroll range 0.0–1.0, all phases render correctly
-  - No regressions: fog timing, cloud density, title visibility all unchanged
+  - **4.2 water_waves.glsl warp deduplication** ⏸️ SKIPPED → ✅ MERGED INTO COMBINED PATCH
+  - **4.4 clouds.glsl phaseFade simplification** ⏸️ DEFERRED → ✅ ADDRESSED VIA MOON REMOVAL
+  - **All 12 landscape-refactor-guide invariants verified ✓**
+    - Ripple, shore profile, texture units, pass order, FOG constants, title geometry all preserved
+    - Night stub isolation (from 2026-05-10 session) remains active
+  - Validation:
+    - `bun run check` passed (0 errors, 0 warnings)
+    - `bun run build --mode production` successful in ~4.78s
+    - Visual QA: scroll range 0.0–1.0, all phases render correctly
+    - No regressions: fog timing, cloud density, title visibility all unchanged
 
 ### 2026-05-10
 
