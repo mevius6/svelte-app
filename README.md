@@ -76,7 +76,7 @@ FinalColorPass (single linear → sRGB transfer)
 - **baseLift removed:** анимация подъёма тайтла по Y при скролле удалена. Высота теперь фиксирована: `WATER_LEVEL + height * 0.5 + 0.06`.
 - **Render order:** BushesPass перенесён перед HeroTitlePass — растительность за тайтлом, не перед ним.
 - **Статичная камера:** scroll больше не двигает орбиту. Камера зафиксирована: `yaw=-0.08`, `pitch=0.068`, `radius=2.92`.
-- **Scroll = time of day:** `u_scroll` теперь только фаза дня (0=рассвет, 1=закат).
+- **Scroll = time of day (Phase 6):** `u_scroll` теперь только фаза суток с инвертированной семантикой: `0=ночь`, `0.2=рассвет`, `0.5=день`, `1=закат/late-sunset`.
 - **Clouds follow sun (Phase B):** `solarDrift = vec2(phase01 * 0.42, phase01 * 0.06)` в `cloudDensity` — облака движутся вместе с солнцем.
 - **Title reflection fixes:** убрана белая рамка (`haloAlpha` не композируется), базовый цвет тайтла зафиксирован как DayGlo `#c9f08a` (в shader как linear-эквивалент), нормаль воды сглаживается перед reflection ray для title (`nTitle = mix(n, vec3(0,1,0), rippleStrength*0.70)`).
 - **Phase A — shore 1D texture:** `shoreFbm` (≈90 vnoise/пиксель воды) заменён на 1 texture fetch из `u_shoreProfileTex`. Новый файл: `src/lib/scene/shoreProfileBaker.ts`.
@@ -86,16 +86,16 @@ FinalColorPass (single linear → sRGB transfer)
 - **Phase D tuning (итерация 2):** LOD-якоря вынесены в константы (`WAVE_LOD_NEAR_DIST/FAR_DIST`, `RIPPLE_FADE_START/END`, `WAVENORMAL_EPS_NEAR/FAR`), окно затухания ripple расширено до `smoothstep(0.58, 0.82, farField)`, `waveNormal` теперь увеличивает `eps` к дальнему полю (меньше shimmer на горизонте), interactive ripple-normal отвязан от `rippleWaveMask` в отдельный `interactiveRippleMask`.
 - **Phase D debug tooling:** добавлен debug-режим `Landscape=Wave LOD` (`DEBUG_WAVE_LOD`), который показывает маски LOD по каналам: `R=farField`, `G=rippleLod`, `B=interactiveRippleMask`.
 - **Phase E (E1, in progress) — Title glyph loop isolation:** для reflection-path добавлена предсобранная `phrase MSDF` texture; `landscape.frag` перешёл с 32-итерационного цикла по глифам на single-texture lookup по `localMetric`.
-- **Sunset reveal animation:** тайтл теперь проявляется ближе к закату через фазовые маски (`smoothstep(0.62, 0.88)` для direct и `smoothstep(0.67, 0.93)` для reflection), плюс лёгкий scale-in без смещения якоря по `Y`.
-- **Night phase (post-sunset):** scroll-цикл теперь включает выраженную ночную фазу после заката (`phase ~ 0.92..1.0`) с затемнением неба/солнца и снижением солнечного вклада (без поломки late-sunset палитры).
-- **Phase F (POC) — Morning fog pass:** добавлен отдельный fullscreen pass утреннего тумана (`MorningFogPass`) с fade-out до появления тайтла. Базовые ручки тюнинга в shader-константах: `FOG_DISSIPATE_START`, `FOG_DISSIPATE_END`, `FOG_DENSITY`.
+- **Sunset reveal animation (Phase 6):** тайтл проявляется к late-sunset через фазовые маски (`smoothstep(0.78, 0.94)` для direct и `smoothstep(0.82, 0.98)` для reflection), плюс лёгкий scale-in без смещения якоря по `Y`.
+- **Night phase (Phase 6):** ночная фаза теперь находится в начале scroll-цикла (`nightPhase = smoothstep(0.12, 0.0, phase)`), а закат/late-sunset — в хвосте (`phase ~ 0.78..1.0`).
+- **Phase F (POC) — Morning fog pass:** добавлен отдельный fullscreen pass утреннего тумана (`MorningFogPass`) с fade-out до появления тайтла. Базовые ручки Phase 6: `FOG_DISSIPATE_START=0.18`, `FOG_DISSIPATE_END=0.36`, `FOG_DENSITY`.
 - **Phase F (F1) — Analytic height fog:** в `landscape.frag` добавлен экспоненциальный height fog через оптическую толщину `tau` и трансмиттанс `T=exp(-tau)`, с корректным композитингом `scene*T + fog*(1-T)`; тайтл туманится по своему `tTitle`.
   - Важный нюанс для non-constant density: фактор тумана должен быть `1 - exp(-tau)`, а не сырое `tau`.
 - **Phase G — Linear color pipeline:** финальная сцена теперь композится в линейном `sceneColor` FBO, после чего единоразово проходит через `FinalColorPass` (`linear -> sRGB`). Ранняя display-gamma удалена из `landscape.frag` (`tonemap` остался в linear).
 - **Phase H (in progress) — Title glow pass:** добавлен отдельный fullscreen post-pass `TitleGlowPass` после `HeroTitlePass` (до `FinalColorPass`), glow строится по precomposed phrase MSDF (`u_titlePhraseTex`) и включается/отключается из dev debug panel.
   - Внутри pass применена схема `source -> separable blur (multi-pass) -> layered additive composite` (по мотивам GM Mini Bloom/Blur Philosophy) для устранения рваного/гребенчатого свечения.
-- **Night title glow baseline:** glow в `TitleGlowPass` включается только в ночном хвосте (`nightPhase ~ 0.92..1.0`); отражённый glow тайтла в воде отключён из-за артефактов контура/рамки.
-- **Night sky/water lighting:** в `landscape.frag` добавлена читаемая луна в небе (диск + мягкий ореол) и отдельный `moonPhase` gate (`~0.945..1.0`) для более позднего/плавного включения луны и лунной дорожки; широкая часть дорожки приглушена примерно на 10–15% для более атмосферного финального кадра.
+- **Late-sunset title glow baseline:** glow в `TitleGlowPass` включается в late-sunset хвосте (`titleReveal 0.78→0.94`, `nightGlowReveal 0.94→1.0`); отражённый glow тайтла в воде отключён из-за артефактов контура/рамки.
+- **Night sky/water lighting:** в `landscape.frag` добавлена читаемая луна в небе (диск + мягкий ореол) и отдельный `moonPhase` gate в начале цикла (`phase ~ 0.0..0.10`) для ночного света/лунной дорожки; широкая часть дорожки приглушена примерно на 10–15% для более атмосферного кадра.
 - **Vegetation PoC refinement:** береговая трава переведена с равномерной полосы на кластерную раскладку с просветами и центральным readability-коридором за тайтлом; в `bushes.frag` добавлен horizon/distance fade (меньше “пилы” на горизонте).
 - **Vegetation + fog integration:** трава теперь дополнительно туманится в `bushes.frag` (phase + distance + height), а `MorningFogPass` получил сглаживание horizon-core, чтобы убрать белую линию на переходе горизонт/берег.
 

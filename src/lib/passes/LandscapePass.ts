@@ -4,7 +4,7 @@ import { RenderPass } from "../render/RenderPass"
 import type { RippleWorldRect, SceneCameraState, TitleHeroState } from "../scene/sceneCamera"
 import type { HeroTitleAtlasRenderData } from "../scene/LandscapeResources"
 import landscapeVert from "../shaders/landscape.vert?raw"
-import landscapeFrag from "../shaders/landscape.frag?raw"
+import landscapeFrag from "../shaders/landscape/_entry.frag?raw"
 
 export type LandscapeDebugMode = "beauty" | "ripple" | "normals" | "reflection" | "waveLod"
 

@@ -31,17 +31,17 @@ void main() {
     blurC *= 0.25;
 
     float sunsetBoost = mix(0.92, 1.08, smoothstep(0.70, 1.0, u_phase));
-    float nightBoost = smoothstep(0.92, 1.0, u_phase);
+    // float nightBoost = 0.0;  // stub: night glow disabled
     float pulse = 0.98 + 0.02 * sin(u_time * 0.85);
 
     vec3 glowRgb = (blurA.rgb * 1.08 + blurB.rgb * 0.72 + blurC.rgb * 0.32)
-        * sunsetBoost * mix(0.96, 1.20, nightBoost) * pulse;
+        * sunsetBoost * 0.96 * pulse;  // mix(0.96, 1.20, 0.0) = 0.96
     float energy = blurA.a * 0.80 + blurB.a * 0.52 + blurC.a * 0.24;
     float softMask = smoothstep(0.01, 0.26, energy);
     glowRgb *= mix(0.58, 1.0, softMask);
 
     float glowAlpha = (blurA.a * 0.52 + blurB.a * 0.34 + blurC.a * 0.15)
-        * sunsetBoost * mix(0.94, 1.26, nightBoost) * pulse;
+        * sunsetBoost * 0.94 * pulse;  // mix(0.94, 1.26, 0.0) = 0.94
     glowAlpha = clamp(glowAlpha * mix(0.72, 1.0, softMask), 0.0, 0.56);
     glowRgb = min(glowRgb, vec3(0.82));
 

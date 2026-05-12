@@ -6,7 +6,11 @@ import { MorningFogPass } from "../passes/MorningFogPass"
 import { TitleGlowPass } from "../passes/TitleGlowPass"
 import { FinalColorPass } from "../passes/FinalColorPass"
 import { FBO } from "../gl/FBO"
-import { LandscapeResources, type FoliageAtlasSourceSet } from "./LandscapeResources"
+import {
+  LandscapeResources,
+  type FoliageAtlasSourceSet,
+  type HeroTitleAtlasRenderData,
+} from "./LandscapeResources"
 import {
   computeSceneCamera,
   computeVegetationHorizon,
@@ -38,6 +42,20 @@ export type SceneDebugState = {
   passView: PassDebugView
   landscapeMode: Exclude<LandscapeDebugMode, "ripple">
   glowEnabled: boolean
+}
+
+// AI: Phase 1 — extracted frame state to separate structure for cleaner dispatch logic.
+// Collects all per-frame computed data once, then passes to appropriate renderDebug* or renderFinal.
+interface FrameState {
+  time: number
+  rippleTex: WebGLTexture | null
+  sceneFrame: ReturnType<typeof computeSceneFrame>
+  camera: SceneCameraState
+  vegetationHorizon: number
+  titleHero: ReturnType<typeof computeTitleHeroState>
+  heroTitleAtlasRenderData: HeroTitleAtlasRenderData | null
+  heroTitleAtlas: any // placeholder; will get the actual type from resources
+  useGlyphTitle: boolean
 }
 
 export class LandscapeScene implements Scene {
@@ -73,6 +91,17 @@ export class LandscapeScene implements Scene {
   private readonly scrollHandler = () => {
     const max = document.body.scrollHeight - window.innerHeight
     this.scrollNorm = max > 0 ? Math.min(Math.max(window.scrollY / max, 0), 1) : 0
+  }
+
+  /**
+   * Phase 6: Convert scroll position to phase (0-1) with new semantics.
+   * New mapping: 0=night, 0.2=dawn, 0.5=day, 0.8=dusk, 1.0=late-sunset
+   * This is the single point of control for day-night cycle ordering.
+   */
+  private scrollToPhase(scroll: number): number {
+    // Currently identity mapping; shader functions interpret phase semantics.
+    // Future: can add easing (slow dawn, fast sunset) here without changing shaders.
+    return Math.max(0, Math.min(scroll, 1.0))
   }
 
   private readonly onPointerDown = (event: PointerEvent) => {
@@ -170,13 +199,11 @@ export class LandscapeScene implements Scene {
 
   update(_dt: number) {}
 
-  render(time: number) {
+  // AI: Phase 1 — builds frame state once per render cycle, centralizing all per-frame data computation.
+  // Reduces render() method complexity and enables clean dispatch to renderDebug*/renderFinal.
+  private buildFrameState(time: number): FrameState | null {
     const textTexture = this.resources.textTexture
-    if (!textTexture) {
-      return
-    }
-
-    this.setSceneOutputFramebuffer(null)
+    if (!textTexture) return null
 
     const rippleTex = this.ripple.render(time, null) ?? this.resources.rippleFallbackTexture
     const sceneFrame = computeSceneFrame(this.width, this.height)
@@ -184,9 +211,14 @@ export class LandscapeScene implements Scene {
     const vegetationHorizon = computeVegetationHorizon(camera, this.width, this.height)
     const textTexSize = this.resources.textTextureSize
     const titleLayout = this.resources.heroTitleLayout
-    const titleHero = computeTitleHeroState(this.scrollNorm, titleLayout.aspect, textTexSize.contentRect)
+    const titleHero = computeTitleHeroState(
+      this.scrollNorm,
+      titleLayout.aspect,
+      textTexSize.contentRect
+    )
     const heroTitleAtlasRenderData = this.resources.heroTitleAtlasRenderData
-    const heroTitleAtlas = heroTitleAtlasRenderData?.atlas ?? this.resources.heroTitleAtlas
+    const heroTitleAtlas = heroTitleAtlasRenderData?.atlas ?? this.resources.heroTitleAtlas ?? null
+
     // AI: Phase E — require both atlas texture and precomposed phrase texture so
     // direct title and reflection stay on the same MSDF source.
     const useGlyphTitle = Boolean(
@@ -194,148 +226,193 @@ export class LandscapeScene implements Scene {
       heroTitleAtlasRenderData?.phraseTexture
     )
 
-    this.landscape.setFrameState({
+    return {
+      time,
+      rippleTex,
+      sceneFrame,
       camera,
-      scroll: this.scrollNorm,
-      textTexture,
+      vegetationHorizon,
       titleHero,
-      useTitleBillboard: !useGlyphTitle,
-      titleAtlasRenderData: heroTitleAtlasRenderData,
-      rippleTexelSize: this.ripple.texelSize,
-      rippleWorldRect: RIPPLE_WORLD_RECT,
+      heroTitleAtlasRenderData,
+      heroTitleAtlas,
+      useGlyphTitle,
+    }
+  }
+
+  render(time: number) {
+    const frame = this.buildFrameState(time)
+    if (!frame) return
+
+    switch (this.passView) {
+      case 'ripple':
+        return this.renderDebugRipple(frame)
+      case 'vegetation':
+        return this.renderDebugVegetation(frame)
+      case 'fog':
+        return this.renderDebugFog(frame)
+      case 'glow':
+        return this.renderDebugGlow(frame)
+      case 'landscape':
+        return this.renderDebugLandscape(frame)
+      default:
+        return this.renderFinal(frame)
+    }
+  }
+
+  // AI: Phase 1 — debug view for ripple simulation pass.
+  private renderDebugRipple(frame: FrameState) {
+    this.setSceneOutputFramebuffer(null)
+    this.landscape.setDebugMode('ripple')
+    this.landscape.render(frame.time, frame.rippleTex)
+  }
+
+  // AI: Phase 1 — debug view for vegetation (bushes) pass; fog/haze disabled for readability.
+  private renderDebugVegetation(frame: FrameState) {
+    this.gl.clearColor(...VEGETATION_DEBUG_CLEAR)
+    this.gl.clear(this.gl.COLOR_BUFFER_BIT)
+    this.bushes.setFrameState({
+      camera: frame.camera,
+      horizon: frame.vegetationHorizon,
+      phase: this.scrollToPhase(this.scrollNorm),
+      debugView: true,
+      atlasTextures: this.resources.foliageAtlas,
       sceneScale: {
-        x: sceneFrame.scaleX,
-        y: sceneFrame.scaleY,
+        x: frame.sceneFrame.scaleX,
+        y: frame.sceneFrame.scaleY,
       },
-      shorePlaneZ: SHORELINE_WORLD_Z,
-      waterLevel: WATER_LEVEL,
-      // AI: Phase A — pre-baked shore profile texture.
-      shoreProfileTexture: this.resources.shoreProfileTexture,
     })
-    this.heroTitle.setFrameState({
-      camera,
-      phase: this.scrollNorm,
-      waterLevel: WATER_LEVEL,
-      titleHero,
-      atlas: heroTitleAtlas,
-      gpuLayout: heroTitleAtlasRenderData?.gpuLayout ?? null,
+    this.bushes.render(frame.time, null)
+  }
+
+  // AI: Phase 1 — debug view for morning fog pass; shows density profile in isolation.
+  private renderDebugFog(frame: FrameState) {
+    this.gl.clearColor(0.02, 0.03, 0.05, 1.0)
+    this.gl.clear(this.gl.COLOR_BUFFER_BIT)
+    this.morningFog.setFrameState({
+      phase: this.scrollToPhase(this.scrollNorm),
+      debugDensity: true,
     })
-    this.titleGlow.setFrameState({
-      enabled: this.glowEnabled && useGlyphTitle,
-      debugIsolate: this.passView === "glow",
-      camera,
-      phase: this.scrollNorm,
-      waterLevel: WATER_LEVEL,
-      titleHero,
-      phraseTexture: heroTitleAtlasRenderData?.phraseTexture ?? null,
-      phraseTextureSize: heroTitleAtlasRenderData?.phraseTextureSize ?? { width: 1, height: 1 },
-      titleAtlasPxRange: heroTitleAtlasRenderData?.atlas.font.atlas.distanceRange ?? 4,
-    })
+    this.morningFog.render(frame.time, null)
+  }
 
-    if (this.passView === "ripple") {
-      this.landscape.setDebugMode("ripple")
-      this.landscape.render(time, rippleTex)
-      return
-    }
+  // AI: Phase 1 — debug view for title glow pass; shows glow isolation.
+  private renderDebugGlow(frame: FrameState) {
+    this.gl.clearColor(0.0, 0.0, 0.0, 1.0)
+    this.gl.clear(this.gl.COLOR_BUFFER_BIT)
+    this.setupTitleGlowState(frame)
+    this.titleGlow.render(frame.time, null)
+  }
 
-    if (this.passView === "vegetation") {
-      this.gl.clearColor(...VEGETATION_DEBUG_CLEAR)
-      this.gl.clear(this.gl.COLOR_BUFFER_BIT)
-      this.bushes.setFrameState({
-        camera,
-        horizon: vegetationHorizon,
-        phase: this.scrollNorm,
-        debugView: true,
-        atlasTextures: this.resources.foliageAtlas,
-        sceneScale: {
-          x: sceneFrame.scaleX,
-          y: sceneFrame.scaleY,
-        },
-      })
-      this.bushes.render(time, null)
-      return
-    }
+  // AI: Phase 1 — debug view for landscape pass; allows viewing specific shader domains (ripple, normals, reflection, wave LOD).
+  private renderDebugLandscape(frame: FrameState) {
+    this.landscape.setDebugMode(this.landscapeMode)
+    this.landscape.render(frame.time, frame.rippleTex)
+  }
 
-    if (this.passView === "fog") {
-      this.gl.clearColor(0.02, 0.03, 0.05, 1.0)
-      this.gl.clear(this.gl.COLOR_BUFFER_BIT)
-      this.morningFog.setFrameState({
-        phase: this.scrollNorm,
-        debugDensity: true,
-      })
-      this.morningFog.render(time, null)
-      return
-    }
+  // AI: Phase 1 — full render: landscape → bushes → fog → heroTitle → titleGlow → final color transfer (linear→sRGB).
+  // All passes write to offscreen sceneColor FBO, then FinalColorPass applies single display transfer.
+  private renderFinal(frame: FrameState) {
+    if (!this.sceneColor) return
 
-    if (this.passView === "glow") {
-      this.gl.clearColor(0.0, 0.0, 0.0, 1.0)
-      this.gl.clear(this.gl.COLOR_BUFFER_BIT)
-      this.titleGlow.render(time, null)
-      return
-    }
+    // Setup all pass state up front
+    this.setupLandscapeState(frame)
+    this.setupBushesState(frame)
+    this.setupMorningFogState(frame)
+    this.setupHeroTitleState(frame)
+    this.setupTitleGlowState(frame)
 
-    const shouldRenderHeroTitle =
-      useGlyphTitle &&
-      (this.passView === "final" ||
-        (this.passView === "landscape" && this.landscapeMode === "beauty"))
-    const shouldRenderTitleGlow = this.glowEnabled && shouldRenderHeroTitle
-
-    if (this.passView === "landscape" && this.landscapeMode !== "beauty") {
-      this.landscape.setDebugMode(this.landscapeMode)
-      this.landscape.render(time, rippleTex)
-      return
-    }
-
-    if (!this.sceneColor) {
-      return
-    }
-
-    // AI: linear scene composition is now done in offscreen target first, then a single
-    // display transfer pass applies sRGB output conversion.
+    // Offscreen composition: linear scene in sceneColor FBO
     this.setSceneOutputFramebuffer(this.sceneColor.framebuffer)
     this.gl.bindFramebuffer(this.gl.FRAMEBUFFER, this.sceneColor.framebuffer)
     this.gl.viewport(0, 0, this.width, this.height)
     this.gl.clearColor(0.0, 0.0, 0.0, 1.0)
     this.gl.clear(this.gl.COLOR_BUFFER_BIT)
 
-    // AI: renderer uses painter's algorithm (depth test disabled), so pass order defines layering.
-    // Final chain: landscape → bushes → morningFog → heroTitle → titleGlow.
-    this.landscape.setDebugMode("beauty")
-    this.landscape.render(time, rippleTex)
+    // Painter's algorithm: pass order defines layering. Do not reorder.
+    this.landscape.setDebugMode('beauty')
+    this.landscape.render(frame.time, frame.rippleTex)
+    this.bushes.render(frame.time, null)
+    this.morningFog.render(frame.time, null)
 
-    // AI: bushes + fog render before heroTitle so text remains crisp/legible over atmosphere.
-    if (this.passView === "final") {
-      this.bushes.setFrameState({
-        camera,
-        horizon: vegetationHorizon,
-        phase: this.scrollNorm,
-        debugView: false,
-        atlasTextures: this.resources.foliageAtlas,
-        sceneScale: {
-          x: sceneFrame.scaleX,
-          y: sceneFrame.scaleY,
-        },
-      })
-      this.bushes.render(time, null)
-
-      this.morningFog.setFrameState({
-        phase: this.scrollNorm,
-        debugDensity: false,
-      })
-      this.morningFog.render(time, null)
+    if (frame.useGlyphTitle) {
+      this.heroTitle.render(frame.time, null)
+      if (this.glowEnabled) {
+        this.titleGlow.render(frame.time, null)
+      }
     }
 
-    if (shouldRenderHeroTitle) {
-      this.heroTitle.render(time, null)
-    }
-    if (shouldRenderTitleGlow) {
-      this.titleGlow.render(time, null)
-    }
-
+    // Single display transfer: linear → sRGB in FinalColorPass
     this.setSceneOutputFramebuffer(null)
     this.finalColor.setOutputFramebuffer(null)
     this.finalColor.setFrameState({ useExactSrgb: true })
-    this.finalColor.render(time, this.sceneColor.texture)
+    this.finalColor.render(frame.time, this.sceneColor.texture)
+  }
+
+  // AI: Phase 1 — setup helpers extract pass-specific configuration from frame state.
+  private setupLandscapeState(frame: FrameState) {
+    this.landscape.setFrameState({
+      camera: frame.camera,
+      scroll: this.scrollToPhase(this.scrollNorm),
+      textTexture: this.resources.textTexture!,
+      titleHero: frame.titleHero,
+      useTitleBillboard: !frame.useGlyphTitle,
+      titleAtlasRenderData: frame.heroTitleAtlasRenderData,
+      rippleTexelSize: this.ripple.texelSize,
+      rippleWorldRect: RIPPLE_WORLD_RECT,
+      sceneScale: {
+        x: frame.sceneFrame.scaleX,
+        y: frame.sceneFrame.scaleY,
+      },
+      shorePlaneZ: SHORELINE_WORLD_Z,
+      waterLevel: WATER_LEVEL,
+      shoreProfileTexture: this.resources.shoreProfileTexture,
+    })
+  }
+
+  private setupBushesState(frame: FrameState) {
+    this.bushes.setFrameState({
+      camera: frame.camera,
+      horizon: frame.vegetationHorizon,
+      phase: this.scrollToPhase(this.scrollNorm),
+      debugView: false,
+      atlasTextures: this.resources.foliageAtlas,
+      sceneScale: {
+        x: frame.sceneFrame.scaleX,
+        y: frame.sceneFrame.scaleY,
+      },
+    })
+  }
+
+  private setupMorningFogState(frame: FrameState) {
+    this.morningFog.setFrameState({
+      phase: this.scrollToPhase(this.scrollNorm),
+      debugDensity: false,
+    })
+  }
+
+  private setupHeroTitleState(frame: FrameState) {
+    this.heroTitle.setFrameState({
+      camera: frame.camera,
+      phase: this.scrollToPhase(this.scrollNorm),
+      waterLevel: WATER_LEVEL,
+      titleHero: frame.titleHero,
+      atlas: frame.heroTitleAtlas,
+      gpuLayout: frame.heroTitleAtlasRenderData?.gpuLayout ?? null,
+    })
+  }
+
+  private setupTitleGlowState(frame: FrameState) {
+    this.titleGlow.setFrameState({
+      enabled: this.glowEnabled && frame.useGlyphTitle,
+      debugIsolate: this.passView === "glow",
+      camera: frame.camera,
+      phase: this.scrollToPhase(this.scrollNorm),
+      waterLevel: WATER_LEVEL,
+      titleHero: frame.titleHero,
+      phraseTexture: frame.heroTitleAtlasRenderData?.phraseTexture ?? null,
+      phraseTextureSize: frame.heroTitleAtlasRenderData?.phraseTextureSize ?? { width: 1, height: 1 },
+      titleAtlasPxRange: frame.heroTitleAtlasRenderData?.atlas.font.atlas.distanceRange ?? 4,
+    })
   }
 
   dispose() {

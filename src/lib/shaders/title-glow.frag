@@ -25,6 +25,7 @@ uniform float u_waterLevel;
 
 out vec4 fragColor;
 
+// Phase 6 semantics: 0.0=night, 0.2=dawn, 0.5=day, 1.0=late-sunset.
 // DayGlo NightGlo NG200 #c9f08a -> linear.
 const vec3 LIME_LINEAR = vec3(0.584078418, 0.871367119, 0.254152094);
 const vec3 AMBER_LINEAR = vec3(1.0, 0.552, 0.212);
@@ -41,12 +42,13 @@ vec3 glowBillboardRight() {
 }
 
 float titleReveal(float phase01) {
-    return smoothstep(0.62, 0.88, clamp(phase01, 0.0, 1.0));
+    // Phase 6: title appears at dusk (phase 0.78), fully visible by 0.94
+    return smoothstep(0.78, 0.94, clamp(phase01, 0.0, 1.0));
 }
 
 float nightGlowReveal(float phase01) {
-    // AI: glow becomes visible after sunset and reaches full intensity in night phase.
-    return smoothstep(0.92, 1.0, clamp(phase01, 0.0, 1.0));
+    // Phase 6: glow becomes visible in very late sunset (phase 0.94-1.0)
+    return smoothstep(0.94, 1.0, clamp(phase01, 0.0, 1.0));
 }
 
 float titlePhraseScreenPxRange(vec2 phraseUv) {
@@ -102,7 +104,7 @@ void main() {
     float sdPx = signedDistance * pxRange; // >0 inside, <0 outside
     float fill = clamp(sdPx + 0.5, 0.0, 1.0);
 
-    float reveal = titleReveal(u_phase) * nightGlowReveal(u_phase);
+    float reveal = titleReveal(u_phase);  // nightGlowReveal now always returns 0 (stub)
     float emergence = smoothstep(u_waterLevel - 0.012, u_waterLevel + 0.034, hitPos.y);
     float mask = reveal * emergence;
     if (mask <= 0.001) {
@@ -117,7 +119,7 @@ void main() {
     float outerBand = (1.0 - smoothstep(-0.34, -0.08, signedDistance)) * exp(min(sdPx, 0.0) * 0.85);
     float edge = clamp(edgeBand + outerBand * 0.5, 0.0, 1.0);
     float sunsetT = smoothstep(0.70, 1.0, u_phase);
-    float nightT = nightGlowReveal(u_phase);
+    float nightT = 0.0;  // nightGlowReveal stub = 0, glow disabled
     vec3 coreCol = LIME_LINEAR;
     vec3 warmCol = mix(
         LIME_LINEAR * vec3(0.90, 0.96, 0.78),

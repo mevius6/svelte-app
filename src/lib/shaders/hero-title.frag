@@ -25,7 +25,8 @@ float screenPxRange() {
 }
 
 float titleReveal(float phase01) {
-    return smoothstep(0.62, 0.88, clamp(phase01, 0.0, 1.0));
+    // Phase 6: title appears at dusk (phase 0.78), fully visible by 0.94
+    return smoothstep(0.78, 0.94, clamp(phase01, 0.0, 1.0));
 }
 
 // AI: exact display target for title ink:

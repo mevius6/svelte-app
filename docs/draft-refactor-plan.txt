@@ -1,0 +1,384 @@
+С учётом текущей структуры кода я бы делал рефакторинг в несколько фаз: сначала ввести систему GLSL‑чанков и разрубить landscape.frag на логические блоки, затем разнести LandscapeResources на специализированные загрузчики, и только после этого чисто разделить рендер‑путь сцены на «debug» и «final», параллельно делая точечные оптимизации шейдеров по рекомендациям The Book of Shaders и GM Shaders.
+
+Ниже — поэтапный план.
+
+1. Общие цели рефакторинга
+Основные проблемы, которые вы уже зафиксировали:
+
+Монолитный фрагментный шейдер ландшафта: в одном файле живут небо, берег, вода, туман, отражение титра, вспомогательные функции.
+
+LandscapeResources одновременно:
+
+создаёт canvas‑текстуру для текста,
+
+грузит MSDF‑атлас и строит GPU‑layout,
+
+грузит комплект текстур для травы,
+
+бэйкает профиль берега и ripple‑fallback.
+
+LandscapeScene.render() управляет и финальным рендером, и всеми debug‑режимами в одном методе.
+
+Цель плана: сделать так, чтобы:
+
+Шейдеры были разбиты по «домейнам» (sky / water / fog / title / helpers), а не по «файлам проекта», что напрямую следует из советов «писать шейдеры блоками, а не бесконечной простынёй».
+
+Вся загрузка ресурсов была представлена как набор маленьких, изолированных «loader‑ов», что упрощает багфикс и unit‑/integration‑тесты.
+
+Рендер‑путь стал явным: отдельный код пути «финальный кадр» и отдельный — «режимы инспекции/отладки».
+
+2. Фаза 1: система GLSL‑чанков
+Сначала нужен технический фундамент: возможность разбивать GLSL‑код на части и собирать их на билде, чтобы не зависеть от хака с #include в рантайме.
+
+2.1. Выбрать механизм сборки чанков
+Два практичных варианта для Vite + Svelte + WebGL:
+
+Простая prebuild‑конкатенация:
+
+Вводите в landscape.frag директивы вида #include "sky.glsl", #include "water.glsl", #include "fog.glsl" и т.п.
+
+Пишете мини‑скрипт (Node / bun) или Vite plugin, который:
+
+читает корневой landscape.frag.src,
+
+рекурсивно разворачивает #include,
+
+на выходе кладёт собранный landscape.frag в src/lib/shaders или в output/.
+
+Использовать готовую идею из glslify / LYGIA:
+
+Реализовать тот же паттерн «мелкие .glsl‑модули + сборка», только без тора glslify, чтобы сохранить контроль над пайплайном.
+
+Для вашей задачи prebuild‑конкатенация достаточно проста и полностью под вашим контролем.
+
+2.2. Правила для чанков
+Основываясь на рекомендациях «Common Shader Mistakes» и «Design Choices», лучше сразу заложить правила читаемости, а не code‑golf:
+
+Один чанк — один домейн или группа близких функций:
+
+sky.glsl — небо, солнце/луна, базовые градиенты.
+
+clouds.glsl — все функции шума и облаков.
+
+water_waves.glsl — волновая модель и нормали.
+
+shoreline.glsl — профиль берега, работа с текстурой профиля.
+
+fog.glsl — высотный туман, экспоненциальная интеграция, вспомогательные функции.
+
+title.glsl — sample‑helpers для MSDF/bitmap‑текста и отражения.
+
+tonemap.glsl / color.glsl — общие функции для тон‑маппинга и цветовых операций.
+
+noise.glsl — hash / value noise / FBM, используемые в небе и воде.
+
+Все «опасные» функции (sqrt, log, pow, asin/acos) — только в helper‑чанке, с гарантированным clamping, как советует Xor в «Common Shader Mistakes».
+
+Magic‑numbers выносите в const‑ы вверху соответствующего чанка (как уже сделано у вас для разных параметров волн и тумана) — это сильно снижает шанс регрессии при Phase D/E/F‑тюнинге.
+
+3. Фаза 2: разрубить landscape.frag на домены
+Когда механизм сборки готов, можно физически разнести код.
+
+3.1. Минимальный первый сплит
+Сделайте «тонкий» первый шаг, без изменения логики:
+
+Создайте файлы:
+
+landscape_main.frag — только main() + glue‑код.
+
+landscape_sky.glsl
+
+landscape_clouds.glsl
+
+landscape_water.glsl
+
+landscape_shore.glsl
+
+landscape_fog.glsl
+
+landscape_title.glsl
+
+landscape_helpers.glsl (hash, noise, tonemap, math‑утиль).
+
+В корневом landscape.frag.src:
+
+text
+#version 300 es
+precision highp float;
+precision highp int;
+
+// uniforms...
+
+#include "landscape_helpers.glsl"
+#include "landscape_sky.glsl"
+#include "landscape_clouds.glsl"
+#include "landscape_shore.glsl"
+#include "landscape_water.glsl"
+#include "landscape_fog.glsl"
+#include "landscape_title.glsl"
+#include "landscape_main.frag"
+Внутренние функции не трогаете, только переносите их в соответствующие файлы, адаптируя static/inline стили под GLSL (т.е. просто оставляете float/vec3 функции).
+
+Такой шаг перераспределит код по домейнам, но не поменяет структуру вызовов, и регрессии будут минимальны (баги только если ошибиться в include‑пути или порядке объявления).
+
+3.2. Стабилизация API между чанками
+После первого сплита имеет смысл «причесать» интерфейсы:
+
+Явно задокументируйте, какие функции являются «публичными» для домейна:
+
+Например, vec3 shadeSky(vec3 rayDir, float phase01) — единственная точка входа в блок неба.
+
+vec3 shadeWater(...) — вода, applyMorningHeightFog(...) — туман и т.д.
+
+Внутри чанка используйте префиксы (sky_, fog_, water_) для приватных функций, как рекомендует Xor под аспектом «Clarity».
+
+По возможности избегайте передачи тонны параметров — если функция нуждается в 10 аргументах, её стоит разрезать на более мелкие (например, сначала расчёт геометрии, потом — освещение).
+
+Так вы получите модульный шейдер, где Phase D/E/F‑изменения в конкретном эффекте касаются только одного файла.
+
+4. Фаза 3: LandscapeResources → отдельные загрузчики
+Сейчас LandscapeResources фактически является «God‑object» для всех ресурсов сцены. В духе рекомендаций WebGL2 Fundamentals про организацию кода лучше разделить ответственность на более мелкие структуры.
+
+4.1. Выделить отдельные loader‑ы
+Предлагаемый расклад:
+
+TitleResources (или HeroTitleResources):
+
+отвечает за:
+
+canvas‑текстуру текста (fallback),
+
+загрузку MSDF‑атласа (json + image),
+
+построение HeroTitlePhraseGpuLayout,
+
+создание phrase‑texture для отражения.
+
+отдаёт наружу компактный TitleRenderData:
+
+ts
+type TitleRenderData = {
+  textTexture: WebGLTexture
+  textLayout: HeroTitleLayoutMetrics
+  atlas: HeroTitleAtlasResource | null
+  gpuLayout: HeroTitlePhraseGpuLayout | null
+  phraseTexture: WebGLTexture | null
+  phraseTextureSize: { width: number; height: number }
+}
+FoliageAtlasLoader:
+
+принимает FoliageAtlasSourceSet,
+
+возвращает FoliageAtlasTextureSet,
+
+внутри держит только WebGL‑логика создания текстур.
+
+RippleFallbackFactory (простая функция/мини‑класс):
+
+создаёт и отдаёт dummy‑ripple‑текстуру по требованию.
+
+Shore profile уже частично вынесен в ShoreProfileBaker — это хороший шаг, важно оставить за ним единственную ответственность.
+
+4.2. Упростить LandscapeResources
+После этого LandscapeResources превращается в тонкий фасад:
+
+В поле держит:
+
+title: TitleResources
+
+foliage: FoliageAtlasTextureSet
+
+shoreProfileTexture: WebGLTexture
+
+rippleFallbackTexture: WebGLTexture | null
+
+В load():
+
+последовательно вызывает title.load(projectName), loadFoliageAtlas, createShoreProfileTexture, maybeCreateRippleFallback.
+
+Getter‑ы становятся простыми прокси к этим под‑ресурсам.
+
+Плюсы:
+
+Если вы переделываете, например, pipeline MSDF‑текста (другой формат атласа, шрифт и т.п.), вам не приходится в лоб трогать код загрузки травы или берега.
+
+Легче писать маленькие тесты и временные демо, которые используют только заголовок или только траву.
+
+5. Фаза 4: разделение LandscapeScene.render() на debug/final
+Сейчас render() делает всё сразу: вычисляет камеру/стейт, настраивает pass‑ы, обрабатывает debug‑режимы и финальный рендер. Рекомендуемый подход — явное разделение «подготовки кадра» и «конкретного пути рисования».
+
+5.1. Ввести «frame state»
+Добавьте приватный helper:
+
+ts
+private buildFrameState(time: number) {
+  const rippleTex = this.ripple.render(time, null) ?? this.resources.rippleFallbackTexture
+  const sceneFrame = computeSceneFrame(this.width, this.height)
+  const camera = this.resolveCamera()
+  const vegetationHorizon = computeVegetationHorizon(camera, this.width, this.height)
+  const textTexSize = this.resources.textTextureSize
+  const titleLayout = this.resources.heroTitleLayout
+  const titleHero = computeTitleHeroState(this.scrollNorm, titleLayout.aspect, textTexSize.contentRect)
+  const heroTitleAtlasRenderData = this.resources.heroTitleAtlasRenderData
+  const heroTitleAtlas = heroTitleAtlasRenderData?.atlas ?? this.resources.heroTitleAtlas
+  const useGlyphTitle = Boolean(heroTitleAtlasRenderData?.atlas.texture && heroTitleAtlasRenderData?.phraseTexture)
+
+  return {
+    time,
+    rippleTex,
+    sceneFrame,
+    camera,
+    vegetationHorizon,
+    titleHero,
+    heroTitleAtlasRenderData,
+    heroTitleAtlas,
+    useGlyphTitle,
+  }
+}
+render() тогда превращается в:
+
+ts
+render(time: number) {
+  const textTexture = this.resources.textTexture
+  if (!textTexture) return
+
+  const frame = this.buildFrameState(time)
+
+  switch (this.passView) {
+    case "ripple":     return this.renderDebugRipple(frame)
+    case "vegetation": return this.renderDebugVegetation(frame)
+    case "fog":        return this.renderDebugFog(frame)
+    case "glow":       return this.renderDebugGlow(frame)
+    case "landscape":  return this.renderDebugLandscape(frame)
+    case "final":
+    default:           return this.renderFinal(frame)
+  }
+}
+5.2. renderDebug* и renderFinal
+renderDebugRipple(frame):
+
+только настраивает LandscapePass в режим «ripple» и рендерит.
+
+renderDebugVegetation(frame):
+
+clear фона + BushesPass с debugView=true.
+
+renderDebugFog(frame):
+
+фон + MorningFogPass с debugDensity=true.
+
+renderDebugGlow(frame):
+
+фон + TitleGlowPass.
+
+renderDebugLandscape(frame):
+
+LandscapePass в выбранном debug‑режиме (normals, depth, masks и т.п.).
+
+renderFinal(frame):
+
+Подготавливает sceneColor FBO, как и сейчас.
+
+Выполняет «плотную» цепочку:
+
+LandscapePass (beauty)
+
+BushesPass
+
+MorningFogPass
+
+HeroTitlePass (если useGlyphTitle)
+
+TitleGlowPass (если включён и useGlyphTitle)
+
+FinalColorPass с sRGB‑конверсией.
+
+В результате:
+
+Любое изменение debug‑режимов не затрагивает логики финального кадра.
+
+Гораздо проще локализовать регрессии: ломается только конкретный renderDebug*.
+
+6. Фаза 5: точечные оптимизации шейдеров
+После структурного рефакторинга можно безопасно заняться перфоманс‑/визуальными улучшениями, опираясь на GM Shaders и The Book of Shaders.
+
+6.1. Безопасность и стабильность
+По «Common Shader Mistakes» стоит пройтись по каждому чанку и проверить:
+
+Все вызовы sqrt, log, pow с потенциально отрицательными/нулевыми аргументами:
+
+оборачиваем во вспомогательные функции с max(x, 0.0) или abs(x).
+
+Все acos / asin — с предварительным clamp(x, -1.0, 1.0).
+
+Все деления — иметь защиту от деления на 0 (max(den, 1e-4)).
+
+Везде, где есть time или функции от u_time, убедиться, что поведение не деградирует при больших значениях; при необходимости использовать модуль/петлю времени.
+
+Это снизит риск «чёрного экрана» (NaN) после будущих правок.
+
+6.2. Цвет, гамма, тон‑маппинг
+С учётом рекомендаций по освещению и гамме:
+
+Убедиться, что:
+
+все «физические» операции цвета проходят в линейном пространстве,
+
+финальный pass (FinalColorPass) один раз конвертирует в sRGB.
+
+В чанке тон‑маппинга можно:
+
+использовать уже выбранный вами оператор (например, ACES‑подобный — он соответствует совету «использовать тон‑маппинг для ярких источников, чтобы избежать выжженных областей»).
+
+добавить лёгкое dither‑шумирование на выходе для борьбы с banding, как советует Maxime Heckel и Xor.
+
+6.3. Облака, шум, SDF‑формы
+С опорой на The Book of Shaders (раздел Noise/Fbm) и «SDF Tricks»:
+
+Cloud‑чанк:
+
+хранить количество октав и коэффициенты в const‑ах; это упрощает тюнинг фаз D/E.
+
+Чётко разделить «базовый fBm» и «detail fBm», чтобы в отражении/далёком фоне крутить только базовый слой (меньше вызовов шума).
+
+SDF‑формы:
+
+если вы используете SDF для силуэта берега/растительности или иконок, вынесите базовые SDF в отдельный helper‑чанк (circle / box / rounded box), как в статье «SDF Tricks».
+
+Для границ и тонких линий (вода, отражение титра) используйте SDF‑подход к AA (рассчёт distance и плавный edge) вместо жесткого step, это улучшит качество без заметной стоимости.
+
+6.4. Оптимизация волн и воды
+Здесь хорошо накладываются советы из «Code Golfing» (про математические эквивалентности) и «Common Shader Mistakes» (про precision):
+
+В чанке water_waves.glsl:
+
+Общие trig/warp‑части вынести в отдельные функции, результаты переиспользовать (особенно если есть несколько волн с одинаковой частотой и разными амплитудами).
+
+Там, где вы считаете pow(length(v), 2.0), заменить на dot(v, v); где length(v) используется только для нормализации, можно явно делать v / sqrt(dot(v, v)) и т.п.
+
+Управление precision:
+
+координаты и время — highp,
+
+текстурные координаты, маски, вспомогательные значения — mediump, как советует Xor для производительности на мобильных.
+
+7. Фаза 6: процессная часть — как избежать регрессий
+Чтобы рефакторинг такой крупной части рендерера не сломал демо:
+
+Каждый шаг (Фаза 1–6) — отдельный PR/коммит:
+
+Фаза 1: добавить include‑систему, не меняя шейдер.
+
+Фаза 2: разбить шейдер по чанкам.
+
+Фаза 3: разнести LandscapeResources.
+
+Фаза 4: разделить render() на renderDebug*/renderFinal.
+
+Фаза 5–6: мелкие shader‑оптимизации по одному домейну (fog, water, title).
+
+Используйте debug‑view, уже заложенный в сцене:
+
+После каждого шага прогнать все passView и landscapeMode и визуально сравнить с эталоном (желательно записать несколько скриншотов до начала работ).
+
+Для шейдеров, где критичен визуальный баланс (composition / lighting / colors) — периодически смотреть на гистограмму и визуально проверять, что динамический диапазон заполнен (совет из «Design Choices»).
