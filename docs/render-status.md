@@ -72,7 +72,7 @@ Mark Phase D as `Done` only if all criteria hold across all required checkpoints
 ### 2026-05-12 (Session 2 — Continued)
 
 - **Phase 6.2: Shader Optimizations (continued)**
-  - **4.2 & 4.4 combined: Moon lighting removal + shoreRunupWave deduplication** ✅ DONE
+  - **4.2 & 4.4 combined: Moon lighting removal + shoreRunupWave deduplication + warp caching** ✅ DONE
     - **Moon lighting removal in landscape_main.glsl** (real performance problem)
       - Removed `moonDirection()`, `moonColor()`, `moonMirror`, `moonLight` blocks from water lighting
       - Removed `halfMoonDir`, `moonGlint` computation and moon glint contributions (lines 414-417)
@@ -90,9 +90,16 @@ Mark Phase D as `Done` only if all criteria hold across all required checkpoints
       - Previously computed twice: once in overlap-mask block, again in film-rendering block
       - Now computed once after `shoreWaterEdgeZ`, reused in both blocks
       - Savings: one `waveFieldWithMasks()` call per shore pixel (~8 sin() operations)
-    - Combined impact: ~130+ total ops/pixel savings across water + shore + sky rendering paths
-    - Verified: TypeScript clean, build 5.19s success, all shader invariants preserved
-    - Commits: `69ad4c4`, `9cf7330`
+    - **Warp caching in water_waves.glsl** (critical micro-optimization)
+      - Extracted `computeWarp(p, t) -> vec2` function (8 sin() calls)
+      - Updated `waveFieldWithMasks()` signature: expects pre-warped `pw`, not raw `p`
+      - Old: warp computed 4 times in `waveNormal()` (4 finite-diff samples × 8 sin each = 32 sin)
+      - New: warp computed once, cached, reused for all 4 samples (8 sin total)
+      - Savings: **24 sin() per water normal calculation** (~every water pixel)
+      - Integration: `landscape_main.glsl` computes `pw = p + computeWarp(p, t)` once
+    - Combined impact: **~154+ total ops/pixel** savings across water + shore + sky paths
+    - Verified: TypeScript clean, build successful, all shader invariants preserved
+    - Commits: `69ad4c4`, `9cf7330`, `9894068`, `97d2d60`
   - **FPS counter display** ✅ DONE
     - Added FPS tracking in `Renderer.ts` RAF loop (frameCount, lastSecondTime, fps fields)
     - Exposed via public `getFPS()` getter method
@@ -102,9 +109,9 @@ Mark Phase D as `Done` only if all criteria hold across all required checkpoints
     - Verified: TypeScript clean, build successful
   - **Validation Summary**
     - `bun run check`: 0 errors, 0 warnings ✓
-    - `bun run build`: 5.19s, success ✓
+    - `bun run build`: success, ~5s ✓
     - Visual QA: all scroll phases 0.0–1.0 render correctly ✓
-    - No regressions: water lighting coherent, shore foam visible, title reflection reads correctly ✓
+    - No regressions: water lighting coherent, shore foam visible, title reflection reads correctly, wave detail preserved ✓
     - All 12 landscape-refactor-guide invariants maintained ✓
 
 ### 2026-05-12 (Session 1)
