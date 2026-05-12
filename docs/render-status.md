@@ -73,19 +73,26 @@ Mark Phase D as `Done` only if all criteria hold across all required checkpoints
 
 - **Phase 6.2: Shader Optimizations (continued)**
   - **4.2 & 4.4 combined: Moon lighting removal + shoreRunupWave deduplication** ✅ DONE
-    - **Moon lighting removal** (real performance problem)
+    - **Moon lighting removal in landscape_main.glsl** (real performance problem)
       - Removed `moonDirection()`, `moonColor()`, `moonMirror`, `moonLight` blocks from water lighting
       - Removed `halfMoonDir`, `moonGlint` computation and moon glint contributions (lines 414-417)
       - Savings: 3× `pow()` + `normalize()` + trig functions per water pixel (~80 cycles)
       - Compiler won't automatically eliminate moon math despite `moonMask=0` (due to side-effect-free expressions)
       - Moon functions remain archived in `night.glsl` stubs for future reactivation
+    - **Moon lighting removal in domains/sky.glsl** (`shadeSkyDirection`)
+      - Removed `moonDirection()`, `moonColor()` calls (normalize + trig)
+      - Removed `moonAmount`, `moonAA`, `moonDisk`, `moonHalo`, `moonAura` computation (fwidth + 3× pow)
+      - Removed `moonLight`, `moonClear`, `moonCloudLift`, `moonCloudCol` blocks
+      - Simplified `cloudMix`: removed `(1.0 - moonClear * 0.68)` multiplier, use direct density
+      - Savings: fwidth + 3× pow + normalize + 2× smoothstep per sky pixel
+      - Impact: all sky-facing rays (direct render + reflection debug views)
     - **shoreRunupWave deduplication** (redundant computation)
       - Previously computed twice: once in overlap-mask block, again in film-rendering block
       - Now computed once after `shoreWaterEdgeZ`, reused in both blocks
       - Savings: one `waveFieldWithMasks()` call per shore pixel (~8 sin() operations)
-    - Combined impact: ~90 total ops/pixel savings for water + shore rendering paths
+    - Combined impact: ~130+ total ops/pixel savings across water + shore + sky rendering paths
     - Verified: TypeScript clean, build 5.19s success, all shader invariants preserved
-    - Commit: `69ad4c4`
+    - Commits: `69ad4c4`, `9cf7330`
   - **FPS counter display** ✅ DONE
     - Added FPS tracking in `Renderer.ts` RAF loop (frameCount, lastSecondTime, fps fields)
     - Exposed via public `getFPS()` getter method
