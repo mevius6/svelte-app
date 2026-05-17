@@ -13,6 +13,7 @@ uniform float u_cameraTanHalfFovY;
 // Title billboard
 uniform vec3  u_titleWorldCenter;
 uniform vec2  u_titleWorldSize;
+uniform vec2  u_titleLayoutSize;
 
 // MSDF phrase texture
 uniform sampler2D u_titlePhraseTex;
@@ -25,8 +26,8 @@ uniform float u_waterLevel;
 
 out vec4 fragColor;
 
-// Phase 6 semantics: 0.0=night, 0.2=dawn, 0.5=day, 1.0=late-sunset.
-// DayGlo NightGlo NG200 #c9f08a -> linear.
+// Scroll phase: 0.0=start, 0.2=dawn, 0.5=day, 1.0=late-sunset.
+// DayGlo NG200 #c9f08a -> linear.
 const vec3 LIME_LINEAR = vec3(0.584078418, 0.871367119, 0.254152094);
 const vec3 AMBER_LINEAR = vec3(1.0, 0.552, 0.212);
 const vec3 SKY_COOL = vec3(0.84, 0.96, 0.68);
@@ -41,14 +42,39 @@ vec3 glowBillboardRight() {
     return l > 0.0001 ? r / l : vec3(1.0, 0.0, 0.0);
 }
 
-float titleReveal(float phase01) {
-    // Phase 6: title appears at dusk (phase 0.78), fully visible by 0.94
-    return smoothstep(0.78, 0.94, clamp(phase01, 0.0, 1.0));
+// адаптированные ВЕРСИИ из title.glsl
+vec2 titlePhraseUvFromLocalMetric(vec2 localMetric) {
+    return vec2(
+        localMetric.x / max(u_titleLayoutSize.x, 0.001) + 0.5,
+        localMetric.y / max(u_titleLayoutSize.y, 0.001) + 0.5
+    );
 }
 
-float nightGlowReveal(float phase01) {
-    // Phase 6: glow becomes visible in very late sunset (phase 0.94-1.0)
-    return smoothstep(0.94, 1.0, clamp(phase01, 0.0, 1.0));
+vec2 titleLocalMetricFromHitPos(vec3 hitPos) {
+    // 0) Локальные оси и вектор от центра титра
+    vec3 titleRight = glowBillboardRight();
+    vec3 titleUp = vec3(0.0, 1.0, 0.0);
+    vec3 local = hitPos - u_titleWorldCenter;
+
+    // 1) Aspect активного layout'а (фраза/цифры)
+    float layoutAspect = u_titleLayoutSize.x / max(u_titleLayoutSize.y, 0.001);
+
+    // 2) Мировая высота титра — как в hero-title.vert
+    float worldHeight = u_titleWorldSize.y;
+
+    // 3) Мировая ширина = высота * aspect (так же, как в hero-title.vert)
+    float worldWidth = worldHeight * layoutAspect;
+
+    // 4) Нормализуем local в [-0.5 .. 0.5] по world-рамке титра
+    float nx = dot(local, titleRight) / max(worldWidth, 0.001);
+    float ny = dot(local, titleUp)    / max(worldHeight, 0.001);
+
+    // 5) Переводим в метрику layout'а через активный u_titleLayoutSize
+    //    (nx, ny) ~ [-0.5..0.5], умножение даёт координаты в единицах layout'а
+    return vec2(
+        nx * u_titleLayoutSize.x,
+        ny * u_titleLayoutSize.y
+    );
 }
 
 float titlePhraseScreenPxRange(vec2 phraseUv) {
@@ -64,7 +90,7 @@ void main() {
     vec3 rayDir = normalize(
         u_cameraForward
         + u_cameraRight * ndc.x * aspect * u_cameraTanHalfFovY
-        + u_cameraUp    * ndc.y           * u_cameraTanHalfFovY
+        + u_cameraUp    * ndc.y          * u_cameraTanHalfFovY
     );
 
     vec3 billboardRight = glowBillboardRight();
@@ -82,31 +108,34 @@ void main() {
         return;
     }
 
+    // 1) Точка попадания луча в плоскость текста (в мире)
     vec3 hitPos = u_cameraPos + rayDir * t;
-    vec3 local = hitPos - u_titleWorldCenter;
-    float lx = dot(local, billboardRight) / max(u_titleWorldSize.x, 0.001);
-    float ly = dot(local, billboardUp) / max(u_titleWorldSize.y, 0.001);
 
-    const float GLOW_PAD = 0.16;
-    if (abs(lx) > 0.5 + GLOW_PAD || abs(ly) > 0.5 + GLOW_PAD) {
+    // 2) Local metric в координатах макета текста —
+    //    та же система, что использует hero-title/title.glsl
+    //    (функция определена в title.glsl, который подключается в landscape/_entry.frag, но без прямого доступа к titleGlow.frag, поэтому дублируем её здесь)
+    vec2 localMetric = titleLocalMetricFromHitPos(hitPos);
+
+    // 3) UV внутри phraseTexture (0..1) через размер макета
+    vec2 phraseUv = titlePhraseUvFromLocalMetric(localMetric);
+
+    // 4) Клип по UV, чтобы свечение не выходило за рамки прямоугольника фразы
+    bool inBounds = all(greaterThanEqual(phraseUv, vec2(0.0))) &&
+                    all(lessThanEqual(phraseUv, vec2(1.0)));
+    if (!inBounds) {
         fragColor = vec4(0.0);
         return;
     }
 
-    vec2 phraseUv = vec2(lx + 0.5, ly + 0.5);
-    if (phraseUv.x < 0.0 || phraseUv.x > 1.0 || phraseUv.y < 0.0 || phraseUv.y > 1.0) {
-        fragColor = vec4(0.0);
-        return;
-    }
+    // 5) MSDF-сэмпл и signed distance в той же системе, что и основная фраза в hero-title.frag, но с учётом активного u_titleLayoutSize
     vec3 msdf = texture(u_titlePhraseTex, phraseUv).rgb;
     float signedDistance = median3(msdf) - 0.5;
     float pxRange = titlePhraseScreenPxRange(phraseUv);
     float sdPx = signedDistance * pxRange; // >0 inside, <0 outside
     float fill = clamp(sdPx + 0.5, 0.0, 1.0);
 
-    float reveal = titleReveal(u_phase);  // nightGlowReveal now always returns 0 (stub)
     float emergence = smoothstep(u_waterLevel - 0.012, u_waterLevel + 0.034, hitPos.y);
-    float mask = reveal * emergence;
+    float mask = emergence;
     if (mask <= 0.001) {
         fragColor = vec4(0.0);
         return;
@@ -119,19 +148,25 @@ void main() {
     float outerBand = (1.0 - smoothstep(-0.34, -0.08, signedDistance)) * exp(min(sdPx, 0.0) * 0.85);
     float edge = clamp(edgeBand + outerBand * 0.5, 0.0, 1.0);
     float sunsetT = smoothstep(0.70, 1.0, u_phase);
-    float nightT = 0.0;  // nightGlowReveal stub = 0, glow disabled
     vec3 coreCol = LIME_LINEAR;
     vec3 warmCol = mix(
         LIME_LINEAR * vec3(0.90, 0.96, 0.78),
         LIME_LINEAR * 0.46 + AMBER_LINEAR * 0.54,
         sunsetT
     );
-    vec3 rimCol = mix(coreCol * 0.76, SKY_COOL * 0.78 + AMBER_LINEAR * 0.22, edge * 0.72);
-    vec3 seedCol = mix(coreCol * 0.84, warmCol * 0.96, 0.34 + edge * 0.44) * 0.60 + rimCol * 0.40;
-    seedCol = mix(seedCol, warmCol * 0.86 + AMBER_LINEAR * 0.14, nightT * 0.62);
-    float coreSeed = pow(fill, 3.1) * mix(0.018, 0.026, nightT);
-    float rimSeed = edgeBand * mix(0.32, 0.46, nightT);
-    float outerSeed = outerBand * mix(0.16, 0.28, nightT);
+    vec3 rimCol = mix(
+        coreCol * 0.76,
+        SKY_COOL * 0.78 + AMBER_LINEAR * 0.22,
+        edge * 0.72
+    );
+    vec3 seedCol = mix(
+        coreCol * 0.84,
+        warmCol * 0.96,
+        0.34 + edge * 0.44
+    ) * 0.60 + rimCol * 0.40;
+    float coreSeed = pow(fill, 3.1) * 0.018;
+    float rimSeed = edgeBand * 0.32;
+    float outerSeed = outerBand * 0.16;
     float seedAlpha = clamp((coreSeed + rimSeed + outerSeed) * nearGlyph * mask, 0.0, 0.42);
     fragColor = vec4(seedCol * seedAlpha, clamp(seedAlpha, 0.0, 1.0));
 }

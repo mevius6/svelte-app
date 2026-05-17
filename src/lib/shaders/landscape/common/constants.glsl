@@ -7,7 +7,6 @@
 // Title colors (pre-converted to linear space for composition)
 const vec3 TITLE_DAYGLO_LINEAR = vec3(0.584078418, 0.871367119, 0.254152094);
 const vec3 TITLE_GLOW_AMBER_LINEAR = vec3(0.86, 0.50, 0.20);
-const vec3 MOONLIGHT_LINEAR = vec3(0.58, 0.66, 0.92);
 
 // Morning fog (analytic height fog)
 // Phase 6: fog appears at dawn (phase 0.18) and dissipates by 0.36 (full daylight)

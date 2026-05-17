@@ -86,6 +86,14 @@ export class LandscapeResources {
     this.shoreProfileTexRef = createShoreProfileTexture(this.gl)
   }
 
+  getDigitRenderData(digit: number) {
+    return this.title.getDigitRenderData(digit);
+  }
+
+  get titleResources() {
+    return this.title
+  }
+
   get textTexture() {
     return this.title.textTexture
   }

@@ -61,9 +61,9 @@ FinalColorPass (single linear → sRGB transfer)
 ## 4. Current scene baseline (May 2026)
 
 ### Scene model
-- `scroll` = time of day with Phase 6 semantics: `0=night`, `0.2=dawn`, `0.5=day`, `1.0=dusk/late-sunset`. Clouds and sun move together via `solarDrift = vec2(phase01 * 0.42, phase01 * 0.06)` in `cloudDensity`.
-- Phase 6 intentionally inverted the old baseline (`0=dawn → 1=night`) so night is at the beginning of the scroll cycle and late sunset is at the end.
-- Title reveal is late-sunset-driven: direct fade window `0.78→0.94`, reflection `0.82→0.98`.
+- `scroll` = time-of-day phase with Phase 6 ordering: `0=start`, `0.2=dawn`, `0.5=day`, `1.0=dusk/late-sunset`. Clouds and sun move together via `solarDrift = vec2(phase01 * 0.42, phase01 * 0.06)` in `cloudDensity`.
+- Night rendering is not part of the active baseline: `night.glsl`, moon gates, and night-grade stubs are not in the active shader graph.
+- Title reveal is late-sunset-driven: direct fade window `0.78→0.94`; reflection is an end-scroll gate only (`phase >= 0.96`), not a separate reveal animation.
 - Morning fog POC is dawn-driven and dissipates before title reveal: `FOG_DISSIPATE_START=0.18`, `FOG_DISSIPATE_END=0.36`.
 - Morning fog F1 uses analytic exponential height fog in `landscape.frag` (`tau` + `T=exp(-tau)`), with title fogged at `tTitle` (not shoreline depth).
 - Color pipeline is linear-first: scene layers are composited in offscreen `sceneColor`, and display transfer (`linear -> sRGB`) happens once in `FinalColorPass`.
@@ -79,8 +79,7 @@ FinalColorPass (single linear → sRGB transfer)
 - **Phase C:** `tanHalfFovY` in `SceneCameraState` (computed once). Camera cached in `LandscapeScene`. Glyph uniforms (256 floats) upload only on atlas change.
 - **Phase H (in progress):** `TitleGlowPass` added as separate fullscreen glow layer after `HeroTitlePass`, sampling precomposed phrase MSDF texture (`u_titlePhraseTex`), with debug toggle support.
   Quality baseline: inside `TitleGlowPass`, use `source -> separable blur (multi-pass) -> layered additive composite` to avoid jagged/comb-like glow artifacts.
-- Late-sunset glow baseline: title glow uses `titleReveal(0.78→0.94) * nightGlowReveal(0.94→1.0)`, while reflected title glow in water stays disabled to avoid contour/rect framing artifacts.
-- Night water-light baseline: `moonDirection(...)` + `moonColor(...)` drive nocturnal lighting (visible moon disk/halo in sky + separate moon reflection/glint terms on water), gated by dedicated `moonPhase(phase)` in the beginning of the cycle (`~0.0..0.10`).
+- Late-sunset glow baseline: title glow is sunset-driven only; reflected title glow in water stays disabled to avoid contour/rect framing artifacts.
 - **Title reflection fixes:** no haloAlpha compositing (white border eliminated), title base hue locked to DayGlo `#c9f08a` (stored in shaders as linear equivalent), normal smoothed before reflection ray: `nTitle = mix(n, vec3(0,1,0), 0.30 + smoothstep(0.0, 0.48, rippleStrength) * 0.42)`.
 - **Vegetation strip PoC:** `BushesPass` now builds shoreline-wide grass coverage (`90` columns × `4` rows × `3` cards = `1080` instances) with seeded RNG for deterministic hot-reloads.
 - **Vegetation + fog integration:** grass now applies phase/distance/height fog in `bushes.frag`; fullscreen fog horizon core in `morning-fog.frag` is smoothed to avoid bright shoreline seam.

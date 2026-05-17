@@ -1,6 +1,6 @@
 // ============================================================
 // Shore domain — beach/bank sculpting and material shading
-// Depends on math.glsl, night.glsl, constants.glsl
+// Depends on math.glsl, constants.glsl
 // ============================================================
 
 float baselineSilhouette(float x) {
@@ -62,8 +62,7 @@ vec3 bankMaterialBase(float worldX, float hNorm, float phase) {
     vec3 col = mix(bankShadow, bankLight, pow(hNorm, 0.72));
     col *= mix(0.94, 1.06, bankNoise);
     col = mix(col, bankGrass, crestMask * (0.28 + bankNoise * 0.18));
-    float night = nightPhase(phase);
-    return applyNightGrade(col, night, vec3(0.05, 0.08, 0.14));
+    return col;
 }
 
 bool intersectShore(vec3 ro, vec3 rd, out float t, out vec3 pos, out float height) {

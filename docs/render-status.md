@@ -1,6 +1,6 @@
 # Render Status Log
 
-Last updated: 2026-05-12 16:44:39 (Session 2 — Optimization completion)
+Last updated: 2026-05-18 (MSDF title reflection cleanup)
 
 ## Current Vector
 
@@ -21,7 +21,8 @@ Last updated: 2026-05-12 16:44:39 (Session 2 — Optimization completion)
 | Phase F | Morning fog pass (dawn atmosphere) | In Progress | F1 landed: analytic height fog in `landscape.frag` + secondary fullscreen wisps pass. |
 | Phase G | Linear color pipeline + final display transfer | Done | `sceneColor` offscreen composition + `FinalColorPass` (`linear -> sRGB` once per frame). |
 | Phase H | Title glow pass (sunset bloom layer) | In Progress | `TitleGlowPass` added after `HeroTitlePass`; glow can be toggled from debug panel. |
-| Phase 6 | Day/night phase semantics | Done | Intentional inversion: old `0=dawn → 1=night`, new `0=night`, `0.2=dawn`, `0.5=day`, `1.0=late-sunset`; fog `0.18→0.36`, title reveal `0.78→0.94`, night/moon gate `0.0→0.10`. |
+| Phase I | Scroll-driven MSDF title text | Done | Active title render data is unified for phrase/digit; scroll maps to digit `1..7`; direct title, glow, and water reflection use the same active MSDF texture + layout. Reflection width now derives from `worldHeight * layoutAspect`, preventing stretched digit reflections. |
+| Phase 6 | Scroll phase semantics | Done | Active ordering: `0=start`, `0.2=dawn`, `0.5=day`, `1.0=late-sunset`; fog `0.18→0.36`, direct title reveal `0.78→0.94`, reflection end-gate `phase >= 0.96`; night/moon shader path removed from active graph. |
 | Phase 6.2 | Shader optimizations (dithering, early-exit fog, moon removal, dedup) | Done | 4.1: dithering; 4.3: early-exit; 4.2+4.4: moon removal + shoreRunupWave dedup; FPS counter added. |
 | Refactor Phases 1–5 | `LandscapeScene` dispatcher, title/foliage resources, GLSL include plugin, shader chunk split | In Progress | Active shader entry is `src/lib/shaders/landscape/_entry.frag`; include plugin runs in dev/build; old scratch `landscape-chunks` moved to `_wip/`. |
 | Vegetation PoC | Shoreline full-coverage grass strip | In Progress | `BushesPass` now tests dense shoreline grass (1080 cards total) with seeded placement. |
@@ -68,6 +69,25 @@ Mark Phase D as `Done` only if all criteria hold across all required checkpoints
 - No regressions in shoreline contact, title reflection readability, or fog layering.
 
 ## Change Log
+
+### 2026-05-18
+
+- Title reflection/glow cleanup:
+  - Removed the separate animated reflection reveal (`smoothstep(0.82, 0.98)`) and replaced it with a final-scroll gate: `titleReflectionEndGate(phase) = step(0.96, phase)`.
+  - Removed active `night.glsl` include and deleted the active `domains/night.glsl` stub file.
+  - Removed night/moon helpers from active sky code, night-grade calls from shore/water shading, and dead `nightGlowReveal`/`nightT` code from `title-glow.frag`.
+  - Updated README and system prompt notes to treat night as historical, not current baseline.
+- Scroll-driven MSDF title text update:
+  - `HeroTitleAtlasRenderData` now carries `digit: number | null`, so phrase and digit title data share one render contract.
+  - `getDigitRenderData(digit)` returns the same active render data shape as the phrase path, including its own precomposed MSDF `phraseTexture`, texture size, GPU layout, and atlas.
+  - `LandscapeScene` selects `activeTitleRenderData` directly from either phrase data or digit data; `LandscapePass`, `HeroTitlePass`, and `TitleGlowPass` receive the same active layout/texture.
+  - Fixed stretched title reflection for digits: `titleLocalMetricFromHitPos(...)` now uses `worldWidth = u_titleWorldSize.y * layoutAspect`, matching `hero-title.vert` and `title-glow.frag`.
+- Validation:
+  - `bun run check`: 0 errors, 0 warnings.
+  - `bun run build`: success.
+  - `bun run dev`: started at `http://127.0.0.1:4173/`; root route returned HTTP 200.
+  - Dev shader module import (`_entry.frag?import&raw`) returned expanded GLSL with includes resolved.
+  - Existing local content warning remains: Strapi requests to `localhost:1337` fail when Strapi is not running.
 
 ### 2026-05-12 (Session 2 — Continued)
 

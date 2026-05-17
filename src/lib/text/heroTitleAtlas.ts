@@ -408,3 +408,12 @@ export function measureHeroTitleLayoutFromCanvas(
     source: "canvas-fallback",
   }
 }
+
+export function buildDigitPhraseGpuLayout(
+  digit: number,
+  atlas: HeroTitleAtlasFont
+): HeroTitlePhraseGpuLayout | null {
+  const clamped = Math.min(7, Math.max(1, digit));
+  const text = String(clamped); // "1".."7"
+  return buildHeroTitlePhraseGpuLayout(text, atlas);
+}

@@ -6,10 +6,8 @@ void main()
     vec3 rd = makeCameraRay(screenUV);
     // AI: Phase 1 keeps the fullscreen pass, but moves the landscape into orbital camera/world-ray space so depth no longer depends only on a screen-space horizon split.
     float phase = clamp(u_scroll, 0.0, 1.0);
-    float nightMask = nightPhase(phase);
-    float moonMask = moonPhase(phase);
     float titleRevealMask = titleReveal(phase);
-    float titleReflectionRevealMask = titleReflectionReveal(phase);
+    float titleReflectionMask = titleReflectionEndGate(phase);
     vec3 sunCol = sunColor(phase);
     vec3 sunDir = sunDirection(phase);
     vec3 horizonSky = skyColor(0.5, phase);
@@ -95,10 +93,6 @@ void main()
         vec3 bankShadow = mix(vec3(0.060, 0.050, 0.052), vec3(0.070, 0.048, 0.046), phase);
         vec3 shallowShelfTint = mix(vec3(0.40, 0.31, 0.25), vec3(0.48, 0.28, 0.20), phase);
         vec3 wetEdgeTint = mix(vec3(0.18, 0.13, 0.11), vec3(0.20, 0.11, 0.09), phase);
-        // AI: night-grade shoreline contact palette so waterline doesn't read as bright dry sand.
-        bankShadow = applyNightGrade(bankShadow, nightMask, vec3(0.04, 0.07, 0.13));
-        shallowShelfTint = applyNightGrade(shallowShelfTint, nightMask, vec3(0.03, 0.06, 0.12));
-        wetEdgeTint = applyNightGrade(wetEdgeTint, nightMask, vec3(0.04, 0.07, 0.14));
         vec3 sharedContactCol = mix(
             wetEdgeTint + shallowShelfTint * 0.10,
             horizonSky * 0.58 + shallowShelfTint * 0.42,
@@ -308,7 +302,7 @@ void main()
                 titleReflAlpha
             );
             if (hasTitleRefl) {
-                titleReflAlpha = titleAboveWaterAlpha(titleReflHitPos, titleReflAlpha) * titleReflectionRevealMask;
+                titleReflAlpha = titleAboveWaterAlpha(titleReflHitPos, titleReflAlpha) * titleReflectionMask;
                 if (titleReflAlpha > 0.0005) {
                     // Depth-based attenuation: reflection fades with ray travel distance,
                     // reinforcing spatial depth of the world-space billboard.
@@ -334,7 +328,7 @@ void main()
                 float titleReflFill;
                 float unusedTitleReflHalo;
                 sampleTitlePhraseReflectionCoverage(titleReflMetric, titleReflFill, unusedTitleReflHalo);
-                titleReflFill = titleAboveWaterAlpha(titleReflHitPos, titleReflFill) * titleReflectionRevealMask;
+                titleReflFill = titleAboveWaterAlpha(titleReflHitPos, titleReflFill) * titleReflectionMask;
                 if (titleReflFill > 0.0005) {
                     float distFade = exp(-tTitleRefl * 0.28);
                     // Suppress further when water is very agitated: secondary damping
@@ -364,9 +358,6 @@ void main()
     vec3 waterCol  = mix(waterDeep, skyRefl + sunLight, fresnel);
     vec3 shallowShelfTint = mix(vec3(0.40, 0.31, 0.25), vec3(0.48, 0.28, 0.20), phase);
     vec3 wetEdgeTint = mix(vec3(0.18, 0.13, 0.11), vec3(0.20, 0.11, 0.09), phase);
-    // AI: same night-grade for underwater shelf/edge to keep shoreline-water continuity.
-    shallowShelfTint = applyNightGrade(shallowShelfTint, nightMask, vec3(0.03, 0.06, 0.12));
-    wetEdgeTint = applyNightGrade(wetEdgeTint, nightMask, vec3(0.04, 0.07, 0.14));
     vec3 sharedContactCol = mix(
         wetEdgeTint + shallowShelfTint * 0.10,
         horizonSky * 0.58 + shallowShelfTint * 0.42,

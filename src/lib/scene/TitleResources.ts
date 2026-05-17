@@ -1,4 +1,5 @@
 import {
+  buildDigitPhraseGpuLayout,
   buildHeroTitlePhraseGpuLayout,
   measureHeroTitleLayoutFromAtlas,
   measureHeroTitleLayoutFromCanvas,
@@ -21,25 +22,27 @@ type TextTexture = {
   layout: HeroTitleLayoutMetrics
 }
 
-type HeroTitleAtlasResource = {
+export type HeroTitleAtlasResource = {
   font: HeroTitleAtlasFont
   texture: WebGLTexture | null
   imageUrl: string | null
   image: HTMLImageElement | null
 }
 
-export type { HeroTitleAtlasResource }
-
 export type HeroTitleAtlasRenderData = {
   atlas: HeroTitleAtlasResource
   gpuLayout: HeroTitlePhraseGpuLayout
-  // AI: Phase E — precomposed phrase MSDF texture used by landscape reflection path
-  // to avoid per-fragment 32-glyph loops in landscape.frag.
+  digit: number | null
+  // NOTE: Phase E — precomposed phrase MSDF texture used by landscape reflection path and as a fallback for hero title rendering when atlas-driven path is unavailable.
   phraseTexture: WebGLTexture | null
   phraseTextureSize: {
     width: number
     height: number
   }
+}
+
+export type HeroTitleDigitRenderData = HeroTitleAtlasRenderData & {
+  digit: number
 }
 
 export type HeroTitleLayoutMetrics_Export = HeroTitleLayoutMetrics
@@ -57,7 +60,7 @@ function clampInteger(value: number, min: number, max: number) {
   return Math.max(min, Math.min(max, Math.round(value)))
 }
 
-// AI: Phase 2 — TitleResources extracted from LandscapeResources to manage canvas title,
+// NOTE: Phase 2 — TitleResources extracted from LandscapeResources to manage canvas title,
 // MSDF atlas loading, phrase GPU layout, and precomposed phrase texture independently.
 export class TitleResources {
 
@@ -75,10 +78,11 @@ export class TitleResources {
   constructor(private gl: WebGL2RenderingContext) {}
 
   async load(projectName: string) {
-    // AI: Phase 2.1 starts the atlas-driven hero-title path by attempting to load MSDF atlas metadata first; canvas text stays only as a fallback/render bridge.
+    this.disposeDigitRenderData()
+    // NOTE: Phase 2.1 starts the atlas-driven hero-title path by attempting to load MSDF atlas metadata first; canvas text stays only as a fallback/render bridge.
     this.heroTitleAtlasRef = await this.loadHeroTitleAtlas()
 
-    // AI: keep scene orchestration lean by centralizing title resource creation and ownership here.
+    // NOTE: keep scene orchestration lean by centralizing title resource creation and ownership here.
     const textResult = this.createTextTexture(projectName)
     if (!textResult) {
       throw new Error("Failed to create landscape title texture")
@@ -126,6 +130,7 @@ export class TitleResources {
     if (this.heroTitleAtlasRenderDataRef?.phraseTexture) {
       this.gl.deleteTexture(this.heroTitleAtlasRenderDataRef.phraseTexture)
     }
+    this.disposeDigitRenderData()
     this.heroTitleAtlasRef = null
     this.heroTitleAtlasRenderDataRef = null
 
@@ -300,6 +305,7 @@ export class TitleResources {
     return {
       atlas,
       gpuLayout,
+      digit: null,
       phraseTexture: phraseTextureData.texture,
       phraseTextureSize: {
         width: phraseTextureData.width,
@@ -370,7 +376,7 @@ export class TitleResources {
       ratioCount += 2
     }
     const pxPerUnit = ratioCount > 0 ? ratioSum / ratioCount : 96
-    // AI: Phase E quality tuning — keep phrase texture slightly supersampled so
+    // NOTE: Phase E quality tuning — keep phrase texture slightly supersampled so
     // reflection path stays close to per-glyph MSDF sharpness without per-fragment loop.
     const phraseResolutionScale = 1.12
     const phraseWidth = clampInteger(phraseLayout.width * pxPerUnit * phraseResolutionScale, 384, 3072)
@@ -418,7 +424,7 @@ export class TitleResources {
     this.gl.bindTexture(this.gl.TEXTURE_2D, texture)
     this.gl.pixelStorei(this.gl.UNPACK_FLIP_Y_WEBGL, true)
     this.gl.texImage2D(this.gl.TEXTURE_2D, 0, this.gl.RGBA, this.gl.RGBA, this.gl.UNSIGNED_BYTE, offscreen)
-    // AI: phrase MSDF is sampled analytically in shader (screen-space pxRange).
+    // NOTE: phrase MSDF is sampled analytically in shader (screen-space pxRange).
     // Disable mipmaps to avoid extra blur in reflection path.
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MIN_FILTER, this.gl.LINEAR)
     this.gl.texParameteri(this.gl.TEXTURE_2D, this.gl.TEXTURE_MAG_FILTER, this.gl.LINEAR)
@@ -429,4 +435,47 @@ export class TitleResources {
     return { texture, width: phraseWidth, height: phraseHeight }
   }
 
+  private digitRenderData = new Map<number, HeroTitleDigitRenderData>()
+
+  /**
+   * Возвращает GPU-layout для цифры 1..7, используя MSDF-атлас.
+   * Если атласа нет (фоллбэк), возвращает null.
+   */
+  getDigitRenderData(digit: number): HeroTitleDigitRenderData | null {
+    const atlas = this.heroTitleAtlasRef
+    if (!atlas) return null
+
+    const clamped = Math.min(7, Math.max(1, digit))
+
+    const cached = this.digitRenderData.get(clamped)
+    if (cached) return cached
+
+    const gpuLayout = buildDigitPhraseGpuLayout(clamped, atlas.font)
+    if (!gpuLayout) return null
+
+    const phraseTex = this.createTitlePhraseTexture(atlas, gpuLayout)
+
+    const data: HeroTitleDigitRenderData = {
+      atlas,
+      digit: clamped,
+      gpuLayout,
+      phraseTexture: phraseTex.texture,
+      phraseTextureSize: {
+        width: phraseTex.width,
+        height: phraseTex.height,
+      },
+    }
+
+    this.digitRenderData.set(clamped, data)
+    return data
+  }
+
+  private disposeDigitRenderData() {
+    for (const data of this.digitRenderData.values()) {
+      if (data.phraseTexture) {
+        this.gl.deleteTexture(data.phraseTexture)
+      }
+    }
+    this.digitRenderData.clear()
+  }
 }

@@ -17,7 +17,7 @@ uniform vec2  u_titleLayoutSize;
 
 out vec2  v_uvAtlas;
 out float v_worldY;
-// AI: Phase 2 atmospheric perspective — camera-space depth for fragment distance fog.
+// NOTE: Phase 2 atmospheric perspective — camera-space depth for fragment distance fog.
 // viewZ = dot(worldPos - cameraPos, cameraForward): positive forward, increases with depth.
 out float v_viewDist;
 
@@ -33,23 +33,47 @@ vec3 titleBillboardRight() {
 
 void main() {
     float aspect = u_resolution.x / max(u_resolution.y, 1.0);
+
+    // 1) Интерполируем local bounds по вершине квада
     vec2 localMetric = mix(a_localBounds.xy, a_localBounds.zw, a_position);
+
+    // 2) Нормализуем в [0..1] по макету активной строки
     vec2 localNorm = vec2(
         localMetric.x / max(u_titleLayoutSize.x, 0.001),
         localMetric.y / max(u_titleLayoutSize.y, 0.001)
     );
 
+    // 3) Центрируем вокруг (0,0): [-0.5..0.5]
+    // vec2 centered = localNorm - 0.5;
+
+    // 4) Билборд-ориентация
     vec3 titleRight = titleBillboardRight();
     vec3 titleUp = vec3(0.0, 1.0, 0.0);
-    vec3 worldPos = u_titleWorldCenter
-                  + titleRight * (localNorm.x * u_titleWorldSize.x)
-                  + titleUp * (localNorm.y * u_titleWorldSize.y);
 
+    // 5) Соотношение сторон активного макета
+    float layoutAspect = u_titleLayoutSize.x / max(u_titleLayoutSize.y, 0.001);
+
+    // 6) Фиксируем мировую высоту и считаем ширину через соотношение сторон
+    float worldHeight = u_titleWorldSize.y;
+    float worldWidth = worldHeight * layoutAspect;
+
+    // 7) Масштабируем по X/Y с сохранением соотношения сторон
+    // vec3 worldPos = u_titleWorldCenter
+    //               + titleRight * (centered.x * worldWidth)
+    //               + titleUp    * (centered.y * worldHeight);
+    vec3 worldPos = u_titleWorldCenter
+                  + titleRight * (localNorm.x * worldWidth)
+                  + titleUp * (localNorm.y * worldHeight);
+
+    // считаем точку в мире, где висит текст.
     vec3 relative = worldPos - u_cameraPos;
+    // переводим точку в пространство камеры: оси X/Y/Z уже относительно камеры.
     float viewX = dot(relative, u_cameraRight);
     float viewY = dot(relative, u_cameraUp);
     float viewZ = dot(relative, u_cameraForward);
 
+    // перспективная проекция в NDC
+    // «универсальные экранные координаты» до перевода в пиксели
     if (viewZ <= 0.0001) {
         gl_Position = vec4(2.0, 2.0, 1.0, 1.0);
     } else {
@@ -59,11 +83,10 @@ void main() {
         );
         gl_Position = vec4(ndc, 0.0, 1.0);
     }
+    // https://paroj.github.io/gltut/Positioning/Tut05%20Overlap%20and%20Depth%20Buffering.html
+    // https://apoorvaj.io/ndc-clip
 
     v_uvAtlas  = a_atlasRect.xy + a_position * a_atlasRect.zw;
     v_worldY   = worldPos.y;
-    // AI: pass camera-forward depth to fragment for atmospheric perspective fade.
-    // Current title anchor is near pond center (sceneCamera TITLE_WORLD_Z_NEAR=+0.35),
-    // so atmospheric fade remains subtle while preserving crisp near-camera readability.
     v_viewDist = viewZ;
 }

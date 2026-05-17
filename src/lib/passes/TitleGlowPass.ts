@@ -21,6 +21,7 @@ type TitleGlowFrameState = {
     height: number
   }
   titleAtlasPxRange: number
+  layoutSize?: { width: number; height: number } | null
 }
 
 export class TitleGlowPass extends RenderPass {
@@ -55,6 +56,8 @@ export class TitleGlowPass extends RenderPass {
   private phraseTextureSize = { width: 1, height: 1 }
   private titleAtlasPxRange = 4
 
+  private layoutSize = { width: 1, height: 1 }
+
   constructor(gl: WebGL2RenderingContext) {
     super(gl)
     this.sourceProgram = new Program(gl, quadVert, titleGlowSourceFrag)
@@ -78,6 +81,7 @@ export class TitleGlowPass extends RenderPass {
     this.phraseTexture = state.phraseTexture
     this.phraseTextureSize = state.phraseTextureSize
     this.titleAtlasPxRange = state.titleAtlasPxRange
+    this.layoutSize = state.layoutSize ?? this.phraseTextureSize
   }
 
   render(time: number, input: WebGLTexture | null) {
@@ -94,7 +98,7 @@ export class TitleGlowPass extends RenderPass {
     const glowWidth = this.glowWidth
     const glowHeight = this.glowHeight
 
-    // AI: Stage 1 (Bloom source) — render only glow source mask/color.
+    // NOTE: Stage 1 (Bloom source) — render only glow source mask/color.
     gl.bindFramebuffer(gl.FRAMEBUFFER, this.sourceBuffer.framebuffer)
     gl.viewport(0, 0, glowWidth, glowHeight)
     gl.disable(gl.BLEND)
@@ -134,19 +138,28 @@ export class TitleGlowPass extends RenderPass {
       this.titleHero.center.y,
       this.titleHero.center.z
     )
-    this.sourceProgram.setVec2("u_titleWorldSize", this.titleHero.size.w, this.titleHero.size.h)
+    this.sourceProgram.setVec2(
+      "u_titleWorldSize",
+      this.titleHero.size.w,
+      this.titleHero.size.h
+    )
     this.sourceProgram.setTexture("u_titlePhraseTex", this.phraseTexture, 0)
     this.sourceProgram.setVec2(
       "u_titlePhraseTexSize",
       Math.max(this.phraseTextureSize.width, 1),
       Math.max(this.phraseTextureSize.height, 1)
     )
+    this.sourceProgram.setVec2(
+      "u_titleLayoutSize",
+      this.layoutSize.width,
+      this.layoutSize.height
+    )
     this.sourceProgram.setFloat("u_titleAtlasPxRange", this.titleAtlasPxRange)
     this.sourceProgram.setFloat("u_phase", this.phase)
     this.sourceProgram.setFloat("u_waterLevel", this.waterLevel)
     this.quad.draw()
 
-    // AI: Stage 2 (Separable blur) — multi-pass gaussian radii for smooth halo.
+    // NOTE: Stage 2 (Separable blur) — multi-pass gaussian radii for smooth halo.
     let readTexture: WebGLTexture = this.sourceBuffer.texture
     const blurRadii = [1.0, 2.25, 4.0]
     for (const radius of blurRadii) {
@@ -155,7 +168,7 @@ export class TitleGlowPass extends RenderPass {
       readTexture = this.pongBuffer.texture
     }
 
-    // AI: Stage 3 (Layered composite) — additive in final pass, isolate mode for debug.
+    // NOTE: Stage 3 (Layered composite) — additive in final pass, isolate mode for debug.
     this.bindOutputFramebuffer()
     gl.viewport(0, 0, this.width, this.height)
     gl.enable(gl.BLEND)
@@ -172,6 +185,13 @@ export class TitleGlowPass extends RenderPass {
     this.compositeProgram.setFloat("u_phase", this.phase)
     this.compositeProgram.setFloat("u_time", time)
     this.compositeProgram.setFloat("u_debugIsolate", this.debugIsolate ? 1 : 0)
+
+    // console.log('Glow uniforms', {
+    //   worldSize: this.titleHero.size,
+    //   layoutSize: this.layoutSize,
+    //   phraseTexSize: this.phraseTextureSize,
+    // })
+
     this.quad.draw()
 
     gl.disable(gl.BLEND)

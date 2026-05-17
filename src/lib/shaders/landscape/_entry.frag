@@ -52,10 +52,9 @@ out vec4 fragColor;
 
 // ====================================================================
 //  functions only, use uniforms declared aboveDomains
-// Order matters: night first (used widely), then domains in dependency order
+// Order matters: domains in dependency order.
 // ====================================================================
 
-#include "./domains/night.glsl"
 // cloudDensity must be declared before shadeSkyDirection calls it.
 #include "./domains/clouds.glsl"
 #include "./domains/sky.glsl"

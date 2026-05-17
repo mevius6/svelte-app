@@ -9,7 +9,7 @@ uniform float u_debugDensity;
 out vec4 fragColor;
 
 // AI: POC tuning notes (Phase 6):
-// - Phase semantics: 0.0=night, 0.2=dawn, 0.5=day, 1.0=late-sunset
+// - Scroll phase: 0.0=start, 0.2=dawn, 0.5=day, 1.0=late-sunset
 // - Fog appears at dawn (phase 0.18) and dissipates by day (0.36)
 // - This pass is a secondary artistic wisp layer; keep density conservative
 // - Physical/base dawn fog now lives in landscape.frag (analytic height fog)

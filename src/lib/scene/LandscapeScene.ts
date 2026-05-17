@@ -9,6 +9,7 @@ import { FBO } from "../gl/FBO"
 import {
   LandscapeResources,
   type FoliageAtlasSourceSet,
+  type HeroTitleAtlasResource,
   type HeroTitleAtlasRenderData,
 } from "./LandscapeResources"
 import {
@@ -26,6 +27,8 @@ import {
 import { computeSceneFrame } from "./sceneFraming"
 import type { Scene } from "./Scene"
 
+import type { HeroTitleDigitRenderData } from "./TitleResources"
+
 const DEFAULT_FOLIAGE_ATLAS_SOURCES: FoliageAtlasSourceSet = {
   albedo: "/grass-atlas-web/TCom_Grass12_512_albedo.png",
   alpha: "/grass-atlas-web/TCom_Grass12_512_alpha.png",
@@ -37,14 +40,16 @@ const DROP_THROTTLE_MS = 45
 const VEGETATION_DEBUG_CLEAR: [number, number, number, number] = [0.03, 0.04, 0.06, 1.0]
 
 export type PassDebugView = "final" | "ripple" | "landscape" | "vegetation" | "fog" | "glow"
+export type TitleRenderMode = "digit" | "phrase"
 
 export type SceneDebugState = {
   passView: PassDebugView
   landscapeMode: Exclude<LandscapeDebugMode, "ripple">
   glowEnabled: boolean
+  titleRenderMode: TitleRenderMode
 }
 
-// AI: Phase 1 — extracted frame state to separate structure for cleaner dispatch logic.
+// NOTE: Phase 1 — extracted frame state to separate structure for cleaner dispatch logic.
 // Collects all per-frame computed data once, then passes to appropriate renderDebug* or renderFinal.
 interface FrameState {
   time: number
@@ -52,9 +57,18 @@ interface FrameState {
   sceneFrame: ReturnType<typeof computeSceneFrame>
   camera: SceneCameraState
   vegetationHorizon: number
+
   titleHero: ReturnType<typeof computeTitleHeroState>
+
   heroTitleAtlasRenderData: HeroTitleAtlasRenderData | null
-  heroTitleAtlas: any // placeholder; will get the actual type from resources
+  heroTitleAtlas: HeroTitleAtlasResource | null
+  digit: number // 1..7 — новый слайдовый шаг
+  digitTitleRenderData: HeroTitleDigitRenderData | null
+
+  activeTitleRenderData: HeroTitleAtlasRenderData | null
+  activeLayoutSize: { width: number; height: number } | null // логический layout (phraseLayout)
+  activePhraseTexSize: { width: number; height: number } | null // физический размер текстуры
+
   useGlyphTitle: boolean
 }
 
@@ -77,7 +91,7 @@ export class LandscapeScene implements Scene {
   private width = 1
   private height = 1
   private scrollNorm = 0
-  // AI: Phase C — camera is now effectively static (time-of-day scroll,
+  // NOTE: Phase C — camera is now effectively static (time-of-day scroll,
   // fixed orbital params). Cache to avoid trig on every RAF call.
   private cachedCamera: SceneCameraState | null = null
   private cameraWidth = 0
@@ -87,6 +101,7 @@ export class LandscapeScene implements Scene {
   private passView: PassDebugView = "final"
   private landscapeMode: Exclude<LandscapeDebugMode, "ripple"> = "beauty"
   private glowEnabled = true
+  private titleRenderMode: TitleRenderMode = "digit"
 
   private readonly scrollHandler = () => {
     const max = document.body.scrollHeight - window.innerHeight
@@ -95,7 +110,6 @@ export class LandscapeScene implements Scene {
 
   /**
    * Phase 6: Convert scroll position to phase (0-1) with new semantics.
-   * New mapping: 0=night, 0.2=dawn, 0.5=day, 0.8=dusk, 1.0=late-sunset
    * This is the single point of control for day-night cycle ordering.
    */
   private scrollToPhase(scroll: number): number {
@@ -151,7 +165,7 @@ export class LandscapeScene implements Scene {
   async init() {
     if (this.initialized) return
 
-    // AI: keep LandscapeScene focused on input + pass orchestration by delegating GPU asset setup to LandscapeResources.
+    // NOTE: keep LandscapeScene focused on input + pass orchestration by delegating GPU asset setup to LandscapeResources.
     await this.resources.load({
       projectName: this.projectName,
       atlasSources: this.atlasSources,
@@ -194,12 +208,15 @@ export class LandscapeScene implements Scene {
     if (state.glowEnabled !== undefined) {
       this.glowEnabled = state.glowEnabled
     }
+    if (state.titleRenderMode) {
+      this.titleRenderMode = state.titleRenderMode
+    }
 
   }
 
   update(_dt: number) {}
 
-  // AI: Phase 1 — builds frame state once per render cycle, centralizing all per-frame data computation.
+  // NOTE: Phase 1 — builds frame state once per render cycle, centralizing all per-frame data computation.
   // Reduces render() method complexity and enables clean dispatch to renderDebug*/renderFinal.
   private buildFrameState(time: number): FrameState | null {
     const textTexture = this.resources.textTexture
@@ -211,19 +228,44 @@ export class LandscapeScene implements Scene {
     const vegetationHorizon = computeVegetationHorizon(camera, this.width, this.height)
     const textTexSize = this.resources.textTextureSize
     const titleLayout = this.resources.heroTitleLayout
+
+    const heroTitleAtlasRenderData = this.resources.heroTitleAtlasRenderData
+    const heroTitleAtlas = heroTitleAtlasRenderData?.atlas ?? this.resources.heroTitleAtlas ?? null
+
+    // Вычисляем digit на основе scrollNorm (phase01)
+    const rawPhase = this.scrollNorm // 0..1
+    const digit = Math.min(7, Math.max(1, Math.floor(rawPhase * 7) + 1))
+    const digitTitleRenderData = this.resources.getDigitRenderData(digit)
+    const phraseGlyphRenderData = heroTitleAtlasRenderData?.atlas.texture
+      ? heroTitleAtlasRenderData
+      : null
+
+    const activeTitleRenderData = this.titleRenderMode === "digit"
+      ? digitTitleRenderData
+      : phraseGlyphRenderData
+
+    const useGlyphTitle = Boolean(
+      activeTitleRenderData?.atlas.texture && activeTitleRenderData.gpuLayout
+    )
+
+    // ЛОГИЧЕСКИЙ layout берём из gpuLayout.phraseLayout
+    const activeLayoutSize = activeTitleRenderData?.gpuLayout
+      ? {
+          width: activeTitleRenderData.gpuLayout.phraseLayout.width,
+          height: activeTitleRenderData.gpuLayout.phraseLayout.height,
+        }
+      : {
+          width: this.resources.heroTitleLayout.width,
+          height: this.resources.heroTitleLayout.height,
+        }
+
+    // ФИЗИЧЕСКИЙ размер текстуры для MSDF
+    const activePhraseTexSize = activeTitleRenderData?.phraseTextureSize ?? null
+
     const titleHero = computeTitleHeroState(
       this.scrollNorm,
       titleLayout.aspect,
       textTexSize.contentRect
-    )
-    const heroTitleAtlasRenderData = this.resources.heroTitleAtlasRenderData
-    const heroTitleAtlas = heroTitleAtlasRenderData?.atlas ?? this.resources.heroTitleAtlas ?? null
-
-    // AI: Phase E — require both atlas texture and precomposed phrase texture so
-    // direct title and reflection stay on the same MSDF source.
-    const useGlyphTitle = Boolean(
-      heroTitleAtlasRenderData?.atlas.texture &&
-      heroTitleAtlasRenderData?.phraseTexture
     )
 
     return {
@@ -233,9 +275,16 @@ export class LandscapeScene implements Scene {
       camera,
       vegetationHorizon,
       titleHero,
+
       heroTitleAtlasRenderData,
       heroTitleAtlas,
+      activeTitleRenderData,
+      activeLayoutSize,
+      activePhraseTexSize,
       useGlyphTitle,
+
+      digit,
+      digitTitleRenderData
     }
   }
 
@@ -259,14 +308,15 @@ export class LandscapeScene implements Scene {
     }
   }
 
-  // AI: Phase 1 — debug view for ripple simulation pass.
+  // MARK:- Debug views
+  // NOTE: Phase 1 — debug view for ripple simulation pass.
   private renderDebugRipple(frame: FrameState) {
     this.setSceneOutputFramebuffer(null)
     this.landscape.setDebugMode('ripple')
     this.landscape.render(frame.time, frame.rippleTex)
   }
 
-  // AI: Phase 1 — debug view for vegetation (bushes) pass; fog/haze disabled for readability.
+  // NOTE: Phase 1 — debug view for vegetation (bushes) pass; fog/haze disabled for readability.
   private renderDebugVegetation(frame: FrameState) {
     this.gl.clearColor(...VEGETATION_DEBUG_CLEAR)
     this.gl.clear(this.gl.COLOR_BUFFER_BIT)
@@ -284,7 +334,7 @@ export class LandscapeScene implements Scene {
     this.bushes.render(frame.time, null)
   }
 
-  // AI: Phase 1 — debug view for morning fog pass; shows density profile in isolation.
+  // NOTE: Phase 1 — debug view for morning fog pass; shows density profile in isolation.
   private renderDebugFog(frame: FrameState) {
     this.gl.clearColor(0.02, 0.03, 0.05, 1.0)
     this.gl.clear(this.gl.COLOR_BUFFER_BIT)
@@ -295,7 +345,7 @@ export class LandscapeScene implements Scene {
     this.morningFog.render(frame.time, null)
   }
 
-  // AI: Phase 1 — debug view for title glow pass; shows glow isolation.
+  // NOTE: Phase 1 — debug view for title glow pass; shows glow isolation.
   private renderDebugGlow(frame: FrameState) {
     this.gl.clearColor(0.0, 0.0, 0.0, 1.0)
     this.gl.clear(this.gl.COLOR_BUFFER_BIT)
@@ -303,13 +353,14 @@ export class LandscapeScene implements Scene {
     this.titleGlow.render(frame.time, null)
   }
 
-  // AI: Phase 1 — debug view for landscape pass; allows viewing specific shader domains (ripple, normals, reflection, wave LOD).
+  // NOTE: Phase 1 — debug view for landscape pass; allows viewing specific shader domains (ripple, normals, reflection, wave LOD).
   private renderDebugLandscape(frame: FrameState) {
     this.landscape.setDebugMode(this.landscapeMode)
     this.landscape.render(frame.time, frame.rippleTex)
   }
 
-  // AI: Phase 1 — full render: landscape → bushes → fog → heroTitle → titleGlow → final color transfer (linear→sRGB).
+  // MARK:- Final render
+  // NOTE: Phase 1 — full render: landscape → bushes → fog → heroTitle → titleGlow → final color transfer (linear→sRGB).
   // All passes write to offscreen sceneColor FBO, then FinalColorPass applies single display transfer.
   private renderFinal(frame: FrameState) {
     if (!this.sceneColor) return
@@ -348,7 +399,8 @@ export class LandscapeScene implements Scene {
     this.finalColor.render(frame.time, this.sceneColor.texture)
   }
 
-  // AI: Phase 1 — setup helpers extract pass-specific configuration from frame state.
+  // MARK:- Setup helpers
+  // NOTE: Phase 1 — setup helpers extract pass-specific configuration from frame state.
   private setupLandscapeState(frame: FrameState) {
     this.landscape.setFrameState({
       camera: frame.camera,
@@ -356,7 +408,7 @@ export class LandscapeScene implements Scene {
       textTexture: this.resources.textTexture!,
       titleHero: frame.titleHero,
       useTitleBillboard: !frame.useGlyphTitle,
-      titleAtlasRenderData: frame.heroTitleAtlasRenderData,
+      titleAtlasRenderData: frame.activeTitleRenderData,
       rippleTexelSize: this.ripple.texelSize,
       rippleWorldRect: RIPPLE_WORLD_RECT,
       sceneScale: {
@@ -396,12 +448,16 @@ export class LandscapeScene implements Scene {
       phase: this.scrollToPhase(this.scrollNorm),
       waterLevel: WATER_LEVEL,
       titleHero: frame.titleHero,
-      atlas: frame.heroTitleAtlas,
-      gpuLayout: frame.heroTitleAtlasRenderData?.gpuLayout ?? null,
+      atlas: frame.activeTitleRenderData?.atlas ?? frame.heroTitleAtlas,
+      digit: frame.activeTitleRenderData?.digit ?? 1,
+      gpuLayout: frame.activeTitleRenderData?.gpuLayout ?? null,
+      layoutSize: frame.activeLayoutSize
     })
   }
 
   private setupTitleGlowState(frame: FrameState) {
+    const active = frame.activeTitleRenderData
+
     this.titleGlow.setFrameState({
       enabled: this.glowEnabled && frame.useGlyphTitle,
       debugIsolate: this.passView === "glow",
@@ -409,9 +465,10 @@ export class LandscapeScene implements Scene {
       phase: this.scrollToPhase(this.scrollNorm),
       waterLevel: WATER_LEVEL,
       titleHero: frame.titleHero,
-      phraseTexture: frame.heroTitleAtlasRenderData?.phraseTexture ?? null,
-      phraseTextureSize: frame.heroTitleAtlasRenderData?.phraseTextureSize ?? { width: 1, height: 1 },
-      titleAtlasPxRange: frame.heroTitleAtlasRenderData?.atlas.font.atlas.distanceRange ?? 4,
+      phraseTexture: active?.phraseTexture ?? null,
+      phraseTextureSize: frame.activePhraseTexSize ?? { width: 1, height: 1 }, // размер текстуры
+      titleAtlasPxRange: active?.atlas.font.atlas.distanceRange ?? 4,
+      layoutSize: frame.activeLayoutSize // логический layout
     })
   }
 
@@ -462,12 +519,12 @@ export class LandscapeScene implements Scene {
       return null
     }
 
-    // AI: Phase 1 upgrades ripple input to the same world-water mapping used by the landscape shader, so interaction no longer depends on the screen's lower half.
+    // NOTE: Phase 1 upgrades ripple input to the same world-water mapping used by the landscape shader, so interaction no longer depends on the screen's lower half.
     return waterWorldToRippleUV(waterHit)
   }
 
   private resolveCamera() {
-    // AI: Phase C — recompute only when viewport size changes.
+    // NOTE: Phase C — recompute only when viewport size changes.
     // If cinematic camera motion is introduced later, include that motion phase/revision
     // in this cache invalidation key.
     if (

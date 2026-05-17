@@ -13,6 +13,8 @@ type HeroTitleFrameState = {
   titleHero: TitleHeroState
   atlas: HeroTitleAtlasResource | null
   gpuLayout: HeroTitlePhraseGpuLayout | null
+  digit: number // опционально, для смены виз. эффектов в зависимости от номера эл-та последовательности (1..7)
+  layoutSize?: { width: number; height: number } | null
 }
 
 export class HeroTitlePass extends RenderPass {
@@ -42,6 +44,9 @@ export class HeroTitlePass extends RenderPass {
     size: { w: 1, h: 1 },
     uvRect: { x: 0, y: 0, w: 1, h: 1 },
   }
+
+  private digit = 1
+  private layoutSize: { width: number; height: number } | null = null
 
   constructor(
     gl: WebGL2RenderingContext,
@@ -102,6 +107,10 @@ export class HeroTitlePass extends RenderPass {
     this.phase = state.phase
     this.waterLevel = state.waterLevel
     this.titleHero = state.titleHero
+    this.digit = state.digit // для uniform
+
+    this.layoutSize = state.layoutSize ?? null
+
     this.syncAtlas(state.atlas, state.gpuLayout)
   }
 
@@ -154,23 +163,37 @@ export class HeroTitlePass extends RenderPass {
       this.titleHero.size.w,
       this.titleHero.size.h
     )
+
+    const layoutWidth =
+      this.layoutSize?.width ?? this.phraseLayout.width
+    const layoutHeight =
+      this.layoutSize?.height ?? this.phraseLayout.height
+
     this.program.setVec2(
       "u_titleLayoutSize",
-      this.phraseLayout.width,
-      this.phraseLayout.height
+      layoutWidth,
+      layoutHeight
     )
     this.program.setVec2(
       "u_titleAtlasSize",
       this.currentAtlas.font.atlas.width,
       this.currentAtlas.font.atlas.height
     )
+
     this.program.setFloat("u_titleAtlasPxRange", this.currentAtlas.font.atlas.distanceRange)
     this.program.setFloat("u_phase", this.phase)
     this.program.setFloat("u_waterLevel", this.waterLevel)
     this.program.setTexture("u_titleAtlas", this.currentAtlas.texture, 0)
+    this.program.setFloat("u_digit", this.digit) // для визуальных эффектов, зависящих от конкретных мест прокрутки, обозначенных числом (0..7)
 
     gl.bindVertexArray(this.vao)
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.instanceCount)
+
+    // console.log('HeroTitle uniforms', {
+    //   worldSize: this.titleHero.size,
+    //   layoutSize: { w: layoutWidth, h: layoutHeight },
+    // })
+
     gl.bindVertexArray(null)
     gl.disable(gl.BLEND)
 

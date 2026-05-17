@@ -16,7 +16,7 @@ if (typeof globalThis.ImageData === "undefined") {
   }
 }
 
-const DEFAULT_TEXT = "ЧИСТЫЕ ПРУДЫ"
+const DEFAULT_TEXT = "0123456789 ЧИСТЫЕПРУДЫ"
 const DEFAULT_FONT_PATH = "src/fonts/RoslindaleCyrillic-DisplayCondensedBlack.otf"
 const DEFAULT_OUTPUT_DIR = "static/hero-title"
 const DEFAULT_BASENAME = "roslindale-msdf"

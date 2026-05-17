@@ -1,5 +1,5 @@
 // ============================================================
-// Title  hero text rendering, billboarding, MSDF samplingdomain
+// Title hero text rendering, billboarding, MSDF sampling domain
 // Depends on constants.glsl (TITLE_*)
 // ============================================================
 
@@ -38,7 +38,7 @@ float sampleTitlePhraseAlpha(vec2 localMetric) {
     }
     vec3 msdf = texture(u_titlePhraseTex, phraseUv).rgb;
     float signedDistance = median3(msdf) - 0.5;
-    // AI: reflection hit-test must not depend on fwidth(phraseUv):
+    // NOTE: reflection hit-test must not depend on fwidth(phraseUv):
     // grazing-angle derivatives are unstable and create comb-like early-out artifacts.
     const float REFL_MSDF_HIT_SOFT_RADIUS = 2.8;
     float screenDistance = signedDistance * REFL_MSDF_HIT_SOFT_RADIUS;
@@ -59,7 +59,7 @@ void sampleTitlePhraseReflectionCoverage(vec2 localMetric, out float fillAlpha, 
     vec3 msdf = texture(u_titlePhraseTex, phraseUv).rgb;
     float signedDistance = median3(msdf) - 0.5;
 
-    // AI: in reflection contexts fwidth(phraseUv) is unstable:
+    // NOTE: in reflection contexts fwidth(phraseUv) is unstable:
     // at grazing angles phrase UV changes rapidly -> derivatives inflate
     // -> pxRange collapses -> MSDF turns into a hard step() -> comb-like aliasing.
     // Fixed soft radius gives stable smoothing without reflection artifacts.
@@ -67,14 +67,14 @@ void sampleTitlePhraseReflectionCoverage(vec2 localMetric, out float fillAlpha, 
     float screenDistance = signedDistance * REFL_MSDF_SOFT_RADIUS;
     fillAlpha = clamp(screenDistance + 0.5, 0.0, 1.0);
 
-    // AI: wider UV edge fade removes thin phrase-rect frame.
+    // NOTE: wider UV edge fade removes thin phrase-rect frame.
     float edgeUv = min(min(phraseUv.x, phraseUv.y), min(1.0 - phraseUv.x, 1.0 - phraseUv.y));
     float uvEdgeFade = smoothstep(0.025, 0.090, edgeUv);
 
     float contourBand = smoothstep(0.85, 0.06, abs(screenDistance));
     float interiorSuppress = 1.0 - smoothstep(0.20, 0.82, fillAlpha);
 
-    // AI: glyphProximity suppresses halo in background space between letters
+    // NOTE: glyphProximity suppresses halo in background space between letters
     // inside phrase-rect. Without it contourBand ~= 1.0 even where no glyph exists
     // -> rectangular glow field between symbols.
     float glyphProximity = smoothstep(-0.38, 0.0, signedDistance);
@@ -137,9 +137,14 @@ vec2 titleLocalMetricFromHitPos(vec3 hitPos) {
     vec3 titleRight = titleBillboardRight();
     vec3 titleUp = vec3(0.0, 1.0, 0.0);
     vec3 local = hitPos - u_titleWorldCenter;
+
+    float layoutAspect = u_titleLayoutSize.x / max(u_titleLayoutSize.y, 0.001);
+    float worldHeight = u_titleWorldSize.y;
+    float worldWidth = worldHeight * layoutAspect;
+
     return vec2(
-        dot(local, titleRight) / max(u_titleWorldSize.x, 0.001) * u_titleLayoutSize.x,
-        dot(local, titleUp) / max(u_titleWorldSize.y, 0.001) * u_titleLayoutSize.y
+        dot(local, titleRight) / max(worldWidth, 0.001) * u_titleLayoutSize.x,
+        dot(local, titleUp) / max(worldHeight, 0.001) * u_titleLayoutSize.y
     );
 }
 
@@ -177,7 +182,7 @@ float titleAboveWaterAlpha(vec3 hitPos, float alpha) {
 }
 
 vec3 titleHeroColor(vec3 rayDir, vec3 sunCol, vec3 sunDir) {
-    // AI: keep direct title ink locked to target display hue (#c9f08a).
+    // NOTE: keep direct title ink locked to target display hue (#c9f08a).
     return TITLE_DAYGLO_LINEAR;
 }
 
@@ -190,7 +195,7 @@ float titleReveal(float phase01) {
     return smoothstep(0.78, 0.94, clamp(phase01, 0.0, 1.0));
 }
 
-float titleReflectionReveal(float phase01) {
-    // Reflection emerges slightly after direct text (phase 0.82-0.98)
-    return smoothstep(0.82, 0.98, clamp(phase01, 0.0, 1.0));
+float titleReflectionEndGate(float phase01) {
+    // Reflection is a final-scroll state, not a separate reveal animation.
+    return step(0.96, clamp(phase01, 0.0, 1.0));
 }

@@ -17,6 +17,7 @@
   let passView: PassDebugView = "final"
   let landscapeMode: SceneDebugState["landscapeMode"] = "beauty"
   let glowEnabled: SceneDebugState["glowEnabled"] = true
+  let titleRenderMode: SceneDebugState["titleRenderMode"] = "digit"
   let fps = 0
 
   function applyDebugState() {
@@ -24,6 +25,7 @@
       passView,
       landscapeMode,
       glowEnabled,
+      titleRenderMode,
     })
   }
 
@@ -41,6 +43,11 @@
 
   function handleGlowEnabledChange(event: Event) {
     glowEnabled = (event.currentTarget as HTMLInputElement).checked
+    applyDebugState()
+  }
+
+  function handleTitleRenderModeChange(event: Event) {
+    titleRenderMode = (event.currentTarget as HTMLSelectElement).value as SceneDebugState["titleRenderMode"]
     applyDebugState()
   }
 
@@ -127,6 +134,14 @@
         checked={glowEnabled}
         on:change={handleGlowEnabledChange}
       />
+    </label>
+
+    <label class="debug-field">
+      <span>Title Mode</span>
+      <select value={titleRenderMode} on:change={handleTitleRenderModeChange}>
+        <option value="digit">Digit</option>
+        <option value="phrase">Phrase</option>
+      </select>
     </label>
 
     <div class="debug-field debug-fps">
