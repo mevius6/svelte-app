@@ -187,6 +187,10 @@ export class LandscapePass extends RenderPass {
       this.titleAtlasRenderData?.phraseTextureSize.width ?? 1,
       this.titleAtlasRenderData?.phraseTextureSize.height ?? 1
     )
+    // Title MSDF parameters
+    program.setFloat("u_titleStrokeOffset", 0.0)
+    program.setFloat("u_titleStrokeSoftness", 1.0)
+    program.setFloat("u_titleEdgeGamma", 1.0)
 
     program.setTexture("u_rippleTex", rippleTex, 1)
     program.setFloat("u_rippleTexel", this.rippleTexelSize)

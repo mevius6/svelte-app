@@ -31,6 +31,10 @@ uniform vec2      u_titleLayoutSize;
 uniform vec3      u_titleWorldCenter;
 uniform vec2      u_titleWorldSize;
 uniform vec4      u_titleTexRect;
+// Title MSDF parameters
+uniform float     u_titleStrokeOffset;
+uniform float     u_titleStrokeSoftness;
+uniform float     u_titleEdgeGamma;
 
 // Water & terrain
 uniform sampler2D u_rippleTex;

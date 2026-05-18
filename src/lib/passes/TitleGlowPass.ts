@@ -157,6 +157,10 @@ export class TitleGlowPass extends RenderPass {
     this.sourceProgram.setFloat("u_titleAtlasPxRange", this.titleAtlasPxRange)
     this.sourceProgram.setFloat("u_phase", this.phase)
     this.sourceProgram.setFloat("u_waterLevel", this.waterLevel)
+    // Glow MSDF parameters
+    this.sourceProgram.setFloat("u_glowStrokeOffset", 0.0)
+    this.sourceProgram.setFloat("u_glowSoftness", 1.0)
+    this.sourceProgram.setFloat("u_glowGamma", 1.0)
     this.quad.draw()
 
     // NOTE: Stage 2 (Separable blur) — multi-pass gaussian radii for smooth halo.

@@ -36,12 +36,10 @@ float sampleTitlePhraseAlpha(vec2 localMetric) {
     float sd      = msdfSignedDistance(u_titlePhraseTex, phraseUv);
     float pxRange = titlePhraseScreenPxRange(phraseUv);
 
-    // пока константы; позже можно заменить на uniforms
-    const float strokeOffset = 0.0;
-    const float softness     = 1.0;
-    const float gamma        = 1.0;
-
-    return msdfCoverage(sd, pxRange, strokeOffset, softness, gamma);
+    return msdfCoverage(sd, pxRange,
+                        u_titleStrokeOffset,
+                        u_titleStrokeSoftness,
+                        u_titleEdgeGamma);
 }
 
 // float sampleTitlePhraseAlpha(vec2 localMetric) {

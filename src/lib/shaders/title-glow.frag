@@ -19,6 +19,10 @@ uniform vec2  u_titleLayoutSize;
 uniform sampler2D u_titlePhraseTex;
 uniform vec2      u_titlePhraseTexSize;
 uniform float     u_titleAtlasPxRange;
+// Glow MSDF parameters
+uniform float     u_glowStrokeOffset;
+uniform float     u_glowSoftness;
+uniform float     u_glowGamma;
 
 // Scene state
 uniform float u_phase;
@@ -128,11 +132,14 @@ void main() {
     }
 
     // 5) MSDF-сэмпл и signed distance в той же системе, что и основная фраза в hero-title.frag, но с учётом активного u_titleLayoutSize
-    vec3 msdf = texture(u_titlePhraseTex, phraseUv).rgb;
-    float signedDistance = msdfMedian(msdf.r, msdf.g, msdf.b) - 0.5;
+    float signedDistance = msdfSignedDistance(u_titlePhraseTex, phraseUv);
     float pxRange = titlePhraseScreenPxRange(phraseUv);
     float sdPx = signedDistance * pxRange; // >0 inside, <0 outside
-    float fill = clamp(sdPx + 0.5, 0.0, 1.0);
+    
+    float fill = msdfCoverage(signedDistance, pxRange,
+                              u_glowStrokeOffset,
+                              u_glowSoftness,
+                              u_glowGamma);
 
     float emergence = smoothstep(u_waterLevel - 0.012, u_waterLevel + 0.034, hitPos.y);
     float mask = emergence;
