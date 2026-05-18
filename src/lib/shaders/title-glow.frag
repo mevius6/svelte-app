@@ -26,6 +26,8 @@ uniform float u_waterLevel;
 
 out vec4 fragColor;
 
+#include "landscape/common/msdf_core.glsl"
+
 // Scroll phase: 0.0=start, 0.2=dawn, 0.5=day, 1.0=late-sunset.
 // DayGlo NG200 #c9f08a -> linear.
 const vec3 LIME_LINEAR = vec3(0.584078418, 0.871367119, 0.254152094);
@@ -33,7 +35,7 @@ const vec3 AMBER_LINEAR = vec3(1.0, 0.552, 0.212);
 const vec3 SKY_COOL = vec3(0.84, 0.96, 0.68);
 
 float median3(vec3 v) {
-    return max(min(v.r, v.g), min(max(v.r, v.g), v.b));
+    return msdfMedian(v.r, v.g, v.b);
 }
 
 vec3 glowBillboardRight() {
@@ -42,7 +44,7 @@ vec3 glowBillboardRight() {
     return l > 0.0001 ? r / l : vec3(1.0, 0.0, 0.0);
 }
 
-// адаптированные ВЕРСИИ из title.glsl
+// адаптированная версия из title.glsl
 vec2 titlePhraseUvFromLocalMetric(vec2 localMetric) {
     return vec2(
         localMetric.x / max(u_titleLayoutSize.x, 0.001) + 0.5,
@@ -78,9 +80,7 @@ vec2 titleLocalMetricFromHitPos(vec3 hitPos) {
 }
 
 float titlePhraseScreenPxRange(vec2 phraseUv) {
-    vec2 unitRange = vec2(u_titleAtlasPxRange) / max(u_titlePhraseTexSize, vec2(1.0));
-    vec2 screenTexSize = vec2(1.0) / max(fwidth(phraseUv), vec2(1e-5));
-    return max(0.5 * dot(unitRange, screenTexSize), 1.0);
+    return msdfScreenPxRange(u_titleAtlasPxRange, u_titlePhraseTexSize, phraseUv);
 }
 
 void main() {

@@ -2,6 +2,7 @@
 // Title hero text rendering, billboarding, MSDF sampling domain
 // Depends on constants.glsl (TITLE_*)
 // ============================================================
+#include "../common/msdf_core.glsl"
 
 float sampleTitleTextureAlpha(vec2 uv) {
     float inBounds = step(0.0, uv.x) * step(uv.x, 1.0) * step(0.0, uv.y) * step(uv.y, 1.0);
@@ -12,9 +13,9 @@ float sampleTitleTextureAlpha(vec2 uv) {
     return smoothstep(0.42, 0.82, rawAlpha);
 }
 
-float median3(vec3 sampleValue) {
-    return max(min(sampleValue.r, sampleValue.g), min(max(sampleValue.r, sampleValue.g), sampleValue.b));
-}
+// float median3(vec3 sampleValue) {
+//     return max(min(sampleValue.r, sampleValue.g), min(max(sampleValue.r, sampleValue.g), sampleValue.b));
+// }
 
 vec2 titlePhraseUvFromLocalMetric(vec2 localMetric) {
     return vec2(
@@ -24,28 +25,42 @@ vec2 titlePhraseUvFromLocalMetric(vec2 localMetric) {
 }
 
 float titlePhraseScreenPxRange(vec2 phraseUv) {
-    vec2 unitRange = vec2(u_titleAtlasPxRange) / max(u_titlePhraseTexSize, vec2(1.0));
-    vec2 screenTexSize = vec2(1.0) / max(fwidth(phraseUv), vec2(1e-5));
-    return max(0.5 * dot(unitRange, screenTexSize), 1.0);
+    return msdfScreenPxRange(u_titleAtlasPxRange,
+                             u_titlePhraseTexSize,
+                             phraseUv);
 }
 
 float sampleTitlePhraseAlpha(vec2 localMetric) {
     vec2 phraseUv = titlePhraseUvFromLocalMetric(localMetric);
-    bool inBounds = all(greaterThanEqual(phraseUv, vec2(0.0))) &&
-                    all(lessThanEqual(phraseUv, vec2(1.0)));
-    if (!inBounds) {
-        return 0.0;
-    }
-    vec3 msdf = texture(u_titlePhraseTex, phraseUv).rgb;
-    float signedDistance = median3(msdf) - 0.5;
-    // NOTE: reflection hit-test must not depend on fwidth(phraseUv):
-    // grazing-angle derivatives are unstable and create comb-like early-out artifacts.
-    const float REFL_MSDF_HIT_SOFT_RADIUS = 2.8;
-    float screenDistance = signedDistance * REFL_MSDF_HIT_SOFT_RADIUS;
-    float fillAlpha = clamp(screenDistance + 0.5, 0.0, 1.0);
-    float glyphProximity = smoothstep(-0.38, 0.0, signedDistance);
-    return fillAlpha * glyphProximity;
+
+    float sd      = msdfSignedDistance(u_titlePhraseTex, phraseUv);
+    float pxRange = titlePhraseScreenPxRange(phraseUv);
+
+    // пока константы; позже можно заменить на uniforms
+    const float strokeOffset = 0.0;
+    const float softness     = 1.0;
+    const float gamma        = 1.0;
+
+    return msdfCoverage(sd, pxRange, strokeOffset, softness, gamma);
 }
+
+// float sampleTitlePhraseAlpha(vec2 localMetric) {
+//     vec2 phraseUv = titlePhraseUvFromLocalMetric(localMetric);
+//     bool inBounds = all(greaterThanEqual(phraseUv, vec2(0.0))) &&
+//                     all(lessThanEqual(phraseUv, vec2(1.0)));
+//     if (!inBounds) {
+//         return 0.0;
+//     }
+//     vec3 msdf = texture(u_titlePhraseTex, phraseUv).rgb;
+//     float signedDistance = median3(msdf) - 0.5;
+//     // NOTE: reflection hit-test must not depend on fwidth(phraseUv):
+//     // grazing-angle derivatives are unstable and create comb-like early-out artifacts.
+//     const float REFL_MSDF_HIT_SOFT_RADIUS = 2.8;
+//     float screenDistance = signedDistance * REFL_MSDF_HIT_SOFT_RADIUS;
+//     float fillAlpha = clamp(screenDistance + 0.5, 0.0, 1.0);
+//     float glyphProximity = smoothstep(-0.38, 0.0, signedDistance);
+//     return fillAlpha * glyphProximity;
+// }
 
 void sampleTitlePhraseReflectionCoverage(vec2 localMetric, out float fillAlpha, out float haloAlpha) {
     vec2 phraseUv = titlePhraseUvFromLocalMetric(localMetric);

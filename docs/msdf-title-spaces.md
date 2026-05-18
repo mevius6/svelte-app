@@ -380,3 +380,10 @@ activeLayoutSize = activeTitleRenderData?.phraseTextureSize
 Правило:
 
 > Любой код, который влияет на форму заголовка (размер в мире, соотношение сторон макета, UV), должен опираться на **макет заголовка** и его **соотношение сторон**, а не на размер текстуры фразы заголовка.
+
+## Полезные ссылки
+
+- [Awesome MSDF](https://github.com/Blatko1/awesome-msdf)
+- [Signed Distance Field Rendering](https://deepwiki.com/ficool2/sdk_screenspace_shaders/7.7-signed-distance-field-rendering)
+- [MSDF Fragment Shader Antialiasing](https://www.fractolog.com/2025/01/msdf-fragment-shader-antialiasing/)
+- [WebGPU Text Rendering - MSDF](https://webgpu.github.io/webgpu-samples/?sample=textRenderingMsdf)

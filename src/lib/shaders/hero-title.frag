@@ -15,14 +15,10 @@ uniform float u_waterLevel;
 
 out vec4 fragColor;
 
-float median3(vec3 sampleValue) {
-    return max(min(sampleValue.r, sampleValue.g), min(max(sampleValue.r, sampleValue.g), sampleValue.b));
-}
+#include "landscape/common/msdf_core.glsl"
 
 float screenPxRange() {
-    vec2 unitRange = vec2(u_titleAtlasPxRange) / max(u_titleAtlasSize, vec2(1.0));
-    vec2 screenTexSize = vec2(1.0) / max(fwidth(v_uvAtlas), vec2(1e-5));
-    return max(0.5 * dot(unitRange, screenTexSize), 1.0);
+    return msdfScreenPxRange(u_titleAtlasPxRange, u_titleAtlasSize, v_uvAtlas);
 }
 
 float titleReveal(float phase01) {
@@ -36,7 +32,7 @@ const vec3 TITLE_DAYGLO_LINEAR = vec3(0.584078418, 0.871367119, 0.254152094);
 
 void main() {
     vec3 msdf = texture(u_titleAtlas, v_uvAtlas).rgb;
-    float signedDistance = median3(msdf) - 0.5;
+    float signedDistance = msdfMedian(msdf.r, msdf.g, msdf.b) - 0.5;
     float opacity = clamp(screenPxRange() * signedDistance + 0.5, 0.0, 1.0);
     if (opacity <= 0.001) {
         discard;
