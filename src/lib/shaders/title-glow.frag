@@ -129,7 +129,7 @@ void main() {
 
     // 5) MSDF-сэмпл и signed distance в той же системе, что и основная фраза в hero-title.frag, но с учётом активного u_titleLayoutSize
     vec3 msdf = texture(u_titlePhraseTex, phraseUv).rgb;
-    float signedDistance = median3(msdf) - 0.5;
+    float signedDistance = msdfMedian(msdf.r, msdf.g, msdf.b) - 0.5;
     float pxRange = titlePhraseScreenPxRange(phraseUv);
     float sdPx = signedDistance * pxRange; // >0 inside, <0 outside
     float fill = clamp(sdPx + 0.5, 0.0, 1.0);

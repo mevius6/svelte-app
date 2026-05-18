@@ -72,7 +72,7 @@ void sampleTitlePhraseReflectionCoverage(vec2 localMetric, out float fillAlpha, 
         return;
     }
     vec3 msdf = texture(u_titlePhraseTex, phraseUv).rgb;
-    float signedDistance = median3(msdf) - 0.5;
+    float signedDistance = msdfMedian(msdf.r, msdf.g, msdf.b) - 0.5;
 
     // NOTE: in reflection contexts fwidth(phraseUv) is unstable:
     // at grazing angles phrase UV changes rapidly -> derivatives inflate
