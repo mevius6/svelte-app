@@ -76,7 +76,7 @@ void sampleTitlePhraseReflectionCoverage(vec2 localMetric, out float fillAlpha, 
     // at grazing angles phrase UV changes rapidly -> derivatives inflate
     // -> pxRange collapses -> MSDF turns into a hard step() -> comb-like aliasing.
     // Fixed soft radius gives stable smoothing without reflection artifacts.
-    const float REFL_MSDF_SOFT_RADIUS = 2.8;
+    const float REFL_MSDF_SOFT_RADIUS = 2.8; // <= 3.2
     float screenDistance = signedDistance * REFL_MSDF_SOFT_RADIUS;
     fillAlpha = clamp(screenDistance + 0.5, 0.0, 1.0);
 

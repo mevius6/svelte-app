@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { PageProps } from './$types';
 
-  import Cover from "$lib/components/Cover.svelte";
+  // import Cover from "$lib/components/Cover.svelte";
   import LandscapeShader from '$lib/components/LandscapeViewport.svelte';
 
   let { data }: PageProps = $props();
@@ -28,19 +28,16 @@ MARK: Scene I. Intro
     style:--after-blend='screen'
     style:--after-filter='brightness(1) sepia(50%)'
   >
-    <!-- <Landscape /> -->
-    <!-- <WaterText /> -->
-
     <!-- WebGL Environment Shader -->
     <LandscapeShader />
 </div>
 
   <!-- CSS Masked Portal -->
-  <div class="spot-container zi-40">
+  <!-- <div class="spot-container zi-40">
     <div class="spot relpos flex h-full w-full items-center">
       <Cover />
     </div>
-  </div>
+  </div> -->
 </div>
 
 <style>
@@ -74,8 +71,7 @@ MARK: Scene I. Intro
   :global(main:where(:has(> .wrapper))) {
     /* height: 10000vh; */
 
-    /* AI: longer scroll runway for smoother/even phase pacing (dawn/day/night),
-       so late-night cues (moon + moon-track) do not pop in abruptly at the very end. */
+    /* NOTE: longer scroll runway for smoother/even phase pacing (dawn/day/sunset) */
     --scroll-drama: 1000;
     block-size: calc(var(--scroll-drama, 300) * 1svb);
   }

@@ -15,6 +15,8 @@ interface IncludeContext {
  * - Tracks circular dependencies via visited set + stack
  * - Works with Vite query strings (?raw, etc)
  * - Only processes .frag, .vert, .glsl files
+ *
+ * https://github.com/terkelg/awesome-creative-coding
  */
 export function glslIncludePlugin(): Plugin {
   return {

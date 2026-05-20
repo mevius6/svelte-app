@@ -135,7 +135,7 @@ void main() {
     float signedDistance = msdfSignedDistance(u_titlePhraseTex, phraseUv);
     float pxRange = titlePhraseScreenPxRange(phraseUv);
     float sdPx = signedDistance * pxRange; // >0 inside, <0 outside
-    
+
     float fill = msdfCoverage(signedDistance, pxRange,
                               u_glowStrokeOffset,
                               u_glowSoftness,

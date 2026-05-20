@@ -159,7 +159,7 @@ export class TitleGlowPass extends RenderPass {
     this.sourceProgram.setFloat("u_waterLevel", this.waterLevel)
     // Glow MSDF parameters
     this.sourceProgram.setFloat("u_glowStrokeOffset", 0.0)
-    this.sourceProgram.setFloat("u_glowSoftness", 1.0)
+    this.sourceProgram.setFloat("u_glowSoftness", 1.5)
     this.sourceProgram.setFloat("u_glowGamma", 1.0)
     this.quad.draw()
 

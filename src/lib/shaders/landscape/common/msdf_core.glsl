@@ -7,11 +7,11 @@ float msdfMedian(float r, float g, float b) {
 float msdfSignedDistance(sampler2D tex, vec2 uv) {
     vec3 sd = texture(tex, uv).rgb;
     float m = msdfMedian(sd.r, sd.g, sd.b);
-    // Если твой генератор использует другой диапазон, эту нормализацию можно подстроить.
+    // Если генератор использует другой диапазон, эту нормализацию нужно подстроить.
     return m * 2.0 - 1.0;
 }
 
-// Экранный pxRange (аналог твоего titlePhraseScreenPxRange)
+// Экранный pxRange (аналог titlePhraseScreenPxRange)
 float msdfScreenPxRange(float atlasPxRange, vec2 atlasTexSize, vec2 uv) {
     vec2 unitRange     = vec2(atlasPxRange) / max(atlasTexSize, vec2(1.0));
     vec2 screenTexSize = vec2(1.0) / max(fwidth(uv), vec2(1e-5));
