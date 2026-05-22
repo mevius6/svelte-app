@@ -74,6 +74,8 @@ export class TitleResources {
   private heroTitleAtlasRef: HeroTitleAtlasResource | null = null
   private heroTitleAtlasRenderDataRef: HeroTitleAtlasRenderData | null = null
   private heroTitleLayoutRef: HeroTitleLayoutMetrics = DEFAULT_HERO_TITLE_LAYOUT
+  // CMS content: cache of render data for different title texts
+  private heroTitleRenderDataCache = new Map<string, HeroTitleAtlasRenderData>()
 
   constructor(private gl: WebGL2RenderingContext) {}
 
@@ -118,6 +120,28 @@ export class TitleResources {
     return this.heroTitleLayoutRef
   }
 
+  /**
+   * Build render data for arbitrary text (from CMS).
+   * Results are cached per text string.
+   * Returns null if atlas is not loaded.
+   */
+  async buildHeroTitleRenderDataForText(text: string): Promise<HeroTitleAtlasRenderData | null> {
+    if (!this.heroTitleAtlasRef) {
+      return null
+    }
+
+    const cached = this.heroTitleRenderDataCache.get(text)
+    if (cached) {
+      return cached
+    }
+
+    const renderData = await this.buildHeroTitleAtlasRenderData(text, this.heroTitleAtlasRef)
+    if (renderData) {
+      this.heroTitleRenderDataCache.set(text, renderData)
+    }
+    return renderData
+  }
+
   dispose() {
     if (this.textTextureRef) {
       this.gl.deleteTexture(this.textTextureRef)
@@ -130,6 +154,14 @@ export class TitleResources {
     if (this.heroTitleAtlasRenderDataRef?.phraseTexture) {
       this.gl.deleteTexture(this.heroTitleAtlasRenderDataRef.phraseTexture)
     }
+    // Clean up cached title render data
+    for (const renderData of this.heroTitleRenderDataCache.values()) {
+      if (renderData.phraseTexture) {
+        this.gl.deleteTexture(renderData.phraseTexture)
+      }
+    }
+    this.heroTitleRenderDataCache.clear()
+
     this.disposeDigitRenderData()
     this.heroTitleAtlasRef = null
     this.heroTitleAtlasRenderDataRef = null
