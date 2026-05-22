@@ -19,10 +19,6 @@ uniform vec2  u_titleLayoutSize;
 uniform sampler2D u_titlePhraseTex;
 uniform vec2      u_titlePhraseTexSize;
 uniform float     u_titleAtlasPxRange;
-// Glow MSDF parameters
-uniform float     u_glowStrokeOffset;
-uniform float     u_glowSoftness;
-uniform float     u_glowGamma;
 
 // Scene state
 uniform float u_phase;
@@ -136,10 +132,8 @@ void main() {
     float pxRange = titlePhraseScreenPxRange(phraseUv);
     float sdPx = signedDistance * pxRange; // >0 inside, <0 outside
 
-    float fill = msdfCoverage(signedDistance, pxRange,
-                              u_glowStrokeOffset,
-                              u_glowSoftness,
-                              u_glowGamma);
+    // glow использует простую логику (не msdfCoverage, чтобы сохранить визуальный результат)
+    float fill = clamp(sdPx + 0.5, 0.0, 1.0);
 
     float emergence = smoothstep(u_waterLevel - 0.012, u_waterLevel + 0.034, hitPos.y);
     float mask = emergence;
