@@ -26,8 +26,7 @@ import {
 } from "./sceneCamera"
 import { computeSceneFrame } from "./sceneFraming"
 import type { Scene } from "./Scene"
-
-import type { HeroTitleDigitRenderData } from "./TitleResources"
+import { HERO_TITLES } from "../content/heroTitles"
 
 const DEFAULT_FOLIAGE_ATLAS_SOURCES: FoliageAtlasSourceSet = {
   albedo: "/grass-atlas-web/TCom_Grass12_512_albedo.png",
@@ -39,14 +38,24 @@ const DEFAULT_FOLIAGE_ATLAS_SOURCES: FoliageAtlasSourceSet = {
 const DROP_THROTTLE_MS = 45
 const VEGETATION_DEBUG_CLEAR: [number, number, number, number] = [0.03, 0.04, 0.06, 1.0]
 
+/**
+ * Map scroll position (0..1) to hero title index
+ * Divides the scroll range into equal segments for each title
+ */
+function titleIndexFromScroll(scrollNorm: number, count: number): number {
+  const t = Math.max(0, Math.min(scrollNorm, 1)) // clamp 0..1
+  if (count <= 0) return 0
+  const seg = 1 / count
+  const idx = Math.floor(t / seg)
+  return Math.min(idx, count - 1)
+}
+
 export type PassDebugView = "final" | "ripple" | "landscape" | "vegetation" | "fog" | "glow"
-export type TitleRenderMode = "digit" | "phrase"
 
 export type SceneDebugState = {
   passView: PassDebugView
   landscapeMode: Exclude<LandscapeDebugMode, "ripple">
   glowEnabled: boolean
-  titleRenderMode: TitleRenderMode
 }
 
 // NOTE: Phase 1 — extracted frame state to separate structure for cleaner dispatch logic.
@@ -60,16 +69,9 @@ interface FrameState {
 
   titleHero: ReturnType<typeof computeTitleHeroState>
 
-  heroTitleAtlasRenderData: HeroTitleAtlasRenderData | null
-  heroTitleAtlas: HeroTitleAtlasResource | null
-  digit: number // 1..7 — новый слайдовый шаг
-  digitTitleRenderData: HeroTitleDigitRenderData | null
-
   activeTitleRenderData: HeroTitleAtlasRenderData | null
   activeLayoutSize: { width: number; height: number } | null // логический layout (phraseLayout)
   activePhraseTexSize: { width: number; height: number } | null // физический размер текстуры
-
-  useGlyphTitle: boolean
 }
 
 export class LandscapeScene implements Scene {
@@ -101,7 +103,7 @@ export class LandscapeScene implements Scene {
   private passView: PassDebugView = "final"
   private landscapeMode: Exclude<LandscapeDebugMode, "ripple"> = "beauty"
   private glowEnabled = true
-  private titleRenderMode: TitleRenderMode = "digit"
+  private activeTitleIndex = 0 // CMS content: active title from HERO_TITLES
 
   private readonly scrollHandler = () => {
     const max = document.body.scrollHeight - window.innerHeight
@@ -208,10 +210,6 @@ export class LandscapeScene implements Scene {
     if (state.glowEnabled !== undefined) {
       this.glowEnabled = state.glowEnabled
     }
-    if (state.titleRenderMode) {
-      this.titleRenderMode = state.titleRenderMode
-    }
-
   }
 
   update(_dt: number) {}
@@ -229,26 +227,23 @@ export class LandscapeScene implements Scene {
     const textTexSize = this.resources.textTextureSize
     const titleLayout = this.resources.heroTitleLayout
 
-    const heroTitleAtlasRenderData = this.resources.heroTitleAtlasRenderData
-    const heroTitleAtlas = heroTitleAtlasRenderData?.atlas ?? this.resources.heroTitleAtlas ?? null
+    // CMS content: map scroll position to active hero title
+    const titles = HERO_TITLES
+    const activeIndex = titleIndexFromScroll(this.scrollNorm, titles.length)
+    this.activeTitleIndex = activeIndex
 
-    // Вычисляем digit на основе scrollNorm (phase01)
-    const rawPhase = this.scrollNorm // 0..1
-    const digit = Math.min(7, Math.max(1, Math.floor(rawPhase * 7) + 1))
-    const digitTitleRenderData = this.resources.getDigitRenderData(digit)
-    const phraseGlyphRenderData = heroTitleAtlasRenderData?.atlas.texture
-      ? heroTitleAtlasRenderData
-      : null
+    const activeItem = titles[activeIndex]
+    const heroTitleAtlas = this.resources.heroTitleAtlas
 
-    const activeTitleRenderData = this.titleRenderMode === "digit"
-      ? digitTitleRenderData
-      : phraseGlyphRenderData
+    // Get or build render data for active title text
+    // Note: buildHeroTitleRenderDataForText is async, but for now we rely on
+    // pre-population in resources.load() or we cache results synchronously
+    const activeTitleRenderData =
+      heroTitleAtlas && activeItem
+        ? this.resources.buildHeroTitleRenderDataSync(activeItem.text)
+        : null
 
-    const useGlyphTitle = Boolean(
-      activeTitleRenderData?.atlas.texture && activeTitleRenderData.gpuLayout
-    )
-
-    // ЛОГИЧЕСКИЙ layout берём из gpuLayout.phraseLayout
+    // ЛОГИЧЕСКИЙ layout (пространство макета)
     const activeLayoutSize = activeTitleRenderData?.gpuLayout
       ? {
           width: activeTitleRenderData.gpuLayout.phraseLayout.width,
@@ -259,7 +254,7 @@ export class LandscapeScene implements Scene {
           height: this.resources.heroTitleLayout.height,
         }
 
-    // ФИЗИЧЕСКИЙ размер текстуры для MSDF
+    // ФИЗИЧЕСКИЙ размер phrase-текстуры (пространство текстуры)
     const activePhraseTexSize = activeTitleRenderData?.phraseTextureSize ?? null
 
     const titleHero = computeTitleHeroState(
@@ -275,16 +270,9 @@ export class LandscapeScene implements Scene {
       camera,
       vegetationHorizon,
       titleHero,
-
-      heroTitleAtlasRenderData,
-      heroTitleAtlas,
       activeTitleRenderData,
       activeLayoutSize,
       activePhraseTexSize,
-      useGlyphTitle,
-
-      digit,
-      digitTitleRenderData
     }
   }
 
@@ -385,9 +373,11 @@ export class LandscapeScene implements Scene {
     this.bushes.render(frame.time, null)
     this.morningFog.render(frame.time, null)
 
-    if (frame.useGlyphTitle) {
+    if (frame.activeTitleRenderData) {
+      this.setupHeroTitleState(frame)
       this.heroTitle.render(frame.time, null)
       if (this.glowEnabled) {
+        this.setupTitleGlowState(frame)
         this.titleGlow.render(frame.time, null)
       }
     }
@@ -407,7 +397,7 @@ export class LandscapeScene implements Scene {
       scroll: this.scrollToPhase(this.scrollNorm),
       textTexture: this.resources.textTexture!,
       titleHero: frame.titleHero,
-      useTitleBillboard: !frame.useGlyphTitle,
+      useTitleBillboard: !frame.activeTitleRenderData,
       titleAtlasRenderData: frame.activeTitleRenderData,
       rippleTexelSize: this.ripple.texelSize,
       rippleWorldRect: RIPPLE_WORLD_RECT,
@@ -443,32 +433,35 @@ export class LandscapeScene implements Scene {
   }
 
   private setupHeroTitleState(frame: FrameState) {
+    const active = frame.activeTitleRenderData
+    if (!active) return
+
     this.heroTitle.setFrameState({
       camera: frame.camera,
       phase: this.scrollToPhase(this.scrollNorm),
       waterLevel: WATER_LEVEL,
       titleHero: frame.titleHero,
-      atlas: frame.activeTitleRenderData?.atlas ?? frame.heroTitleAtlas,
-      digit: frame.activeTitleRenderData?.digit ?? 1,
-      gpuLayout: frame.activeTitleRenderData?.gpuLayout ?? null,
+      atlas: active.atlas,
+      gpuLayout: active.gpuLayout,
       layoutSize: frame.activeLayoutSize
     })
   }
 
   private setupTitleGlowState(frame: FrameState) {
     const active = frame.activeTitleRenderData
+    if (!active) return
 
     this.titleGlow.setFrameState({
-      enabled: this.glowEnabled && frame.useGlyphTitle,
+      enabled: this.glowEnabled,
       debugIsolate: this.passView === "glow",
       camera: frame.camera,
       phase: this.scrollToPhase(this.scrollNorm),
       waterLevel: WATER_LEVEL,
       titleHero: frame.titleHero,
-      phraseTexture: active?.phraseTexture ?? null,
-      phraseTextureSize: frame.activePhraseTexSize ?? { width: 1, height: 1 }, // размер текстуры
-      titleAtlasPxRange: active?.atlas.font.atlas.distanceRange ?? 4,
-      layoutSize: frame.activeLayoutSize // логический layout
+      phraseTexture: active.phraseTexture ?? null,
+      phraseTextureSize: frame.activePhraseTexSize ?? { width: 1, height: 1 },
+      titleAtlasPxRange: active.atlas.font.atlas.distanceRange ?? 4,
+      layoutSize: frame.activeLayoutSize
     })
   }
 

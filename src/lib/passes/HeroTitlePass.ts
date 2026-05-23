@@ -13,7 +13,6 @@ type HeroTitleFrameState = {
   titleHero: TitleHeroState
   atlas: HeroTitleAtlasResource | null
   gpuLayout: HeroTitlePhraseGpuLayout | null
-  digit: number // опционально, для смены виз. эффектов в зависимости от номера эл-та последовательности (1..7)
   layoutSize?: { width: number; height: number } | null
 }
 
@@ -45,7 +44,6 @@ export class HeroTitlePass extends RenderPass {
     uvRect: { x: 0, y: 0, w: 1, h: 1 },
   }
 
-  private digit = 1
   private layoutSize: { width: number; height: number } | null = null
 
   constructor(
@@ -107,7 +105,6 @@ export class HeroTitlePass extends RenderPass {
     this.phase = state.phase
     this.waterLevel = state.waterLevel
     this.titleHero = state.titleHero
-    this.digit = state.digit // для uniform
 
     this.layoutSize = state.layoutSize ?? null
 
@@ -184,7 +181,6 @@ export class HeroTitlePass extends RenderPass {
     this.program.setFloat("u_phase", this.phase)
     this.program.setFloat("u_waterLevel", this.waterLevel)
     this.program.setTexture("u_titleAtlas", this.currentAtlas.texture, 0)
-    this.program.setFloat("u_digit", this.digit) // для визуальных эффектов, зависящих от конкретных мест прокрутки, обозначенных числом (0..7)
 
     gl.bindVertexArray(this.vao)
     gl.drawArraysInstanced(gl.TRIANGLES, 0, 6, this.instanceCount)

@@ -32,7 +32,6 @@ export type HeroTitleAtlasResource = {
 export type HeroTitleAtlasRenderData = {
   atlas: HeroTitleAtlasResource
   gpuLayout: HeroTitlePhraseGpuLayout
-  digit: number | null
   // NOTE: Phase E — precomposed phrase MSDF texture used by landscape reflection path and as a fallback for hero title rendering when atlas-driven path is unavailable.
   phraseTexture: WebGLTexture | null
   phraseTextureSize: {
@@ -124,6 +123,7 @@ export class TitleResources {
    * Build render data for arbitrary text (from CMS).
    * Results are cached per text string.
    * Returns null if atlas is not loaded.
+   * This is async for lazy loading.
    */
   async buildHeroTitleRenderDataForText(text: string): Promise<HeroTitleAtlasRenderData | null> {
     if (!this.heroTitleAtlasRef) {
@@ -140,6 +140,15 @@ export class TitleResources {
       this.heroTitleRenderDataCache.set(text, renderData)
     }
     return renderData
+  }
+
+  /**
+   * Get cached render data for text (synchronous).
+   * Only works if the data was already built (either via buildHeroTitleRenderDataForText
+   * or pre-loaded during init). Returns null if not cached.
+   */
+  buildHeroTitleRenderDataSync(text: string): HeroTitleAtlasRenderData | null {
+    return this.heroTitleRenderDataCache.get(text) ?? null
   }
 
   dispose() {
@@ -337,7 +346,6 @@ export class TitleResources {
     return {
       atlas,
       gpuLayout,
-      digit: null,
       phraseTexture: phraseTextureData.texture,
       phraseTextureSize: {
         width: phraseTextureData.width,

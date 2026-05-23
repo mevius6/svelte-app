@@ -2,6 +2,7 @@ import { createShoreProfileTexture } from "$lib/scene/ShoreProfileBaker"
 import { TitleResources, type HeroTitleAtlasRenderData, type HeroTitleAtlasResource } from "./TitleResources"
 import { loadFoliageAtlas, type FoliageAtlasSourceSet, type FoliageAtlasTextureSet } from "./loaders/foliageAtlasLoader"
 import type { HeroTitleLayoutMetrics } from "../text/heroTitleAtlas"
+import { HERO_TITLES } from "../content/heroTitles"
 
 export type { HeroTitleAtlasRenderData, HeroTitleAtlasResource }
 export type { FoliageAtlasSourceSet, FoliageAtlasTextureSet } from "./loaders/foliageAtlasLoader"
@@ -84,10 +85,28 @@ export class LandscapeResources {
     // AI: Phase A — bake static shore profile texture (512×1 RGBA32F).
     // Replaces ~90 vnoise calls per water pixel with a single texture fetch.
     this.shoreProfileTexRef = createShoreProfileTexture(this.gl)
+
+    // CMS content: pre-load all hero titles from dummy data
+    await this.preloadHeroTitles()
+  }
+
+  /**
+   * Pre-load render data for all CMS hero titles (from HERO_TITLES).
+   * This ensures smooth scrolling without lag when switching between titles.
+   */
+  private async preloadHeroTitles() {
+    const titleTexts = HERO_TITLES.map(t => t.text)
+    await Promise.all(
+      titleTexts.map(text => this.title.buildHeroTitleRenderDataForText(text))
+    )
   }
 
   getDigitRenderData(digit: number) {
     return this.title.getDigitRenderData(digit);
+  }
+
+  buildHeroTitleRenderDataSync(text: string) {
+    return this.title.buildHeroTitleRenderDataSync(text)
   }
 
   get titleResources() {
