@@ -71,19 +71,23 @@ FinalColorPass (single linear → sRGB transfer)
 - Title billboard (`HeroTitlePass`) sits at `TITLE_WORLD_Z_NEAR=0.35` — middle of the pond between camera and shore, **not** near the shore.
 - Title height: `WATER_LEVEL + height * 0.5 + 0.06` — fixed, no `baseLift` scroll animation.
 
+### CMS title selection (Phase I: scroll-driven)
+- Hero titles come from `HERO_TITLES` array (dummy CMS data; will be Strapi API).
+- Title index is computed from `scrollNorm` via: `idx = floor(scroll / (1/count))` — equal-width segments.
+- Each title's render data (MSDF atlas layout + phrase texture) is built once and cached per text string.
+- `buildFrameState()` selects active title, builds `activeTitleRenderData` from cache (or generates async if missing).
+- No fallback canvas-driven title selection; MSDF atlas is primary for all CMS titles.
+- Canvas texture (`textTexture`) still exists for background landscape reflection only (not for title selection).
+
 ### Completed phases
 - **Phase 1–1.7:** orbital camera, world-ray, water-plane/shoreline intersections, pond-scale, vegetation world-space, shoreline contact (gap metric, shelf, waterfilm, overlap).
 - **Phase 2.2:** MSDF atlas → `HeroTitlePass`. Fallback: canvas billboard in `LandscapePass`.
 - **Phase A:** `shoreFbm` (~90 vnoise/water-pixel) → `u_shoreProfileTex` (512×1 RGBA32F, 3 texture fetches). New file: `src/lib/scene/shoreProfileBaker.ts`.
 - **Phase B:** `cloudDensity(detailLOD)` — reflection path uses `detailLOD=0.0`, saving 3 vnoise/pixel. Direct sky: `detailLOD=1.0`.
 - **Phase C:** `tanHalfFovY` in `SceneCameraState` (computed once). Camera cached in `LandscapeScene`. Glyph uniforms (256 floats) upload only on atlas change.
-- **Phase H (in progress):** `TitleGlowPass` added as separate fullscreen glow layer after `HeroTitlePass`, sampling precomposed phrase MSDF texture (`u_titlePhraseTex`), with debug toggle support.
+- **Phase H:** `TitleGlowPass` added as separate fullscreen glow layer after `HeroTitlePass`, sampling precomposed phrase MSDF texture (`u_titlePhraseTex`), with debug toggle support.
   Quality baseline: inside `TitleGlowPass`, use `source -> separable blur (multi-pass) -> layered additive composite` to avoid jagged/comb-like glow artifacts.
-- Late-sunset glow baseline: title glow is sunset-driven only; reflected title glow in water stays disabled to avoid contour/rect framing artifacts.
-- **Title reflection fixes:** no haloAlpha compositing (white border eliminated), title base hue locked to DayGlo `#c9f08a` (stored in shaders as linear equivalent), normal smoothed before reflection ray: `nTitle = mix(n, vec3(0,1,0), 0.30 + smoothstep(0.0, 0.48, rippleStrength) * 0.42)`.
-- **Vegetation strip PoC:** `BushesPass` now builds shoreline-wide grass coverage (`90` columns × `4` rows × `3` cards = `1080` instances) with seeded RNG for deterministic hot-reloads.
-- **Vegetation + fog integration:** grass now applies phase/distance/height fog in `bushes.frag`; fullscreen fog horizon core in `morning-fog.frag` is smoothed to avoid bright shoreline seam.
-- **Phase F (in progress):** `MorningFogPass` added as separate fullscreen atmosphere layer with explicit tuning constants in `morning-fog.frag`.
+- **Phase I (completed):** Dynamic MSDF glyph generation for CMS titles. Separated `loadHeroTitleAtlas()` and `loadCanvasFallback()` in TitleResources; canvas fallback now used only for landscape reflection. Title selection is scroll-based from HERO_TITLES array with per-text render data caching.
 
 ### Pending optimizations (do not regress)
 - **Phase D (in progress):** wave normal LOD — tuning anchors are centralized in shader constants (`WAVE_LOD_*`, `RIPPLE_FADE_*`, `WAVENORMAL_EPS_*`); ripple fades via wider `smoothstep(0.58, 0.82, farField)`; `waveNormal` increases finite-difference `eps` toward far field for stability; interactive ripple-normal uses dedicated `interactiveRippleMask`.

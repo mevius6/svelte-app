@@ -257,9 +257,17 @@ export class LandscapeScene implements Scene {
     // ФИЗИЧЕСКИЙ размер phrase-текстуры (пространство текстуры)
     const activePhraseTexSize = activeTitleRenderData?.phraseTextureSize ?? null
 
+    // Use active title's aspect ratio, not the canvas fallback's
+    // Each CMS title has different text length → different aspect
+    // NOTE: aspect = height / width (matching canvas fallback convention)
+    const activeLayoutAspect = activeTitleRenderData?.gpuLayout
+      ? activeTitleRenderData.gpuLayout.phraseLayout.height /
+        Math.max(activeTitleRenderData.gpuLayout.phraseLayout.width, 1e-6)
+      : titleLayout.aspect
+
     const titleHero = computeTitleHeroState(
       this.scrollNorm,
-      titleLayout.aspect,
+      activeLayoutAspect,
       textTexSize.contentRect
     )
 

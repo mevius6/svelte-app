@@ -62,8 +62,9 @@ export class LandscapeResources {
   async load(options: LoadLandscapeResourcesOptions) {
     const { projectName, atlasSources, needsRippleFallback } = options
 
-    // AI: Phase 2 — delegate title resource loading to TitleResources module.
-    await this.title.load(projectName)
+    // AI: Phase 3 — load MSDF atlas + canvas fallback separately
+    await this.title.loadHeroTitleAtlas()
+    await this.title.loadCanvasFallback(projectName)
 
     // AI: title.textTextureSize is canonical; mirror for compatibility with existing getters.
     // TODO: Faze 2.1 can simplify by migrating all title access through this.title.
@@ -86,7 +87,7 @@ export class LandscapeResources {
     // Replaces ~90 vnoise calls per water pixel with a single texture fetch.
     this.shoreProfileTexRef = createShoreProfileTexture(this.gl)
 
-    // CMS content: pre-load all hero titles from dummy data
+    // CMS content: pre-load all hero titles from HERO_TITLES array
     await this.preloadHeroTitles()
   }
 
@@ -123,10 +124,6 @@ export class LandscapeResources {
 
   get heroTitleAtlas() {
     return this.title.heroTitleAtlas
-  }
-
-  get heroTitleAtlasRenderData() {
-    return this.title.heroTitleAtlasRenderData
   }
 
   get heroTitleLayout() {

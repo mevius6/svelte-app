@@ -1,5 +1,4 @@
 import {
-  buildDigitPhraseGpuLayout,
   buildHeroTitlePhraseGpuLayout,
   measureHeroTitleLayoutFromAtlas,
   measureHeroTitleLayoutFromCanvas,
@@ -71,32 +70,49 @@ export class TitleResources {
     layout: DEFAULT_HERO_TITLE_LAYOUT,
   }
   private heroTitleAtlasRef: HeroTitleAtlasResource | null = null
-  private heroTitleAtlasRenderDataRef: HeroTitleAtlasRenderData | null = null
   private heroTitleLayoutRef: HeroTitleLayoutMetrics = DEFAULT_HERO_TITLE_LAYOUT
-  // CMS content: cache of render data for different title texts
+  // CMS content: cache of render data for different title texts (keyed by text string)
   private heroTitleRenderDataCache = new Map<string, HeroTitleAtlasRenderData>()
 
   constructor(private gl: WebGL2RenderingContext) {}
 
-  async load(projectName: string) {
-    this.disposeDigitRenderData()
-    // NOTE: Phase 2.1 starts the atlas-driven hero-title path by attempting to load MSDF atlas metadata first; canvas text stays only as a fallback/render bridge.
-    this.heroTitleAtlasRef = await this.loadHeroTitleAtlas()
+  /**
+   * Load MSDF atlas (for glyph-driven title rendering).
+   * This is separate from canvas fallback and can be called independently.
+   */
+  async loadHeroTitleAtlas(): Promise<HeroTitleAtlasResource | null> {
+    this.heroTitleAtlasRef = await this.loadHeroTitleAtlasInternal()
+    if (this.heroTitleAtlasRef) {
+      // Measure layout from atlas (use a placeholder text since layout is atlas-wide)
+      this.heroTitleLayoutRef = measureHeroTitleLayoutFromAtlas(
+        "DEMO",
+        this.heroTitleAtlasRef.font
+      )
+    }
+    return this.heroTitleAtlasRef
+  }
 
-    // NOTE: keep scene orchestration lean by centralizing title resource creation and ownership here.
-    const textResult = this.createTextTexture(projectName)
+  /**
+   * Load canvas fallback texture (for background title reflection).
+   * Optional; only needed if you want background rendering without atlas.
+   */
+  async loadCanvasFallback(fallbackText: string): Promise<void> {
+    const textResult = this.createTextTexture(fallbackText)
     if (!textResult) {
       throw new Error("Failed to create landscape title texture")
     }
-
     this.textTextureRef = textResult.texture
     this.textTextureSizeRef = textResult
-    this.heroTitleAtlasRenderDataRef = this.heroTitleAtlasRef
-      ? await this.buildHeroTitleAtlasRenderData(projectName, this.heroTitleAtlasRef)
-      : null
-    this.heroTitleLayoutRef = this.heroTitleAtlasRef
-      ? measureHeroTitleLayoutFromAtlas(projectName, this.heroTitleAtlasRef.font)
-      : textResult.layout
+  }
+
+  /**
+   * Legacy load() method for backward compatibility.
+   * Loads both atlas and canvas fallback.
+   */
+  async load(fallbackTitle: string) {
+    this.disposeDigitRenderData()
+    await this.loadHeroTitleAtlas()
+    await this.loadCanvasFallback(fallbackTitle)
   }
 
   get textTexture() {
@@ -109,10 +125,6 @@ export class TitleResources {
 
   get heroTitleAtlas() {
     return this.heroTitleAtlasRef
-  }
-
-  get heroTitleAtlasRenderData() {
-    return this.heroTitleAtlasRenderDataRef
   }
 
   get heroTitleLayout() {
@@ -160,9 +172,6 @@ export class TitleResources {
     if (this.heroTitleAtlasRef?.texture) {
       this.gl.deleteTexture(this.heroTitleAtlasRef.texture)
     }
-    if (this.heroTitleAtlasRenderDataRef?.phraseTexture) {
-      this.gl.deleteTexture(this.heroTitleAtlasRenderDataRef.phraseTexture)
-    }
     // Clean up cached title render data
     for (const renderData of this.heroTitleRenderDataCache.values()) {
       if (renderData.phraseTexture) {
@@ -173,7 +182,6 @@ export class TitleResources {
 
     this.disposeDigitRenderData()
     this.heroTitleAtlasRef = null
-    this.heroTitleAtlasRenderDataRef = null
 
     this.textTextureSizeRef = {
       w: 1,
@@ -303,7 +311,7 @@ export class TitleResources {
     return { texture, w: off.width, h: off.height, contentRect, layout }
   }
 
-  private async loadHeroTitleAtlas(): Promise<HeroTitleAtlasResource | null> {
+  private async loadHeroTitleAtlasInternal(): Promise<HeroTitleAtlasResource | null> {
     try {
       const response = await fetch(HERO_TITLE_ATLAS_JSON_URL)
       if (!response.ok) {
@@ -478,8 +486,9 @@ export class TitleResources {
   private digitRenderData = new Map<number, HeroTitleDigitRenderData>()
 
   /**
-   * Возвращает GPU-layout для цифры 1..7, используя MSDF-атлас.
-   * Если атласа нет (фоллбэк), возвращает null.
+   * Legacy: Returns GPU-layout for digit 1..7, using MSDF atlas.
+   * Kept for backward compatibility but not used in CMS title path.
+   * @deprecated Use buildHeroTitleRenderDataForText() instead
    */
   getDigitRenderData(digit: number): HeroTitleDigitRenderData | null {
     const atlas = this.heroTitleAtlasRef
@@ -490,20 +499,22 @@ export class TitleResources {
     const cached = this.digitRenderData.get(clamped)
     if (cached) return cached
 
-    const gpuLayout = buildDigitPhraseGpuLayout(clamped, atlas.font)
+    // Convert digit to text string
+    const digitText = String(clamped)
+    const gpuLayout = buildHeroTitlePhraseGpuLayout(digitText, atlas.font)
     if (!gpuLayout) return null
 
     const phraseTex = this.createTitlePhraseTexture(atlas, gpuLayout)
 
     const data: HeroTitleDigitRenderData = {
       atlas,
-      digit: clamped,
       gpuLayout,
       phraseTexture: phraseTex.texture,
       phraseTextureSize: {
         width: phraseTex.width,
         height: phraseTex.height,
       },
+      digit: clamped,
     }
 
     this.digitRenderData.set(clamped, data)

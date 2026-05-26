@@ -1,6 +1,6 @@
 # Render Status Log
 
-Last updated: 2026-05-18 (MSDF title reflection cleanup)
+Last updated: 2026-05-23 (Dynamic MSDF title selection from CMS content)
 
 ## Current Vector
 
@@ -21,7 +21,7 @@ Last updated: 2026-05-18 (MSDF title reflection cleanup)
 | Phase F | Morning fog pass (dawn atmosphere) | In Progress | F1 landed: analytic height fog in `landscape.frag` + secondary fullscreen wisps pass. |
 | Phase G | Linear color pipeline + final display transfer | Done | `sceneColor` offscreen composition + `FinalColorPass` (`linear -> sRGB` once per frame). |
 | Phase H | Title glow pass (sunset bloom layer) | In Progress | `TitleGlowPass` added after `HeroTitlePass`; glow can be toggled from debug panel. |
-| Phase I | Scroll-driven MSDF title text | Done | Active title render data is unified for phrase/digit; scroll maps to digit `1..7`; direct title, glow, and water reflection use the same active MSDF texture + layout. Reflection width now derives from `worldHeight * layoutAspect`, preventing stretched digit reflections. |
+| Phase I | Scroll-driven MSDF title text | Done | **Phase I.2 (completed):** CMS content model — replaced hardcoded projectName with scroll-based title selection from HERO_TITLES array. Separated `loadHeroTitleAtlas()` and `loadCanvasFallback()` methods. Canvas fallback now used only for landscape reflection. All MSDF titles are preloaded and cached per text string. No breaking changes to render passes. |
 | Phase 6 | Scroll phase semantics | Done | Active ordering: `0=start`, `0.2=dawn`, `0.5=day`, `1.0=late-sunset`; fog `0.18→0.36`, direct title reveal `0.78→0.94`, reflection end-gate `phase >= 0.96`; night/moon shader path removed from active graph. |
 | Phase 6.2 | Shader optimizations (dithering, early-exit fog, moon removal, dedup) | Done | 4.1: dithering; 4.3: early-exit; 4.2+4.4: moon removal + shoreRunupWave dedup; FPS counter added. |
 | Refactor Phases 1–5 | `LandscapeScene` dispatcher, title/foliage resources, GLSL include plugin, shader chunk split | In Progress | Active shader entry is `src/lib/shaders/landscape/_entry.frag`; include plugin runs in dev/build; old scratch `landscape-chunks` moved to `_wip/`. |
