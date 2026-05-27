@@ -42,7 +42,7 @@ void main() {
     // float revealDirect = titleReveal(u_phase);
 
     // Direct rendering path — world-space billboard above water.
-    // float emergence = smoothstep(u_waterLevel - 0.010, u_waterLevel + 0.030, v_worldY);
+    float emergence = smoothstep(u_waterLevel - 0.010, u_waterLevel + 0.030, v_worldY);
 
     // NOTE: Phase 2 atmospheric perspective.
     // Gentle depth fog: title at viewDist≈3.36 fades to ~86% opacity.
@@ -52,5 +52,6 @@ void main() {
     // float atmFade = exp(-max(v_viewDist - 1.2, 0.0) * 0.09);
 
     // fragColor = vec4(directCol, opacity * emergence * atmFade * revealDirect);
-    fragColor = vec4(directCol, opacity);
+    fragColor = vec4(directCol, opacity * emergence);
+    // fragColor = vec4(directCol, opacity);
 }

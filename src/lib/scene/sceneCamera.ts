@@ -217,24 +217,30 @@ export function shorelineVegetationRootAtWorldX(worldX: number): Vec3 {
 
 export function computeTitleHeroState(
   scroll: number,
-  textAspect: number,
+  textAspect: number, // height / width
   uvRect = { x: 0, y: 0, w: 1, h: 1 }
 ): TitleHeroState {
-  // AI: keep world anchor fixed while adding a subtle sunset reveal scale.
-  // No scroll-driven z-movement or y-lift.
+  const clampedAspect = Math.max(textAspect, 1e-4);
+
+  // 1) Окно появления по скроллу — оставляем как есть.
   const revealT = smoothstep01(
     (scroll - TITLE_REVEAL_START) / Math.max(TITLE_REVEAL_END - TITLE_REVEAL_START, 1e-6)
-  )
-  const revealScale = mix(TITLE_REVEAL_SCALE_MIN, 1, revealT)
-  const baseWidth = TITLE_WORLD_WIDTH_NEAR
-  const baseHeight = baseWidth * textAspect
-  const width = baseWidth * revealScale
-  const height = width * textAspect
+  );
+  const revealScale = mix(TITLE_REVEAL_SCALE_MIN, 1, revealT);
 
+  // 2) Базовый world-height — единый для всех заголовков.
+  // Подбирается «на глаз» под сцену.
+  const baseHeight = 0.45; // раньше это было baseWidth * textAspect
+  const height = baseHeight * revealScale;
+
+  // 3) Ширина выводится из aspect: width = height / (height/width)
+  const width = height / clampedAspect;
+
+  // 4) Центр: используем ВЫСОТУ, а не width, чтобы текст висел над водой
   return {
     center: {
       x: 0,
-      y: WATER_LEVEL + baseHeight * 0.5 + 0.06,
+      y: WATER_LEVEL + height * 0.5 + 0.06,
       z: TITLE_WORLD_Z_NEAR,
     },
     size: {
@@ -242,7 +248,7 @@ export function computeTitleHeroState(
       h: height,
     },
     uvRect,
-  }
+  };
 }
 
 // AI: Phase 1.5 retunes the orbital framing from open-water scale toward a compact city-pond read: nearer opposite bank, lower eye height, less "sea horizon".
