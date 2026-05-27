@@ -8,9 +8,12 @@
 
 По слоям это устроено так:
 
-- host/UI layer: `src/lib/components/LandscapeViewport.svelte` — тонкий Svelte-shell конкретной сцены; создаёт `canvas`, монтирует `Renderer`, показывает dev-only debug panel.
+- host/UI layer: `src/lib/components/LandscapeViewport.svelte` — тонкий Svelte-shell конкретной сцены; создаёт `canvas`, монтирует `Renderer`, включает dev-only debug panel через `LandscapeSceneDebugController`.
 - runtime layer: `src/lib/render/Renderer.ts` — владеет WebGL2 context lifecycle, `requestAnimationFrame`, resize по DPR и вызовом активной сцены.
-- scene/orchestration layer: `src/lib/scene/LandscapeScene.ts` — связывает input, scroll/debug state и порядок проходов; координирует кадр.
+- scene/orchestration layer: `src/lib/scene/LandscapeScene.ts` — связывает input, scroll state и порядок проходов; координирует кадр. Без dev-контроллера рендерит только final path.
+- debug control layer: `src/lib/scene/LandscapeSceneDebug.ts` — dev-facing state/controller для выбора debug pass/view без экспорта debug UI-типов из `LandscapeScene`.
+- story content layer: `src/lib/content/storySections.ts` — CMS-ready список story sections и их `titleText`.
+- story timeline layer: `src/lib/scene/storyTimeline.ts` — переводит scroll progress в `StoryFrame`: активная секция, локальный прогресс секции, shot progress и time-of-day phase.
 - camera layer: `src/lib/scene/sceneCamera.ts` — хранит orbital camera model, screen-to-world ray helpers, world-space water mapping. **Камера статична; scroll больше не двигает орбиту.**
 - resource layer: `src/lib/scene/LandscapeResources.ts` — владеет загрузкой и жизненным циклом GPU-ресурсов: title-texture, foliage PBR atlas, fallback ripple texture, **shore profile 1D texture**.
 - baker layer: `src/lib/scene/shoreProfileBaker.ts` — **новый файл.** Запекает `shoreFbm` (5 октав, 3 seed-набора) в 512×1 RGBA32F текстуру при старте. R=baselineSilhouette, G=bankNoise, B=shelfNoiseSrc.
@@ -38,7 +41,9 @@ FinalColorPass (single linear → sRGB transfer)
 
 - `LandscapeViewport` — тонкий host: canvas mounting, scene bootstrapping, dev-only debug UI.
 - `Renderer` — runtime lifecycle, не содержит scene-специфичной логики.
-- `LandscapeScene` — координатор input, frame state, порядка проходов. Не контейнер GPU-ресурсов.
+- `LandscapeScene` — координатор input, frame state, порядка проходов. Не контейнер GPU-ресурсов и не владелец debug UI-state.
+- `LandscapeSceneDebugController` — единственная точка dev debug state; production/default path остаётся final-only, а `LandscapePass` компилирует debug shader variants только когда сцена создана с `enableDebugViews`.
+- `StoryFrame` — единый per-frame результат story timeline: `storyProgress`, `sectionIndex`, `sectionProgress`, `shotProgress`, `timeOfDayPhase`.
 - `LandscapeResources` — владение созданием, загрузкой и освобождением GPU-ресурсов.
 - Один pass — одна роль: simulation, landscape shading, vegetation, atmosphere, title, glow.
 - Ripple влияет на нормали воды, не на цвет напрямую.
@@ -97,6 +102,8 @@ FinalColorPass (single linear → sRGB transfer)
 - **Late-sunset title glow baseline:** glow в `TitleGlowPass` остаётся sunset-driven без night-boost ветки; отражённый glow тайтла в воде отключён из-за артефактов контура/рамки.
 - **Vegetation PoC refinement:** береговая трава переведена с равномерной полосы на кластерную раскладку с просветами и центральным readability-коридором за тайтлом; в `bushes.frag` добавлен horizon/distance fade (меньше “пилы” на горизонте).
 - **Vegetation + fog integration:** трава теперь дополнительно туманится в `bushes.frag` (phase + distance + height), а `MorningFogPass` получил сглаживание horizon-core, чтобы убрать белую линию на переходе горизонт/берег.
+- **Debug isolation:** debug UI-типы и состояние вынесены из `LandscapeScene` в `LandscapeSceneDebugController`; dev host включает debug явно, а `LandscapePass` создаёт debug shader variants только для dev-сцены.
+- **Story timeline naming prep:** CMS-заголовки переименованы на уровне контента в `STORY_SECTIONS` (`src/lib/content/storySections.ts`); `LandscapeScene` теперь получает `StoryFrame` из `computeStoryFrame()` без legacy title aliases. `shotProgress` добавлен как будущий канал для cinematic camera.
 
 ## Следующие итерации
 

@@ -8,6 +8,10 @@ import landscapeFrag from "../shaders/landscape/_entry.frag?raw"
 
 export type LandscapeDebugMode = "beauty" | "ripple" | "normals" | "reflection" | "waveLod"
 
+type LandscapePassOptions = {
+  enableDebugVariants?: boolean
+}
+
 type LandscapeFrameState = {
   camera: SceneCameraState
   scroll: number
@@ -45,7 +49,7 @@ function injectShaderDefines(source: string, defines: string[]) {
 
 export class LandscapePass extends RenderPass {
 
-  private programs: Record<LandscapeDebugMode, Program>
+  private programs: Partial<Record<LandscapeDebugMode, Program>>
   private quad: FullscreenQuad
   private debugMode: LandscapeDebugMode = "beauty"
   private scroll = 0
@@ -73,14 +77,16 @@ export class LandscapePass extends RenderPass {
   // AI: Phase A
   private shoreProfileTexture: WebGLTexture | null = null
 
-  constructor(gl: WebGL2RenderingContext) {
+  constructor(gl: WebGL2RenderingContext, options: LandscapePassOptions = {}) {
     super(gl)
     this.programs = {
       beauty: this.createProgram("beauty"),
-      ripple: this.createProgram("ripple"),
-      normals: this.createProgram("normals"),
-      reflection: this.createProgram("reflection"),
-      waveLod: this.createProgram("waveLod"),
+    }
+    if (options.enableDebugVariants) {
+      this.programs.ripple = this.createProgram("ripple")
+      this.programs.normals = this.createProgram("normals")
+      this.programs.reflection = this.createProgram("reflection")
+      this.programs.waveLod = this.createProgram("waveLod")
     }
     this.quad = new FullscreenQuad(gl)
   }
@@ -103,7 +109,7 @@ export class LandscapePass extends RenderPass {
   }
 
   setDebugMode(mode: LandscapeDebugMode) {
-    this.debugMode = mode
+    this.debugMode = this.programs[mode] ? mode : "beauty"
   }
 
   render(time: number, rippleTex: WebGLTexture | null) {
@@ -116,7 +122,10 @@ export class LandscapePass extends RenderPass {
     this.bindOutputFramebuffer()
     gl.viewport(0, 0, this.width, this.height)
 
-    const program = this.programs[this.debugMode]
+    const program = this.programs[this.debugMode] ?? this.programs.beauty
+    if (!program) {
+      return rippleTex
+    }
     program.use()
 
     // AI: move fullscreen landscape shading behind LandscapePass so the component only feeds frame state. No behavior change intended.

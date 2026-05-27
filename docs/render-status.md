@@ -1,6 +1,6 @@
 # Render Status Log
 
-Last updated: 2026-05-23 (Dynamic MSDF title selection from CMS content)
+Last updated: 2026-05-27 (Debug isolation + StoryFrame naming prep)
 
 ## Current Vector
 
@@ -21,10 +21,10 @@ Last updated: 2026-05-23 (Dynamic MSDF title selection from CMS content)
 | Phase F | Morning fog pass (dawn atmosphere) | In Progress | F1 landed: analytic height fog in `landscape.frag` + secondary fullscreen wisps pass. |
 | Phase G | Linear color pipeline + final display transfer | Done | `sceneColor` offscreen composition + `FinalColorPass` (`linear -> sRGB` once per frame). |
 | Phase H | Title glow pass (sunset bloom layer) | In Progress | `TitleGlowPass` added after `HeroTitlePass`; glow can be toggled from debug panel. |
-| Phase I | Scroll-driven MSDF title text | Done | **Phase I.2 (completed):** CMS content model — replaced hardcoded projectName with scroll-based title selection from HERO_TITLES array. Separated `loadHeroTitleAtlas()` and `loadCanvasFallback()` methods. Canvas fallback now used only for landscape reflection. All MSDF titles are preloaded and cached per text string. No breaking changes to render passes. |
+| Phase I | Scroll-driven MSDF title text | Done | **Phase I.2 (completed):** CMS/story content model — title selection now comes from `STORY_SECTIONS` via `StoryFrame`; no legacy title-content aliases. `StoryFrame` includes `shotProgress` for upcoming camera work. Canvas fallback now used only for landscape reflection. |
 | Phase 6 | Scroll phase semantics | Done | Active ordering: `0=start`, `0.2=dawn`, `0.5=day`, `1.0=late-sunset`; fog `0.18→0.36`, direct title reveal `0.78→0.94`, reflection end-gate `phase >= 0.96`; night/moon shader path removed from active graph. |
 | Phase 6.2 | Shader optimizations (dithering, early-exit fog, moon removal, dedup) | Done | 4.1: dithering; 4.3: early-exit; 4.2+4.4: moon removal + shoreRunupWave dedup; FPS counter added. |
-| Refactor Phases 1–5 | `LandscapeScene` dispatcher, title/foliage resources, GLSL include plugin, shader chunk split | In Progress | Active shader entry is `src/lib/shaders/landscape/_entry.frag`; include plugin runs in dev/build; old scratch `landscape-chunks` moved to `_wip/`. |
+| Refactor Phases 1–5 | `LandscapeScene` dispatcher, title/foliage resources, GLSL include plugin, shader chunk split | In Progress | Debug state now lives in `LandscapeSceneDebugController`; `LandscapePass` compiles debug variants only for dev-enabled scenes; active shader entry is `src/lib/shaders/landscape/_entry.frag`; include plugin runs in dev/build. |
 | Vegetation PoC | Shoreline full-coverage grass strip | In Progress | `BushesPass` now tests dense shoreline grass (1080 cards total) with seeded placement. |
 
 ## Phase D Visual QA
@@ -69,6 +69,21 @@ Mark Phase D as `Done` only if all criteria hold across all required checkpoints
 - No regressions in shoreline contact, title reflection readability, or fog layering.
 
 ## Change Log
+
+### 2026-05-27
+
+- Debug state isolation:
+  - Added `src/lib/scene/LandscapeSceneDebug.ts` with `LandscapeSceneDebugController`, `PassDebugView`, and `SceneDebugState`.
+  - Removed debug UI state/types from `LandscapeScene`; scene now defaults to final rendering unless a dev controller is explicitly enabled.
+  - Updated `LandscapeViewport` to create the debug controller only under `import.meta.env.DEV`.
+  - Updated `LandscapePass` to compile only the `beauty` shader program by default; debug variants (`ripple`, `normals`, `reflection`, `waveLod`) are created only when `LandscapeScene` is constructed with `enableDebugViews`.
+- Story timeline naming prep:
+  - Added `src/lib/scene/storyTimeline.ts` with `computeStoryFrame()` and `shotProgress` for upcoming camera orchestration.
+  - Introduced `src/lib/content/storySections.ts` with `STORY_SECTIONS` / `StorySection` as the content-facing name for CMS sections and removed the old title-content alias.
+  - Updated `LandscapeScene` and `LandscapeResources` to use `STORY_SECTIONS` and `StoryFrame` for active title selection and time-of-day phase.
+- Validation:
+  - `npm run check`: 0 errors, 3 existing warnings in `src/routes/+page.svelte` for unused `.spot-container` CSS selectors.
+  - `npm run build`: success, same existing unused-selector warnings.
 
 ### 2026-05-18
 

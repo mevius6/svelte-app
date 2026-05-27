@@ -1,11 +1,12 @@
 <script lang="ts">
   import { onMount } from "svelte"
   import { Renderer } from "$lib/render/Renderer"
+  import { LandscapeScene } from "$lib/scene/LandscapeScene"
   import {
-    LandscapeScene,
     type PassDebugView,
     type SceneDebugState,
-  } from "$lib/scene/LandscapeScene"
+    type LandscapeSceneDebugController,
+  } from "$lib/scene/LandscapeSceneDebug"
 
   export let projectName = "Чистые пруды"
 
@@ -14,13 +15,14 @@
   let canvas: HTMLCanvasElement
   let renderer: Renderer | null = null
   let scene: LandscapeScene | null = null
+  let debugController: LandscapeSceneDebugController | null = null
   let passView: PassDebugView = "final"
   let landscapeMode: SceneDebugState["landscapeMode"] = "beauty"
   let glowEnabled: SceneDebugState["glowEnabled"] = true
   let fps = 0
 
   function applyDebugState() {
-    scene?.setDebugState({
+    debugController?.setState({
       passView,
       landscapeMode,
       glowEnabled,
@@ -50,10 +52,16 @@
 
     ;(async () => {
       const nextRenderer = new Renderer(canvas)
-      const nextScene = new LandscapeScene(nextRenderer.gl, projectName)
+      const nextScene = new LandscapeScene(
+        nextRenderer.gl,
+        projectName,
+        undefined,
+        { enableDebugViews: isDev }
+      )
 
       renderer = nextRenderer
       scene = nextScene
+      debugController = isDev ? nextScene.enableDebug() : null
       applyDebugState()
 
       try {
@@ -86,6 +94,7 @@
       renderer?.dispose()
       renderer = null
       scene = null
+      debugController = null
     }
   })
 </script>

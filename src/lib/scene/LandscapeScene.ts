@@ -1,5 +1,5 @@
 import { RipplePass } from "../passes/RipplePass"
-import { LandscapePass, type LandscapeDebugMode } from "../passes/LandscapePass"
+import { LandscapePass } from "../passes/LandscapePass"
 import { BushesPass } from "../passes/BushesPass"
 import { HeroTitlePass } from "../passes/HeroTitlePass"
 import { MorningFogPass } from "../passes/MorningFogPass"
@@ -26,7 +26,9 @@ import {
 } from "./sceneCamera"
 import { computeSceneFrame } from "./sceneFraming"
 import type { Scene } from "./Scene"
-import { HERO_TITLES } from "../content/heroTitles"
+import { STORY_SECTIONS } from "../content/storySections"
+import { LandscapeSceneDebugController, type SceneDebugState } from "./LandscapeSceneDebug"
+import { computeStoryFrame, type StoryFrame } from "./storyTimeline"
 
 const DEFAULT_FOLIAGE_ATLAS_SOURCES: FoliageAtlasSourceSet = {
   albedo: "/grass-atlas-web/TCom_Grass12_512_albedo.png",
@@ -38,24 +40,8 @@ const DEFAULT_FOLIAGE_ATLAS_SOURCES: FoliageAtlasSourceSet = {
 const DROP_THROTTLE_MS = 45
 const VEGETATION_DEBUG_CLEAR: [number, number, number, number] = [0.03, 0.04, 0.06, 1.0]
 
-/**
- * Map scroll position (0..1) to hero title index
- * Divides the scroll range into equal segments for each title
- */
-function titleIndexFromScroll(scrollNorm: number, count: number): number {
-  const t = Math.max(0, Math.min(scrollNorm, 1)) // clamp 0..1
-  if (count <= 0) return 0
-  const seg = 1 / count
-  const idx = Math.floor(t / seg)
-  return Math.min(idx, count - 1)
-}
-
-export type PassDebugView = "final" | "ripple" | "landscape" | "vegetation" | "fog" | "glow"
-
-export type SceneDebugState = {
-  passView: PassDebugView
-  landscapeMode: Exclude<LandscapeDebugMode, "ripple">
-  glowEnabled: boolean
+type LandscapeSceneOptions = {
+  enableDebugViews?: boolean
 }
 
 // NOTE: Phase 1 — extracted frame state to separate structure for cleaner dispatch logic.
@@ -63,6 +49,7 @@ export type SceneDebugState = {
 interface FrameState {
   time: number
   rippleTex: WebGLTexture | null
+  storyFrame: StoryFrame
   sceneFrame: ReturnType<typeof computeSceneFrame>
   camera: SceneCameraState
   vegetationHorizon: number
@@ -100,24 +87,11 @@ export class LandscapeScene implements Scene {
   private cameraHeight = 0
   private lastDropMs = 0
   private initialized = false
-  private passView: PassDebugView = "final"
-  private landscapeMode: Exclude<LandscapeDebugMode, "ripple"> = "beauty"
-  private glowEnabled = true
-  private activeTitleIndex = 0 // CMS content: active title from HERO_TITLES
+  private debugController: LandscapeSceneDebugController | null = null
 
   private readonly scrollHandler = () => {
     const max = document.body.scrollHeight - window.innerHeight
     this.scrollNorm = max > 0 ? Math.min(Math.max(window.scrollY / max, 0), 1) : 0
-  }
-
-  /**
-   * Phase 6: Convert scroll position to phase (0-1) with new semantics.
-   * This is the single point of control for day-night cycle ordering.
-   */
-  private scrollToPhase(scroll: number): number {
-    // Currently identity mapping; shader functions interpret phase semantics.
-    // Future: can add easing (slow dawn, fast sunset) here without changing shaders.
-    return Math.max(0, Math.min(scroll, 1.0))
   }
 
   private readonly onPointerDown = (event: PointerEvent) => {
@@ -148,14 +122,17 @@ export class LandscapeScene implements Scene {
   constructor(
     gl: WebGL2RenderingContext,
     projectName: string,
-    atlasSources = DEFAULT_FOLIAGE_ATLAS_SOURCES
+    atlasSources = DEFAULT_FOLIAGE_ATLAS_SOURCES,
+    options: LandscapeSceneOptions = {}
   ) {
     this.gl = gl
     this.projectName = projectName
     this.atlasSources = atlasSources
 
     this.ripple = new RipplePass(gl)
-    this.landscape = new LandscapePass(gl)
+    this.landscape = new LandscapePass(gl, {
+      enableDebugVariants: options.enableDebugViews ?? false,
+    })
     this.bushes = new BushesPass(gl)
     this.morningFog = new MorningFogPass(gl)
     this.heroTitle = new HeroTitlePass(gl, projectName)
@@ -198,18 +175,13 @@ export class LandscapeScene implements Scene {
     this.sceneColor = new FBO(this.gl, width, height)
   }
 
-  setDebugState(state: Partial<SceneDebugState>) {
-    if (state.passView) {
-      this.passView = state.passView
-    }
+  enableDebug(controller = new LandscapeSceneDebugController()) {
+    this.debugController = controller
+    return controller
+  }
 
-    if (state.landscapeMode) {
-      this.landscapeMode = state.landscapeMode
-    }
-
-    if (state.glowEnabled !== undefined) {
-      this.glowEnabled = state.glowEnabled
-    }
+  disableDebug() {
+    this.debugController = null
   }
 
   update(_dt: number) {}
@@ -221,26 +193,22 @@ export class LandscapeScene implements Scene {
     if (!textTexture) return null
 
     const rippleTex = this.ripple.render(time, null) ?? this.resources.rippleFallbackTexture
+    const storyFrame = computeStoryFrame(this.scrollNorm, STORY_SECTIONS.length)
     const sceneFrame = computeSceneFrame(this.width, this.height)
     const camera = this.resolveCamera()
     const vegetationHorizon = computeVegetationHorizon(camera, this.width, this.height)
     const textTexSize = this.resources.textTextureSize
     const titleLayout = this.resources.heroTitleLayout
 
-    // CMS content: map scroll position to active hero title
-    const titles = HERO_TITLES
-    const activeIndex = titleIndexFromScroll(this.scrollNorm, titles.length)
-    this.activeTitleIndex = activeIndex
-
-    const activeItem = titles[activeIndex]
+    const activeSection = STORY_SECTIONS[storyFrame.sectionIndex]
     const heroTitleAtlas = this.resources.heroTitleAtlas
 
     // Get or build render data for active title text
     // Note: buildHeroTitleRenderDataForText is async, but for now we rely on
     // pre-population in resources.load() or we cache results synchronously
     const activeTitleRenderData =
-      heroTitleAtlas && activeItem
-        ? this.resources.buildHeroTitleRenderDataSync(activeItem.text)
+      heroTitleAtlas && activeSection
+        ? this.resources.buildHeroTitleRenderDataSync(activeSection.titleText)
         : null
 
     // ЛОГИЧЕСКИЙ layout (пространство макета)
@@ -266,7 +234,7 @@ export class LandscapeScene implements Scene {
       : titleLayout.aspect
 
     const titleHero = computeTitleHeroState(
-      this.scrollNorm,
+      storyFrame.storyProgress,
       activeLayoutAspect,
       textTexSize.contentRect
     )
@@ -274,6 +242,7 @@ export class LandscapeScene implements Scene {
     return {
       time,
       rippleTex,
+      storyFrame,
       sceneFrame,
       camera,
       vegetationHorizon,
@@ -288,7 +257,12 @@ export class LandscapeScene implements Scene {
     const frame = this.buildFrameState(time)
     if (!frame) return
 
-    switch (this.passView) {
+    const debugState = this.debugController?.state ?? null
+    if (!debugState || debugState.passView === "final") {
+      return this.renderFinal(frame)
+    }
+
+    switch (debugState.passView) {
       case 'ripple':
         return this.renderDebugRipple(frame)
       case 'vegetation':
@@ -298,7 +272,7 @@ export class LandscapeScene implements Scene {
       case 'glow':
         return this.renderDebugGlow(frame)
       case 'landscape':
-        return this.renderDebugLandscape(frame)
+        return this.renderDebugLandscape(frame, debugState)
       default:
         return this.renderFinal(frame)
     }
@@ -319,7 +293,7 @@ export class LandscapeScene implements Scene {
     this.bushes.setFrameState({
       camera: frame.camera,
       horizon: frame.vegetationHorizon,
-      phase: this.scrollToPhase(this.scrollNorm),
+      phase: frame.storyFrame.timeOfDayPhase,
       debugView: true,
       atlasTextures: this.resources.foliageAtlas,
       sceneScale: {
@@ -335,7 +309,7 @@ export class LandscapeScene implements Scene {
     this.gl.clearColor(0.02, 0.03, 0.05, 1.0)
     this.gl.clear(this.gl.COLOR_BUFFER_BIT)
     this.morningFog.setFrameState({
-      phase: this.scrollToPhase(this.scrollNorm),
+      phase: frame.storyFrame.timeOfDayPhase,
       debugDensity: true,
     })
     this.morningFog.render(frame.time, null)
@@ -350,8 +324,8 @@ export class LandscapeScene implements Scene {
   }
 
   // NOTE: Phase 1 — debug view for landscape pass; allows viewing specific shader domains (ripple, normals, reflection, wave LOD).
-  private renderDebugLandscape(frame: FrameState) {
-    this.landscape.setDebugMode(this.landscapeMode)
+  private renderDebugLandscape(frame: FrameState, debugState: SceneDebugState) {
+    this.landscape.setDebugMode(debugState.landscapeMode)
     this.landscape.render(frame.time, frame.rippleTex)
   }
 
@@ -384,7 +358,7 @@ export class LandscapeScene implements Scene {
     if (frame.activeTitleRenderData) {
       this.setupHeroTitleState(frame)
       this.heroTitle.render(frame.time, null)
-      if (this.glowEnabled) {
+      if (this.isTitleGlowEnabled()) {
         this.setupTitleGlowState(frame)
         this.titleGlow.render(frame.time, null)
       }
@@ -402,7 +376,7 @@ export class LandscapeScene implements Scene {
   private setupLandscapeState(frame: FrameState) {
     this.landscape.setFrameState({
       camera: frame.camera,
-      scroll: this.scrollToPhase(this.scrollNorm),
+      scroll: frame.storyFrame.timeOfDayPhase,
       textTexture: this.resources.textTexture!,
       titleHero: frame.titleHero,
       useTitleBillboard: !frame.activeTitleRenderData,
@@ -423,7 +397,7 @@ export class LandscapeScene implements Scene {
     this.bushes.setFrameState({
       camera: frame.camera,
       horizon: frame.vegetationHorizon,
-      phase: this.scrollToPhase(this.scrollNorm),
+      phase: frame.storyFrame.timeOfDayPhase,
       debugView: false,
       atlasTextures: this.resources.foliageAtlas,
       sceneScale: {
@@ -435,7 +409,7 @@ export class LandscapeScene implements Scene {
 
   private setupMorningFogState(frame: FrameState) {
     this.morningFog.setFrameState({
-      phase: this.scrollToPhase(this.scrollNorm),
+      phase: frame.storyFrame.timeOfDayPhase,
       debugDensity: false,
     })
   }
@@ -446,7 +420,7 @@ export class LandscapeScene implements Scene {
 
     this.heroTitle.setFrameState({
       camera: frame.camera,
-      phase: this.scrollToPhase(this.scrollNorm),
+      phase: frame.storyFrame.timeOfDayPhase,
       waterLevel: WATER_LEVEL,
       titleHero: frame.titleHero,
       atlas: active.atlas,
@@ -460,10 +434,10 @@ export class LandscapeScene implements Scene {
     if (!active) return
 
     this.titleGlow.setFrameState({
-      enabled: this.glowEnabled,
-      debugIsolate: this.passView === "glow",
+      enabled: this.isTitleGlowEnabled(),
+      debugIsolate: this.isGlowDebugView(),
       camera: frame.camera,
-      phase: this.scrollToPhase(this.scrollNorm),
+      phase: frame.storyFrame.timeOfDayPhase,
       waterLevel: WATER_LEVEL,
       titleHero: frame.titleHero,
       phraseTexture: active.phraseTexture ?? null,
@@ -471,6 +445,14 @@ export class LandscapeScene implements Scene {
       titleAtlasPxRange: active.atlas.font.atlas.distanceRange ?? 4,
       layoutSize: frame.activeLayoutSize
     })
+  }
+
+  private isTitleGlowEnabled() {
+    return this.debugController?.state.glowEnabled ?? true
+  }
+
+  private isGlowDebugView() {
+    return this.debugController?.state.passView === "glow"
   }
 
   dispose() {

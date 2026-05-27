@@ -40,7 +40,7 @@ src/lib/
   render/       Renderer.ts, RenderPass.ts
   passes/       RipplePass.ts, LandscapePass.ts, BushesPass.ts, MorningFogPass.ts, HeroTitlePass.ts, TitleGlowPass.ts, FinalColorPass.ts
   scene/        LandscapeScene.ts, sceneCamera.ts, LandscapeResources.ts,
-                sceneFraming.ts, shoreProfileBaker.ts
+                LandscapeSceneDebug.ts, storyTimeline.ts, sceneFraming.ts, shoreProfileBaker.ts
 ```
 
 ## 3. Active render pipeline
@@ -67,15 +67,16 @@ FinalColorPass (single linear → sRGB transfer)
 - Morning fog POC is dawn-driven and dissipates before title reveal: `FOG_DISSIPATE_START=0.18`, `FOG_DISSIPATE_END=0.36`.
 - Morning fog F1 uses analytic exponential height fog in `landscape.frag` (`tau` + `T=exp(-tau)`), with title fogged at `tTitle` (not shoreline depth).
 - Color pipeline is linear-first: scene layers are composited in offscreen `sceneColor`, and display transfer (`linear -> sRGB`) happens once in `FinalColorPass`.
+- Dev debug state is explicit: `LandscapeViewport` enables `LandscapeSceneDebugController` only in dev; without a debug controller, `LandscapeScene` defaults to the final render path. `LandscapePass` should compile debug shader variants only when `LandscapeScene` is created with `enableDebugViews`.
 - Camera is **static** — not driven by scroll. Parameters: `yaw=-0.08`, `pitch=0.068`, `radius=2.92`.
 - Title billboard (`HeroTitlePass`) sits at `TITLE_WORLD_Z_NEAR=0.35` — middle of the pond between camera and shore, **not** near the shore.
 - Title height: `WATER_LEVEL + height * 0.5 + 0.06` — fixed, no `baseLift` scroll animation.
 
-### CMS title selection (Phase I: scroll-driven)
-- Hero titles come from `HERO_TITLES` array (dummy CMS data; will be Strapi API).
-- Title index is computed from `scrollNorm` via: `idx = floor(scroll / (1/count))` — equal-width segments.
-- Each title's render data (MSDF atlas layout + phrase texture) is built once and cached per text string.
-- `buildFrameState()` selects active title, builds `activeTitleRenderData` from cache (or generates async if missing).
+### Story section title selection (Phase I: scroll-driven)
+- Story sections come from `STORY_SECTIONS` (dummy CMS data; will be Strapi API). Do not reintroduce legacy title-content aliases.
+- `computeStoryFrame(storyProgress, sectionCount)` computes `sectionIndex`, `sectionProgress`, `shotProgress`, and `timeOfDayPhase`.
+- Each section title's render data (MSDF atlas layout + phrase texture) is built once and cached per text string.
+- `buildFrameState()` selects the active story section title, builds `activeTitleRenderData` from cache (or generates async if missing).
 - No fallback canvas-driven title selection; MSDF atlas is primary for all CMS titles.
 - Canvas texture (`textTexture`) still exists for background landscape reflection only (not for title selection).
 
@@ -87,7 +88,7 @@ FinalColorPass (single linear → sRGB transfer)
 - **Phase C:** `tanHalfFovY` in `SceneCameraState` (computed once). Camera cached in `LandscapeScene`. Glyph uniforms (256 floats) upload only on atlas change.
 - **Phase H:** `TitleGlowPass` added as separate fullscreen glow layer after `HeroTitlePass`, sampling precomposed phrase MSDF texture (`u_titlePhraseTex`), with debug toggle support.
   Quality baseline: inside `TitleGlowPass`, use `source -> separable blur (multi-pass) -> layered additive composite` to avoid jagged/comb-like glow artifacts.
-- **Phase I (completed):** Dynamic MSDF glyph generation for CMS titles. Separated `loadHeroTitleAtlas()` and `loadCanvasFallback()` in TitleResources; canvas fallback now used only for landscape reflection. Title selection is scroll-based from HERO_TITLES array with per-text render data caching.
+- **Phase I (completed):** Dynamic MSDF glyph generation for CMS/story-section titles. Separated `loadHeroTitleAtlas()` and `loadCanvasFallback()` in TitleResources; canvas fallback now used only for landscape reflection. Title selection is scroll-based from `STORY_SECTIONS` through `StoryFrame`, with per-text render data caching.
 
 ### Pending optimizations (do not regress)
 - **Phase D (in progress):** wave normal LOD — tuning anchors are centralized in shader constants (`WAVE_LOD_*`, `RIPPLE_FADE_*`, `WAVENORMAL_EPS_*`); ripple fades via wider `smoothstep(0.58, 0.82, farField)`; `waveNormal` increases finite-difference `eps` toward far field for stability; interactive ripple-normal uses dedicated `interactiveRippleMask`.

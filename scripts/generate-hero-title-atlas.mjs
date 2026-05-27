@@ -16,7 +16,10 @@ if (typeof globalThis.ImageData === "undefined") {
   }
 }
 
-const DEFAULT_TEXT = "0123456789 ЧИСТЫЕПРУДЫ"
+// Collect all unique characters from STORY_SECTIONS titleText values
+// Titles: "Введение", "История места", "Рождение парка", "Возрождение",
+//         "Северный микрорайон", "Дворовое детство", "Парк как семья", "Флора и фауна"
+const DEFAULT_TEXT = "0123456789 АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯЁ"
 const DEFAULT_FONT_PATH = "src/fonts/RoslindaleCyrillic-DisplayCondensedBlack.otf"
 const DEFAULT_OUTPUT_DIR = "static/hero-title"
 const DEFAULT_BASENAME = "roslindale-msdf"

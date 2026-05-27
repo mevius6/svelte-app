@@ -2,7 +2,7 @@ import { createShoreProfileTexture } from "$lib/scene/ShoreProfileBaker"
 import { TitleResources, type HeroTitleAtlasRenderData, type HeroTitleAtlasResource } from "./TitleResources"
 import { loadFoliageAtlas, type FoliageAtlasSourceSet, type FoliageAtlasTextureSet } from "./loaders/foliageAtlasLoader"
 import type { HeroTitleLayoutMetrics } from "../text/heroTitleAtlas"
-import { HERO_TITLES } from "../content/heroTitles"
+import { STORY_SECTIONS } from "../content/storySections"
 
 export type { HeroTitleAtlasRenderData, HeroTitleAtlasResource }
 export type { FoliageAtlasSourceSet, FoliageAtlasTextureSet } from "./loaders/foliageAtlasLoader"
@@ -87,16 +87,16 @@ export class LandscapeResources {
     // Replaces ~90 vnoise calls per water pixel with a single texture fetch.
     this.shoreProfileTexRef = createShoreProfileTexture(this.gl)
 
-    // CMS content: pre-load all hero titles from HERO_TITLES array
+    // CMS content: pre-load all story section title strings.
     await this.preloadHeroTitles()
   }
 
   /**
-   * Pre-load render data for all CMS hero titles (from HERO_TITLES).
+   * Pre-load render data for all CMS story section titles.
    * This ensures smooth scrolling without lag when switching between titles.
    */
   private async preloadHeroTitles() {
-    const titleTexts = HERO_TITLES.map(t => t.text)
+    const titleTexts = STORY_SECTIONS.map((section) => section.titleText)
     await Promise.all(
       titleTexts.map(text => this.title.buildHeroTitleRenderDataForText(text))
     )
