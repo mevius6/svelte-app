@@ -11,9 +11,9 @@ export type StorySection = {
 
 // mock data for now, eventually to be fetched from Strapi API
 // export const STORY_SECTIONS: StorySection[] = [
-//   { id: "pt-1", titleText: "Введение" }, // Вступление / intro
+//   { id: "pt-1", titleText: "Совет" }, // Вступление / Пролог
 //   { id: "pt-2", titleText: "История места" },
-//   { id: "pt-3", titleText: "Рождение парка" }, // Как рождался парк
+//   { id: "pt-3", titleText: "Рождение парка" },
 //   { id: "pt-4", titleText: "Возрождение" }, // Реновация
 //   { id: "pt-5", titleText: "Северный микрорайон" }, // и улицы вокруг парка
 //   { id: "pt-6", titleText: "Дворовое детство" }, // игры и секреты счастья
@@ -21,7 +21,7 @@ export type StorySection = {
 //   { id: "pt-8", titleText: "Флора и фауна" }, // Заключение / Эпилог
 // ]
 export const STORY_SECTIONS: StorySection[] = [
-  // { id: "clean-ponds", titleText: "ЧИСТЫЕ ПРУДЫ" },
+  // { id: "intro", titleText: "ЧИСТЫЕ ПРУДЫ" },
   { id: "pt-1", titleText: "1" },
   { id: "pt-2", titleText: "2" },
   { id: "pt-3", titleText: "3" },

@@ -28,6 +28,7 @@ import { computeSceneFrame } from "./sceneFraming"
 import type { Scene } from "./Scene"
 import { STORY_SECTIONS } from "../content/storySections"
 import { LandscapeSceneDebugController, type SceneDebugState } from "./LandscapeSceneDebug"
+import { TITLE_GLOW_ENABLED } from "./sceneConfig"
 import { computeStoryFrame, type StoryFrame } from "./storyTimeline"
 
 const DEFAULT_FOLIAGE_ATLAS_SOURCES: FoliageAtlasSourceSet = {
@@ -448,7 +449,10 @@ export class LandscapeScene implements Scene {
   }
 
   private isTitleGlowEnabled() {
-    return this.debugController?.state.glowEnabled ?? true
+    if (this.debugController) {
+      return this.debugController.state.glowEnabled
+    }
+    return TITLE_GLOW_ENABLED
   }
 
   private isGlowDebugView() {

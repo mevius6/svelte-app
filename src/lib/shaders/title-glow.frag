@@ -26,6 +26,8 @@ uniform float u_waterLevel;
 
 out vec4 fragColor;
 
+#include "landscape/common/constants.glsl"
+#include "landscape/common/title_timing.glsl"
 #include "landscape/common/msdf_core.glsl"
 
 // Scroll phase: 0.0=start, 0.2=dawn, 0.5=day, 1.0=late-sunset.
@@ -58,14 +60,9 @@ vec2 titleLocalMetricFromHitPos(vec3 hitPos) {
     vec3 titleUp = vec3(0.0, 1.0, 0.0);
     vec3 local = hitPos - u_titleWorldCenter;
 
-    // 1) Aspect активного layout'а (фраза/цифры)
-    float layoutAspect = u_titleLayoutSize.x / max(u_titleLayoutSize.y, 0.001);
-
-    // 2) Мировая высота титра — как в hero-title.vert
+    // CPU already bakes textAspect into u_titleWorldSize — use as-is (hero-title.vert).
+    float worldWidth = u_titleWorldSize.x;
     float worldHeight = u_titleWorldSize.y;
-
-    // 3) Мировая ширина = высота * aspect (так же, как в hero-title.vert)
-    float worldWidth = worldHeight * layoutAspect;
 
     // 4) Нормализуем local в [-0.5 .. 0.5] по world-рамке титра
     float nx = dot(local, titleRight) / max(worldWidth, 0.001);
@@ -136,7 +133,7 @@ void main() {
     float fill = clamp(sdPx + 0.5, 0.0, 1.0);
 
     float emergence = smoothstep(u_waterLevel - 0.012, u_waterLevel + 0.034, hitPos.y);
-    float mask = emergence;
+    float mask = emergence * titleReveal(u_phase);
     if (mask <= 0.001) {
         fragColor = vec4(0.0);
         return;

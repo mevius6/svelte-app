@@ -15,20 +15,13 @@ uniform float u_waterLevel;
 
 out vec4 fragColor;
 
+#include "landscape/common/constants.glsl"
+#include "landscape/common/title_timing.glsl"
 #include "landscape/common/msdf_core.glsl"
 
 float screenPxRange() {
     return msdfScreenPxRange(u_titleAtlasPxRange, u_titleAtlasSize, v_uvAtlas);
 }
-
-float titleReveal(float phase01) {
-    return smoothstep(0.78, 0.94, clamp(phase01, 0.0, 1.0));
-}
-
-// NOTE: exact display target for title ink:
-// DayGlo NightGlo NG200 reference -> #c9f08a (sRGB 201,240,138).
-// Since scene composition is linear, keep shader constants in linear space.
-const vec3 TITLE_DAYGLO_LINEAR = vec3(0.584078418, 0.871367119, 0.254152094);
 
 void main() {
     vec3 msdf = texture(u_titleAtlas, v_uvAtlas).rgb;
@@ -39,7 +32,7 @@ void main() {
     }
 
     vec3 directCol = TITLE_DAYGLO_LINEAR;
-    // float revealDirect = titleReveal(u_phase);
+    float revealDirect = titleReveal(u_phase);
 
     // Direct rendering path — world-space billboard above water.
     float emergence = smoothstep(u_waterLevel - 0.010, u_waterLevel + 0.030, v_worldY);
@@ -51,7 +44,5 @@ void main() {
     // https://iquilezles.org/articles/outdoorslighting/
     // float atmFade = exp(-max(v_viewDist - 1.2, 0.0) * 0.09);
 
-    // fragColor = vec4(directCol, opacity * emergence * atmFade * revealDirect);
-    fragColor = vec4(directCol, opacity * emergence);
-    // fragColor = vec4(directCol, opacity);
+    fragColor = vec4(directCol, opacity * emergence * revealDirect);
 }

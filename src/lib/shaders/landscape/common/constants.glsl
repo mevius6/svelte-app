@@ -8,6 +8,21 @@
 const vec3 TITLE_DAYGLO_LINEAR = vec3(0.584078418, 0.871367119, 0.254152094);
 const vec3 TITLE_GLOW_AMBER_LINEAR = vec3(0.86, 0.50, 0.20);
 
+// Direct title + water reflection reveal (scroll phase 0..1).
+// Default: END <= START → fully visible from first scroll pixel (section 1).
+// Late-sunset only: set e.g. START=0.78, END=0.94.
+// Keep in sync with TITLE_REVEAL_* in src/lib/scene/sceneCamera.ts.
+const float TITLE_REVEAL_START = 0.0;
+const float TITLE_REVEAL_END = 0.0;
+
+// Water title reflection composite (linear space, before tonemap).
+const float TITLE_REFLECTION_FILL_BILLBOARD = 0.52;
+const float TITLE_REFLECTION_FILL_PHRASE = 0.46;
+const float TITLE_REFLECTION_LIME_WEIGHT = 0.72;
+const float TITLE_REFLECTION_SKY_BLEND = 0.12;
+const float TITLE_REFLECTION_DIST_ATTEN = 0.20;
+const float TITLE_REFLECTION_RIPPLE_SUPPRESS = 0.20;
+
 // Morning fog (analytic height fog)
 // Phase 6: fog appears at dawn (phase 0.18) and dissipates by 0.36 (full daylight)
 // Ref: https://forwardscattering.org/post/72

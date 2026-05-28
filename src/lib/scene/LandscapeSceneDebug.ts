@@ -1,4 +1,5 @@
 import type { LandscapeDebugMode } from "../passes/LandscapePass"
+import { TITLE_GLOW_ENABLED } from "./sceneConfig"
 
 export type PassDebugView = "final" | "ripple" | "landscape" | "vegetation" | "fog" | "glow"
 
@@ -11,7 +12,7 @@ export type SceneDebugState = {
 export const DEFAULT_SCENE_DEBUG_STATE: SceneDebugState = {
   passView: "final",
   landscapeMode: "beauty",
-  glowEnabled: true,
+  glowEnabled: TITLE_GLOW_ENABLED,
 }
 
 export class LandscapeSceneDebugController {

@@ -63,7 +63,7 @@ FinalColorPass (single linear → sRGB transfer)
 ### Scene model
 - `scroll` = time-of-day phase with Phase 6 ordering: `0=start`, `0.2=dawn`, `0.5=day`, `1.0=dusk/late-sunset`. Clouds and sun move together via `solarDrift = vec2(phase01 * 0.42, phase01 * 0.06)` in `cloudDensity`.
 - Night rendering is not part of the active baseline: `night.glsl`, moon gates, and night-grade stubs are not in the active shader graph.
-- Title reveal is late-sunset-driven: direct fade window `0.78→0.94`; reflection is an end-scroll gate only (`phase >= 0.96`), not a separate reveal animation.
+- Title reveal: direct title, water reflection, and title glow share `titleReveal(phase)` (`title_timing.glsl`). **Default baseline:** `TITLE_REVEAL_START/END = 0/0` in `constants.glsl` → always visible from scroll 0. Optional late-sunset gate: set `0.78/0.94` (sync `sceneCamera.ts` exports).
 - Morning fog POC is dawn-driven and dissipates before title reveal: `FOG_DISSIPATE_START=0.18`, `FOG_DISSIPATE_END=0.36`.
 - Morning fog F1 uses analytic exponential height fog in `landscape.frag` (`tau` + `T=exp(-tau)`), with title fogged at `tTitle` (not shoreline depth).
 - Color pipeline is linear-first: scene layers are composited in offscreen `sceneColor`, and display transfer (`linear -> sRGB`) happens once in `FinalColorPass`.
@@ -105,7 +105,7 @@ FinalColorPass (single linear → sRGB transfer)
 7. **No baseLift in title:** `computeTitleHeroState` Y is fixed: `WATER_LEVEL + height * 0.5 + 0.06`.
 8. **Texture units in LandscapePass:** 0=textTex, 1=rippleTex, 3=shoreProfileTex, 4=titlePhraseTex (unit 2 currently free).
 9. **Landscape title reflection path:** use `u_titlePhraseTex` sampling by local metric; do not reintroduce per-fragment glyph loops in `landscape.frag`.
-10. **Morning fog timing:** keep fog dissipation end before direct title reveal start (`FOG_DISSIPATE_END=0.36 <= TITLE_REVEAL_START=0.78` under Phase 6 semantics).
+10. **Morning fog timing:** if title uses late-sunset reveal (`TITLE_REVEAL_START > FOG_DISSIPATE_END`), keep fog gone before title fade-in; default scroll-start title skips this coupling.
 11. **Height-fog correctness:** for non-constant density, convert optical depth via transmittance (`T=exp(-tau)`), and use fogAmount `1 - T`.
 12. **Single display transfer point:** no early display gamma in scene passes; `linear -> sRGB` must happen only in `FinalColorPass`.
 13. **Deterministic vegetation placement:** avoid `Math.random()` for instance generation; use seeded RNG so visual layout is stable across hot reloads.
@@ -184,11 +184,13 @@ vec3 reflDirTitle = normalize(reflect(-viewDir, nTitle));
 ## 11. Status tracking protocol
 
 - Canonical progress tracker: `docs/render-status.md`.
+- Prioritized execution plan: `docs/development-plan.md`.
+- Agent-oriented baseline (keep in sync with this file): `AGENTS.md`.
 - After each completed render/runtime iteration:
   1. Update `Last updated` with exact date (`YYYY-MM-DD`).
   2. Update affected phase rows in `Phase Dashboard`.
   3. Add concise factual record into `Change Log`:
      - what changed;
      - what was verified (`bun run check`, `bun run build`, etc.).
-  4. If baseline/invariants changed, sync this file and `README.md` in the same iteration.
+  4. If baseline/invariants changed, sync this file, `README.md`, and `AGENTS.md` in the same iteration.
   5. When creating a git commit for the iteration, use a concise, factual commit message that states the concrete change scope.

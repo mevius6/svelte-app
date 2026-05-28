@@ -50,17 +50,12 @@ void main() {
     vec3 titleRight = titleBillboardRight();
     vec3 titleUp = vec3(0.0, 1.0, 0.0);
 
-    // 5) Соотношение сторон активного макета
-    float layoutAspect = u_titleLayoutSize.x / max(u_titleLayoutSize.y, 0.001);
-
-    // 6) Фиксируем мировую высоту и считаем ширину через соотношение сторон
+    // 5) Мировые размеры УЖЕ правильно вычислены в CPU через textAspect
+    // НЕ ПЕРЕВЫЧИСЛЯЙ через layoutAspect — используй как-есть!
+    float worldWidth = u_titleWorldSize.x;
     float worldHeight = u_titleWorldSize.y;
-    float worldWidth = worldHeight * layoutAspect;
 
-    // 7) Масштабируем по X/Y с сохранением соотношения сторон
-    // vec3 worldPos = u_titleWorldCenter
-    //               + titleRight * (centered.x * worldWidth)
-    //               + titleUp    * (centered.y * worldHeight);
+    // 6) Масштабируем по X/Y
     vec3 worldPos = u_titleWorldCenter
                   + titleRight * (localNorm.x * worldWidth)
                   + titleUp * (localNorm.y * worldHeight);

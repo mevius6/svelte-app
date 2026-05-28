@@ -151,9 +151,8 @@ vec2 titleLocalMetricFromHitPos(vec3 hitPos) {
     vec3 titleUp = vec3(0.0, 1.0, 0.0);
     vec3 local = hitPos - u_titleWorldCenter;
 
-    float layoutAspect = u_titleLayoutSize.x / max(u_titleLayoutSize.y, 0.001);
+    float worldWidth = u_titleWorldSize.x;
     float worldHeight = u_titleWorldSize.y;
-    float worldWidth = worldHeight * layoutAspect;
 
     return vec2(
         dot(local, titleRight) / max(worldWidth, 0.001) * u_titleLayoutSize.x,
@@ -201,14 +200,4 @@ vec3 titleHeroColor(vec3 rayDir, vec3 sunCol, vec3 sunDir) {
 
 vec3 compositeTitle(vec3 baseCol, vec3 titleCol, float alpha) {
     return mix(baseCol, titleCol, alpha * 0.96);
-}
-
-float titleReveal(float phase01) {
-    // Phase 6: title appears at dusk (phase 0.78), fully visible by 0.94
-    return smoothstep(0.78, 0.94, clamp(phase01, 0.0, 1.0));
-}
-
-float titleReflectionEndGate(float phase01) {
-    // Reflection is a final-scroll state, not a separate reveal animation.
-    return step(0.96, clamp(phase01, 0.0, 1.0));
 }

@@ -91,7 +91,7 @@ FinalColorPass (single linear → sRGB transfer)
 - **Phase D tuning (итерация 2):** LOD-якоря вынесены в константы (`WAVE_LOD_NEAR_DIST/FAR_DIST`, `RIPPLE_FADE_START/END`, `WAVENORMAL_EPS_NEAR/FAR`), окно затухания ripple расширено до `smoothstep(0.58, 0.82, farField)`, `waveNormal` теперь увеличивает `eps` к дальнему полю (меньше shimmer на горизонте), interactive ripple-normal отвязан от `rippleWaveMask` в отдельный `interactiveRippleMask`.
 - **Phase D debug tooling:** добавлен debug-режим `Landscape=Wave LOD` (`DEBUG_WAVE_LOD`), который показывает маски LOD по каналам: `R=farField`, `G=rippleLod`, `B=interactiveRippleMask`.
 - **Phase E (E1, in progress) — Title glyph loop isolation:** для reflection-path добавлена предсобранная `phrase MSDF` texture; `landscape.frag` перешёл с 32-итерационного цикла по глифам на single-texture lookup по `localMetric`.
-- **Sunset reveal animation (Phase 6):** тайтл проявляется к late-sunset через direct-маску `smoothstep(0.78, 0.94)`; отражение включается только в самом конце scroll (`phase >= 0.96`) без отдельной reveal-анимации.
+- **Title reveal (default):** прямой тайтл, отражение и glow — `titleReveal(phase)`; по умолчанию видны с начала скролла (`TITLE_REVEAL_START/END = 0` в `constants.glsl`). Опционально late-sunset: `0.78→0.94`.
 - **Night phase removed:** активный landscape shader больше не подключает `night.glsl`; moon/night-grade stubs убраны из active render path.
 - **Phase F (POC) — Morning fog pass:** добавлен отдельный fullscreen pass утреннего тумана (`MorningFogPass`) с fade-out до появления тайтла. Базовые ручки Phase 6: `FOG_DISSIPATE_START=0.18`, `FOG_DISSIPATE_END=0.36`, `FOG_DENSITY`.
 - **Phase F (F1) — Analytic height fog:** в `landscape.frag` добавлен экспоненциальный height fog через оптическую толщину `tau` и трансмиттанс `T=exp(-tau)`, с корректным композитингом `scene*T + fog*(1-T)`; тайтл туманится по своему `tTitle`.
@@ -106,6 +106,8 @@ FinalColorPass (single linear → sRGB transfer)
 - **Story timeline naming prep:** CMS-заголовки переименованы на уровне контента в `STORY_SECTIONS` (`src/lib/content/storySections.ts`); `LandscapeScene` теперь получает `StoryFrame` из `computeStoryFrame()` без legacy title aliases. `shotProgress` добавлен как будущий канал для cinematic camera.
 
 ## Следующие итерации
+
+Подробный план по спринтам и exit criteria: [`docs/development-plan.md`](docs/development-plan.md).
 
 По приоритету из code review (апрель 2026):
 

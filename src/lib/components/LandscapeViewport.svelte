@@ -7,6 +7,7 @@
     type SceneDebugState,
     type LandscapeSceneDebugController,
   } from "$lib/scene/LandscapeSceneDebug"
+  import { TITLE_GLOW_ENABLED } from "$lib/scene/sceneConfig"
 
   export let projectName = "Чистые пруды"
 
@@ -18,7 +19,7 @@
   let debugController: LandscapeSceneDebugController | null = null
   let passView: PassDebugView = "final"
   let landscapeMode: SceneDebugState["landscapeMode"] = "beauty"
-  let glowEnabled: SceneDebugState["glowEnabled"] = true
+  let glowEnabled: SceneDebugState["glowEnabled"] = TITLE_GLOW_ENABLED
   let fps = 0
 
   function applyDebugState() {

@@ -7,7 +7,6 @@ void main()
     // AI: Phase 1 keeps the fullscreen pass, but moves the landscape into orbital camera/world-ray space so depth no longer depends only on a screen-space horizon split.
     float phase = clamp(u_scroll, 0.0, 1.0);
     float titleRevealMask = titleReveal(phase);
-    float titleReflectionMask = titleReflectionEndGate(phase);
     vec3 sunCol = sunColor(phase);
     vec3 sunDir = sunDirection(phase);
     vec3 horizonSky = skyColor(0.5, phase);
@@ -302,13 +301,15 @@ void main()
                 titleReflAlpha
             );
             if (hasTitleRefl) {
-                titleReflAlpha = titleAboveWaterAlpha(titleReflHitPos, titleReflAlpha) * titleReflectionMask;
+                titleReflAlpha = titleAboveWaterAlpha(titleReflHitPos, titleReflAlpha) * titleRevealMask;
                 if (titleReflAlpha > 0.0005) {
-                    // Depth-based attenuation: reflection fades with ray travel distance,
-                    // reinforcing spatial depth of the world-space billboard.
-                    float distFade = exp(-tTitleRefl * 0.28);
-                    vec3 titleReflCol = titleLime * 0.55 + skyRefl * 0.20;
-                    skyRefl = compositeTitle(skyRefl, titleReflCol, titleReflAlpha * 0.36 * distFade);
+                    float distFade = exp(-tTitleRefl * TITLE_REFLECTION_DIST_ATTEN);
+                    vec3 titleReflCol = titleLime * TITLE_REFLECTION_LIME_WEIGHT + skyRefl * TITLE_REFLECTION_SKY_BLEND;
+                    skyRefl = compositeTitle(
+                        skyRefl,
+                        titleReflCol,
+                        titleReflAlpha * TITLE_REFLECTION_FILL_BILLBOARD * distFade
+                    );
                     // AI: reflected title glow disabled to avoid contour/halo artifacts in water reflection.
                 }
             }
@@ -328,15 +329,16 @@ void main()
                 float titleReflFill;
                 float unusedTitleReflHalo;
                 sampleTitlePhraseReflectionCoverage(titleReflMetric, titleReflFill, unusedTitleReflHalo);
-                titleReflFill = titleAboveWaterAlpha(titleReflHitPos, titleReflFill) * titleReflectionMask;
+                titleReflFill = titleAboveWaterAlpha(titleReflHitPos, titleReflFill) * titleRevealMask;
                 if (titleReflFill > 0.0005) {
-                    float distFade = exp(-tTitleRefl * 0.28);
-                    // Suppress further when water is very agitated: secondary damping
-                    // beyond normal smoothing above, guards against extreme ripple bursts.
-                    float rippleAtten = 1.0 - smoothstep(0.0, 0.65, rippleStrength) * 0.38;
-                    vec3 titleReflCol = titleLime * 0.55 + skyRefl * 0.20;
-                    skyRefl = compositeTitle(skyRefl, titleReflCol,
-                                            titleReflFill * 0.18 * distFade * rippleAtten);
+                    float distFade = exp(-tTitleRefl * TITLE_REFLECTION_DIST_ATTEN);
+                    float rippleAtten = 1.0 - smoothstep(0.0, 0.65, rippleStrength) * TITLE_REFLECTION_RIPPLE_SUPPRESS;
+                    vec3 titleReflCol = titleLime * TITLE_REFLECTION_LIME_WEIGHT + skyRefl * TITLE_REFLECTION_SKY_BLEND;
+                    skyRefl = compositeTitle(
+                        skyRefl,
+                        titleReflCol,
+                        titleReflFill * TITLE_REFLECTION_FILL_PHRASE * distFade * rippleAtten
+                    );
                     // AI: reflected title glow disabled to avoid contour/halo artifacts in water reflection.
                 }
             }

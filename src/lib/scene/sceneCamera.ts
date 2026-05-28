@@ -68,10 +68,10 @@ const TITLE_WORLD_Z_NEAR = 0.35
 const TITLE_WORLD_Z_FAR = -0.20
 const TITLE_WORLD_WIDTH_NEAR = 1.75
 const TITLE_WORLD_WIDTH_FAR = 2.10
-// AI: sunset reveal window for title appearance.
-// Text starts appearing in late-day range and reaches full presence near sunset.
-const TITLE_REVEAL_START = 0.62
-const TITLE_REVEAL_END = 0.88
+// AI: title reveal window — keep in sync with TITLE_REVEAL_* in landscape/common/constants.glsl.
+// Default END <= START: full size from scroll 0. Late-sunset: e.g. 0.78 / 0.94.
+export const TITLE_REVEAL_START = 0.0
+export const TITLE_REVEAL_END = 0.0
 const TITLE_REVEAL_SCALE_MIN = 0.965
 
 export const RIPPLE_WORLD_RECT: RippleWorldRect = {
@@ -223,9 +223,12 @@ export function computeTitleHeroState(
   const clampedAspect = Math.max(textAspect, 1e-4);
 
   // 1) Окно появления по скроллу — оставляем как есть.
-  const revealT = smoothstep01(
-    (scroll - TITLE_REVEAL_START) / Math.max(TITLE_REVEAL_END - TITLE_REVEAL_START, 1e-6)
-  );
+  const revealT =
+    TITLE_REVEAL_END <= TITLE_REVEAL_START
+      ? 1
+      : smoothstep01(
+          (scroll - TITLE_REVEAL_START) / Math.max(TITLE_REVEAL_END - TITLE_REVEAL_START, 1e-6)
+        )
   const revealScale = mix(TITLE_REVEAL_SCALE_MIN, 1, revealT);
 
   // 2) Базовый world-height — единый для всех заголовков.

@@ -52,6 +52,7 @@ out vec4 fragColor;
 // ====================================================================
 
 #include "./common/constants.glsl"
+#include "./common/title_timing.glsl"
 #include "./common/math.glsl"
 #include "./common/noise.glsl"
 
