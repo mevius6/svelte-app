@@ -40,7 +40,8 @@ src/lib/
   render/       Renderer.ts, RenderPass.ts
   passes/       RipplePass.ts, LandscapePass.ts, BushesPass.ts, MorningFogPass.ts, HeroTitlePass.ts, TitleGlowPass.ts, FinalColorPass.ts
   scene/        LandscapeScene.ts, sceneCamera.ts, LandscapeResources.ts,
-                LandscapeSceneDebug.ts, storyTimeline.ts, sceneFraming.ts, shoreProfileBaker.ts
+                LandscapeSceneDebug.ts, storyTimeline.ts, sceneFraming.ts,
+                shoreProfileBaker.ts, sceneConfig.ts
 ```
 
 ## 3. Active render pipeline
@@ -110,6 +111,8 @@ FinalColorPass (single linear → sRGB transfer)
 12. **Single display transfer point:** no early display gamma in scene passes; `linear -> sRGB` must happen only in `FinalColorPass`.
 13. **Deterministic vegetation placement:** avoid `Math.random()` for instance generation; use seeded RNG so visual layout is stable across hot reloads.
 14. **Vegetation debug readability:** when `Pass=Vegetation`, reduce/disable heavy atmospheric attenuation in `BushesPass` debug mode so vegetation diagnostics remain visible.
+15. **Vegetation bank placement:** use `shorelineVegetationRootOnBank` on the baked slope; rebuild `BushesPass` instances when viewport aspect changes; X span from `computeVisibleBankXExtents`. Tune water clearance via `sceneConfig.ts` (`VEGETATION_GRASS_MIN_Y_ABOVE_WATER`, slope min/max).
+16. **Title glow default:** `TITLE_GLOW_ENABLED` in `sceneConfig.ts`; dev debug checkbox overrides at runtime.
 
 ## 6. Shader architecture
 

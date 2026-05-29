@@ -113,9 +113,16 @@ Stabilize and ship the current modular WebGL2 pipeline **without visual regressi
 
 ### 3.1 Vegetation quality (PoC → baseline)
 
-**Owner surface:** `BushesPass.ts`, `bushes.vert/frag`, grass atlas assets.
+**Owner surface:** `BushesPass.ts`, `bushes.vert/frag`, `sceneCamera.ts`, `sceneConfig.ts`, grass atlas assets.
 
-**Work**
+**Landed (2026-05-28):**
+
+- Full bank-slope placement (not crest-only strip).
+- Viewport-aware X coverage + resize rebuild (fullscreen/ultrawide).
+- Scroll-synced sun shimmer on grass tips.
+- `sceneConfig.ts` tuning knobs.
+
+**Work remaining:**
 
 1. Atlas: second silhouette region or variant cards (reduce single-clump sameness).
 2. Placement: refine cluster masks + central readability corridor (already started).

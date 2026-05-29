@@ -20,6 +20,8 @@ out vec2 v_uvAtlas;
 out float v_height;
 out float v_viewDist;
 out float v_worldY;
+out vec3 v_worldPos;
+out float v_sparkleSeed;
 
 void main() {
     const vec3 worldUp = vec3(0.0, 1.0, 0.0);
@@ -76,4 +78,6 @@ void main() {
     v_height = h;
     v_viewDist = viewDist;
     v_worldY = worldPos.y;
+    v_worldPos = worldPos;
+    v_sparkleSeed = a_instanceRand.y;
 }

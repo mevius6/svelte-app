@@ -100,7 +100,8 @@ FinalColorPass (single linear → sRGB transfer)
 - **Phase H (in progress) — Title glow pass:** добавлен отдельный fullscreen post-pass `TitleGlowPass` после `HeroTitlePass` (до `FinalColorPass`), glow строится по precomposed phrase MSDF (`u_titlePhraseTex`) и включается/отключается из dev debug panel.
   - Внутри pass применена схема `source -> separable blur (multi-pass) -> layered additive composite` (по мотивам GM Mini Bloom/Blur Philosophy) для устранения рваного/гребенчатого свечения.
 - **Late-sunset title glow baseline:** glow в `TitleGlowPass` остаётся sunset-driven без night-boost ветки; отражённый glow тайтла в воде отключён из-за артефактов контура/рамки.
-- **Vegetation PoC refinement:** береговая трава переведена с равномерной полосы на кластерную раскладку с просветами и центральным readability-коридором за тайтлом; в `bushes.frag` добавлен horizon/distance fade (меньше “пилы” на горизонте).
+- **Vegetation PoC (bank fill):** трава заполняет весь запечённый склон берега (toe→crest) через `shorelineVegetationRootOnBank`; плотность кластерами с мягким центральным коридором; не ниже `WATER_LEVEL + VEGETATION_GRASS_MIN_Y_ABOVE_WATER`. Покрытие по X пересчитывается при resize (`computeVisibleBankXExtents`) — без дыр на fullscreen/ultrawide. Освещение/shimmer в `bushes.frag` синхронизировано с `sunDirection(phase)` landscape.
+- **Scene runtime config:** `src/lib/scene/sceneConfig.ts` — `TITLE_GLOW_ENABLED`, vegetation slope/clearance knobs.
 - **Vegetation + fog integration:** трава теперь дополнительно туманится в `bushes.frag` (phase + distance + height), а `MorningFogPass` получил сглаживание horizon-core, чтобы убрать белую линию на переходе горизонт/берег.
 - **Debug isolation:** debug UI-типы и состояние вынесены из `LandscapeScene` в `LandscapeSceneDebugController`; dev host включает debug явно, а `LandscapePass` создаёт debug shader variants только для dev-сцены.
 - **Story timeline naming prep:** CMS-заголовки переименованы на уровне контента в `STORY_SECTIONS` (`src/lib/content/storySections.ts`); `LandscapeScene` теперь получает `StoryFrame` из `computeStoryFrame()` без legacy title aliases. `shotProgress` добавлен как будущий канал для cinematic camera.
@@ -113,7 +114,7 @@ FinalColorPass (single linear → sRGB transfer)
 
 1. **Phase D — Wave normal LOD (finish):** финальный визуальный тюнинг порогов/кривой (`rippleLod`, `eps`, `interactiveRippleMask`) через новый debug-режим `Wave LOD`; сверка по артефактам горизонта и отражениям.
 2. **Phase E — Title glyph loop isolation (finish):** довести E1 до stable baseline: проверить визуальный паритет reflection-path и при необходимости подстроить резкость/pxRange для `u_titlePhraseTex`.
-3. **Vegetation quality:** atlas silhouette variety, density clustering, layering. Текущий PoC baseline: один atlas region `grass-clump-main`, shoreline strip `90` колонок × `4` ряда × `3` карточки (seeded RNG).
+3. **Vegetation quality:** atlas silhouette variety, layering polish. Текущий PoC: `grass-clump-main`, bank-slope instancing (~3–5k cards, rebuild on resize), scroll sun shimmer — см. `sceneConfig.ts` + `BushesPass`.
 4. **Phase F — Morning fog tuning:** откалибровать вертикальный профиль/контраст и точку dissipation по арт-референсам, не ухудшая читаемость тайтла.
 5. **Title glow tuning:** откалибровать интенсивность/радиусы/палитру `TitleGlowPass` по арт-референсам, проверить паритет в режимах `Final` и `Pass=Glow`.
 6. **Phase 3 selective SDF/volumetrics:** только после стабилизации всего выше.
@@ -172,7 +173,8 @@ src/lib/
     sceneCamera.ts
     LandscapeResources.ts
     sceneFraming.ts
-    shoreProfileBaker.ts      ← NEW (Phase A)
+    shoreProfileBaker.ts
+    sceneConfig.ts              ← runtime toggles (title glow, vegetation tuning)
 
   passes/
     RipplePass.ts

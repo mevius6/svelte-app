@@ -41,7 +41,12 @@ const CAMERA_TARGET: Vec3 = { x: 0, y: 0.06, z: -0.22 }
 
 export const WATER_LEVEL = 0
 export const SHORELINE_WORLD_Z = -0.95
+/** Mirrors `SHORE_BANK_*` in landscape/common/constants.glsl */
+export const SHORE_BANK_TOE_OFFSET = 0.028
+export const SHORE_BANK_CREST_SETBACK = 0.02
+export const SHORE_BANK_FOOT_OFFSET_Y = 0
 const VEGETATION_ANCHOR_HEIGHT = 0.09
+/** Legacy crest-line anchor; prefer roots on `shorelineVegetationRootOnBank`. */
 export const VEGETATION_WORLD_Z = SHORELINE_WORLD_Z - 0.035
 
 // ══════════════════════════════════════════════════════════════════
@@ -207,12 +212,43 @@ export function shorelineHeightAtWorldX(worldX: number) {
   return WATER_LEVEL + Math.max((baselineSilhouetteAtWorldX(worldX) - 0.513) * 1.45, 0)
 }
 
-export function shorelineVegetationRootAtWorldX(worldX: number): Vec3 {
+export function shorelineWaterEdgeZAt() {
+  return SHORELINE_WORLD_Z + SHORE_BANK_TOE_OFFSET
+}
+
+export function shorelineCrestZAt() {
+  return SHORELINE_WORLD_Z - SHORE_BANK_CREST_SETBACK
+}
+
+/** CPU mirror of `shorelineBankSurfaceYAt` in landscape/domains/shore.glsl */
+export function shorelineBankSurfaceYAt(worldX: number, worldZ: number) {
+  const crestY = shorelineHeightAtWorldX(worldX)
+  const yBase = WATER_LEVEL + SHORE_BANK_FOOT_OFFSET_Y
+  const zToe = shorelineWaterEdgeZAt()
+  const zCrest = shorelineCrestZAt()
+  const slopeT = clamp((zToe - worldZ) / Math.max(zToe - zCrest, 0.001), 0, 1)
+  return mix(yBase, crestY, slopeT)
+}
+
+/**
+ * Place vegetation on the baked bank slope.
+ * @param slopeT 0 = water/toe edge, 1 = crest (top of shore profile).
+ */
+export function shorelineVegetationRootOnBank(worldX: number, slopeT: number): Vec3 {
+  const zToe = shorelineWaterEdgeZAt()
+  const zCrest = shorelineCrestZAt()
+  const t = clamp(slopeT, 0, 1)
+  const worldZ = zToe - t * (zToe - zCrest)
   return {
     x: worldX,
-    y: shorelineHeightAtWorldX(worldX) - 0.006,
-    z: VEGETATION_WORLD_Z,
+    y: shorelineBankSurfaceYAt(worldX, worldZ),
+    z: worldZ,
   }
+}
+
+/** @deprecated Use shorelineVegetationRootOnBank — crest-only placement. */
+export function shorelineVegetationRootAtWorldX(worldX: number): Vec3 {
+  return shorelineVegetationRootOnBank(worldX, 1)
 }
 
 export function computeTitleHeroState(
@@ -392,4 +428,104 @@ export function computeVegetationHorizon(
   )
 
   return clamp(projected?.y ?? 0.5, 0.08, 0.92)
+}
+
+/** Screen UV: x/y in [0,1], origin bottom-left (matches projectWorldToScreenUV). */
+export function worldRayFromScreenUV(
+  camera: SceneCameraState,
+  viewportWidth: number,
+  viewportHeight: number,
+  screenX: number,
+  screenY: number
+) {
+  const safeWidth = Math.max(viewportWidth, 1)
+  const safeHeight = Math.max(viewportHeight, 1)
+  const ndcX = screenX * 2 - 1
+  const ndcY = screenY * 2 - 1
+  const aspect = safeWidth / safeHeight
+  const tanHalfFovY = camera.tanHalfFovY
+
+  return {
+    origin: camera.position,
+    direction: normalize({
+      x:
+        camera.forward.x +
+        camera.right.x * ndcX * aspect * tanHalfFovY +
+        camera.up.x * ndcY * tanHalfFovY,
+      y:
+        camera.forward.y +
+        camera.right.y * ndcX * aspect * tanHalfFovY +
+        camera.up.y * ndcY * tanHalfFovY,
+      z:
+        camera.forward.z +
+        camera.right.z * ndcX * aspect * tanHalfFovY +
+        camera.up.z * ndcY * tanHalfFovY,
+    }),
+  }
+}
+
+export function intersectRayWithPlaneZ(origin: Vec3, direction: Vec3, planeZ: number) {
+  if (Math.abs(direction.z) < 1e-5) {
+    return null
+  }
+
+  const t = (planeZ - origin.z) / direction.z
+  if (t <= 0) {
+    return null
+  }
+
+  return add(origin, scale(direction, t))
+}
+
+/**
+ * Visible bank span along world X for the current viewport (fullscreen / ultrawide safe).
+ * Samples screen edges near the vegetation horizon against mid-bank Z.
+ */
+export function computeVisibleBankXExtents(
+  camera: SceneCameraState,
+  viewportWidth: number,
+  viewportHeight: number
+) {
+  const horizon = computeVegetationHorizon(camera, viewportWidth, viewportHeight)
+  const bankZ = (shorelineWaterEdgeZAt() + shorelineCrestZAt()) * 0.5
+  const sampleScreenX = [0.0, 0.012, 0.988, 1.0]
+  const sampleScreenY = [horizon - 0.018, horizon, horizon + 0.028]
+
+  let minX = Infinity
+  let maxX = -Infinity
+
+  for (const screenX of sampleScreenX) {
+    for (const screenY of sampleScreenY) {
+      const ray = worldRayFromScreenUV(
+        camera,
+        viewportWidth,
+        viewportHeight,
+        screenX,
+        screenY
+      )
+      const hit = intersectRayWithPlaneZ(ray.origin, ray.direction, bankZ)
+      if (!hit) {
+        continue
+      }
+
+      minX = Math.min(minX, hit.x)
+      maxX = Math.max(maxX, hit.x)
+    }
+  }
+
+  const rippleMin = RIPPLE_WORLD_RECT.x
+  const rippleMax = RIPPLE_WORLD_RECT.x + RIPPLE_WORLD_RECT.w
+  const pad = 0.08
+
+  if (!Number.isFinite(minX) || !Number.isFinite(maxX)) {
+    return {
+      minX: rippleMin + 0.04,
+      maxX: rippleMax - 0.04,
+    }
+  }
+
+  return {
+    minX: Math.min(minX, rippleMin) - pad,
+    maxX: Math.max(maxX, rippleMax) + pad,
+  }
 }

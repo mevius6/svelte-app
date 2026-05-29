@@ -1,6 +1,6 @@
 # Render Status Log
 
-Last updated: 2026-05-28 (title/reflection reveal sync + reflection strength)
+Last updated: 2026-05-28 (vegetation bank fill + viewport-aware placement)
 
 ## Current Vector
 
@@ -27,7 +27,7 @@ Last updated: 2026-05-28 (title/reflection reveal sync + reflection strength)
 | Phase 6 | Scroll phase semantics | Done | Active ordering: `0=start`, `0.2=dawn`, `0.5=day`, `1.0=late-sunset`; fog `0.18→0.36`; title + reflection + glow share `titleReveal` — **default visible from scroll 0** (`TITLE_REVEAL 0/0`); night/moon path removed. |
 | Phase 6.2 | Shader optimizations (dithering, early-exit fog, moon removal, dedup) | Done | 4.1: dithering; 4.3: early-exit; 4.2+4.4: moon removal + shoreRunupWave dedup; FPS counter added. |
 | Refactor Phases 1–5 | `LandscapeScene` dispatcher, title/foliage resources, GLSL include plugin, shader chunk split | In Progress | Debug state now lives in `LandscapeSceneDebugController`; `LandscapePass` compiles debug variants only for dev-enabled scenes; active shader entry is `src/lib/shaders/landscape/_entry.frag`; include plugin runs in dev/build. |
-| Vegetation PoC | Shoreline full-coverage grass strip | In Progress | `BushesPass` now tests dense shoreline grass (1080 cards total) with seeded placement. |
+| Vegetation PoC | Shoreline bank grass coverage | In Progress | Full baked-bank slope placement (`shorelineVegetationRootOnBank`); viewport-aware X span via `computeVisibleBankXExtents` + `BushesPass` rebuild on resize; scroll-synced sun shimmer in `bushes.frag`; tuning in `sceneConfig.ts`. |
 
 ## Phase D Visual QA
 
@@ -72,7 +72,18 @@ Mark Phase D as `Done` only if all criteria hold across all required checkpoints
 
 ## Change Log
 
-### 2026-05-28
+### 2026-05-28 (vegetation PoC)
+
+- Shore grass bank fill (PoC iteration):
+  - CPU mirror of bank slope: `shorelineBankSurfaceYAt`, `shorelineVegetationRootOnBank` in `sceneCamera.ts` (toe→crest via `slopeT`).
+  - `BushesPass`: dense clustered placement on full bank slope; uniform clump scale band; fill/micro-fill layers; edge seeds; water clearance via `VEGETATION_GRASS_MIN_Y_ABOVE_WATER`.
+  - Viewport-aware coverage: `computeVisibleBankXExtents()` samples screen edges at vegetation horizon; grass instances rebuild on `resize` when aspect changes (fixes fullscreen/ultrawide right-edge gaps).
+  - `bushes.frag`: lighting aligned with landscape `sunDirection`/`sunColor`; scroll-driven tip shimmer + translucency; `bushes.vert` passes world position for specular.
+  - Runtime toggles/tuning: `src/lib/scene/sceneConfig.ts` (`TITLE_GLOW_ENABLED`, vegetation slope/clearance constants).
+- Docs sync: `README.md`, `AGENTS.md`, `codex-system-prompt.md`, `docs/development-plan.md`.
+- Validation: `npm run check` (0 errors); `npm run build` (success).
+
+### 2026-05-28 (title reveal + reflection)
 
 - Title reveal + water reflection sync:
   - Centralized `TITLE_REVEAL_START/END` in `landscape/common/constants.glsl`; shared `titleReveal()` in `title_timing.glsl`.
@@ -82,13 +93,9 @@ Mark Phase D as `Done` only if all criteria hold across all required checkpoints
   - Synced CPU title scale window: exported `TITLE_REVEAL_*` in `sceneCamera.ts` (was 0.62–0.88).
   - Boosted reflection composite: phrase fill `0.18→0.46`, billboard `0.36→0.52`, stronger lime/sky mix via `TITLE_REFLECTION_*` constants.
   - `titleLocalMetricFromHitPos` uses `u_titleWorldSize.xy` directly (matches `hero-title.vert` CPU sizing).
-- Validation: `npm run check` (0 errors), `npm run build` (success).
-
 - Documentation / agent baseline:
-  - Synced `AGENTS.md` with active pipeline (`TitleGlowPass`, story timeline, debug controller, Phase 6 semantics, shader entry `_entry.frag`, four-way doc sync rule).
-  - Added `docs/development-plan.md` (milestones M0–M5, sprint order, per-iteration checklist).
-  - Linked plan from `README.md` and this file (`Current Vector`).
-- Validation: docs-only change (no shader/runtime diff in this entry).
+  - Synced `AGENTS.md` with active pipeline; added `docs/development-plan.md`.
+- Validation: `npm run check` (0 errors), `npm run build` (success).
 
 ### 2026-05-27
 

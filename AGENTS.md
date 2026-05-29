@@ -124,8 +124,15 @@ Full list and code patterns: `codex-system-prompt.md` §5–7.
 
 ## Scene runtime toggles
 
-- `src/lib/scene/sceneConfig.ts` — non-shader flags (e.g. `TITLE_GLOW_ENABLED` for `TitleGlowPass` in final pipeline).
+- `src/lib/scene/sceneConfig.ts` — non-shader flags: `TITLE_GLOW_ENABLED`, `VEGETATION_GRASS_MIN_Y_ABOVE_WATER`, `VEGETATION_SLOPE_T_MIN/MAX`.
 - In dev, debug panel `Title Glow` checkbox overrides `TITLE_GLOW_ENABLED` for the session.
+
+## Vegetation placement (PoC)
+
+- Roots on baked bank slope: `shorelineVegetationRootOnBank(worldX, slopeT)` in `sceneCamera.ts` (mirrors `shorelineBankSurfaceYAt` in `shore.glsl`).
+- `BushesPass` rebuilds instances on viewport resize when aspect changes; X span from `computeVisibleBankXExtents()`.
+- Seeded RNG only (`createSeededRng`); no `Math.random()` for instances.
+- Shader lighting uses landscape `sunDirection`/`sunColor` for scroll-synced grass shimmer (`bushes.frag`).
 
 ## Active work (see `docs/development-plan.md`)
 
