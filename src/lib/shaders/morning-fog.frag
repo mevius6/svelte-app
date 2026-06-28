@@ -8,11 +8,10 @@ uniform float u_debugDensity;
 
 out vec4 fragColor;
 
-// AI: POC tuning notes (Phase 6):
+// NOTE: POC tuning notes (Phase 6):
 // - Scroll phase: 0.0=start, 0.2=dawn, 0.5=day, 1.0=late-sunset
 // - Fog appears at dawn (phase 0.18) and dissipates by day (0.36)
 // - This pass is a secondary artistic wisp layer; keep density conservative
-// - Physical/base dawn fog now lives in landscape.frag (analytic height fog)
 // - For denser dawn mood: lower FOG_DISSIPATE_START and/or increase FOG_DENSITY
 const float FOG_DISSIPATE_START = 0.18;
 const float FOG_DISSIPATE_END = 0.36;
@@ -69,8 +68,7 @@ void main() {
     }
 
     float horizonBand = exp(-pow((uv.y - FOG_HORIZON_Y) / FOG_HORIZON_WIDTH, 2.0));
-    // AI: suppress narrow bright ridge exactly at horizon center, while keeping
-    // broad atmospheric band around it.
+    // NOTE: suppress narrow bright ridge exactly at horizon center, while keeping broad atmospheric band around it.
     float horizonCore = exp(-pow((uv.y - FOG_HORIZON_Y) / (FOG_HORIZON_WIDTH * 0.34), 2.0));
     horizonBand = max(horizonBand - horizonCore * 0.30, 0.0);
     float lowLayer = exp(-uv.y * FOG_LOW_FALLOFF);

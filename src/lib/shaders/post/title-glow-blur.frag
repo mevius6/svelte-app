@@ -13,7 +13,7 @@ void main() {
     vec2 uv = gl_FragCoord.xy / max(u_resolution, vec2(1.0));
     vec2 stepVec = u_direction * u_texelSize * u_radius;
 
-    // AI: separable 9-tap Gaussian approximation (Blur Philosophy / Bloom layering).
+    // NOTE: separable 9-tap Gaussian approximation (Blur Philosophy / Bloom layering).
     vec4 sum = texture(u_sourceTex, uv) * 0.2270270270;
     sum += texture(u_sourceTex, uv + stepVec * 1.0) * 0.1945945946;
     sum += texture(u_sourceTex, uv - stepVec * 1.0) * 0.1945945946;

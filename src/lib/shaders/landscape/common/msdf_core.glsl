@@ -1,3 +1,7 @@
+// https://github.com/Blatko1/awesome-msdf
+// https://deepwiki.com/ficool2/sdk_screenspace_shaders/7.7-signed-distance-field-rendering
+// https://mini.gmshaders.com/p/gm-shaders-mini-sdf-tricks
+
 // Берём медиану из трёх каналов (классический MSDF)
 float msdfMedian(float r, float g, float b) {
     return max(min(r, g), min(max(r, g), b));
@@ -19,7 +23,7 @@ float msdfScreenPxRange(float atlasPxRange, vec2 atlasTexSize, vec2 uv) {
     return max(pxRange, 1.0);
 }
 
-// Coverage с параметрами толщины/softness/gamma
+// Покрытие с параметрами толщины/мягкости/гамма-коррекции
 float msdfCoverage(float signedDistance,
                    float pxRange,
                    float strokeOffset,

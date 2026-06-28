@@ -20,14 +20,15 @@ MARK: Scene I. Intro
   style:--after-filter='brightness(1) sepia(25%)'
 > -->
 <div class="wrapper">
-  <div
+  <!-- <div
     class="content inset-start zi-20 flex items-center justify-center after-overlay--tile"
     style:--after='var(--noise-subtle)'
     style:--after-alpha=.40
     style:--after-tile=250
     style:--after-blend='screen'
     style:--after-filter='brightness(1) sepia(50%)'
-  >
+  > -->
+  <div class="content inset-start zi-20 flex items-center justify-center">
     <!-- WebGL Environment Shader -->
     <LandscapeShader />
 </div>

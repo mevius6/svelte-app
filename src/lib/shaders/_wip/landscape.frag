@@ -20,7 +20,7 @@ uniform vec4      u_titleTexRect;
 
 uniform sampler2D u_rippleTex;
 uniform float     u_rippleTexel;
-// AI: Phase A — 1D shore profile (512×1 RGBA32F). Baked in LandscapeResources.
+// NOTE: Phase A — 1D shore profile (512×1 RGBA32F). Baked in LandscapeResources.
 // R=baselineSilhouette, G=bankNoise, B=shelfNoiseSrc (offset -0.5 in shader).
 uniform sampler2D u_shoreProfileTex;
 uniform vec3      u_cameraPos;
@@ -33,7 +33,7 @@ uniform float     u_waterLevel;
 uniform float     u_shorePlaneZ;
 
 #define PI 3.14159265359
-// AI: exact display target for title ink:
+// NOTE: exact display target for title ink:
 // DayGlo NightGlo NG200 reference -> #c9f08a (sRGB 201,240,138).
 // Scene is composed in linear space; this constant is pre-converted linear.
 const vec3 TITLE_DAYGLO_LINEAR = vec3(0.584078418, 0.871367119, 0.254152094);
@@ -41,18 +41,18 @@ const vec3 TITLE_GLOW_AMBER_LINEAR = vec3(0.86, 0.50, 0.20);
 const vec3 MOONLIGHT_LINEAR = vec3(0.58, 0.66, 0.92);
 
 float nightPhase(float phase01) {
-    // AI: keep late-sunset palette intact; enter night only in the final scroll tail.
+    // NOTE: keep late-sunset palette intact; enter night only in the final scroll tail.
     return smoothstep(0.92, 1.0, clamp(phase01, 0.0, 1.0));
 }
 
 float moonPhase(float phase01) {
-    // AI: moon appears a touch later than generic night grade and ramps more gently.
+    // NOTE: moon appears a touch later than generic night grade and ramps more gently.
     float gate = smoothstep(0.945, 1.0, clamp(phase01, 0.0, 1.0));
     return smoothstep(0.0, 1.0, gate);
 }
 
 vec3 applyNightGrade(vec3 color, float nightMask, vec3 tint) {
-    // AI: compact night-grade helper to avoid sandy/warm carry-over after sunset.
+    // NOTE: compact night-grade helper to avoid sandy/warm carry-over after sunset.
     vec3 darkened = color * vec3(0.52, 0.56, 0.64);
     vec3 cooled = darkened + tint * 0.08;
     return mix(color, cooled, nightMask);
@@ -75,7 +75,7 @@ vec3 skyColor(float y, float phase01)
 vec3 tonemap(vec3 x)
 {
     const float a=2.51, b=0.03, c=2.43, d=0.59, e=0.14;
-    // AI: keep tone mapping in linear space; final display transfer happens in FinalColorPass.
+    // NOTE: keep tone mapping in linear space; final display transfer happens in FinalColorPass.
     return clamp((x*(a*x+b))/(x*(c*x+d)+e), 0.0, 1.0);
 }
 
@@ -100,7 +100,7 @@ vec3 sunDirection(float phase01)
 }
 
 vec3 moonDirection(float phase01) {
-    // AI: night companion light direction for water specular track.
+    // NOTE: night companion light direction for water specular track.
     // Keep moon closer to view-forward so it is readable in the current camera framing.
     float azimuth = mix(0.24, -0.10, clamp(phase01, 0.0, 1.0));
     float elevation = mix(0.22, 0.34, nightPhase(phase01));
@@ -113,7 +113,7 @@ vec3 moonDirection(float phase01) {
 
 vec3 moonColor(float phase01) {
     float moonMask = moonPhase(phase01);
-    // AI: cooler dusk moon -> cleaner moonlight tint in full-night tail.
+    // NOTE: cooler dusk moon -> cleaner moonlight tint in full-night tail.
     return mix(vec3(0.48, 0.57, 0.82), vec3(0.66, 0.74, 0.98), moonMask);
 }
 
@@ -123,7 +123,7 @@ vec3 moonColor(float phase01) {
 // Ref: https://forwardscattering.org/post/72
 // Ref: https://www.scratchapixel.com/lessons/3d-basic-rendering/volume-rendering-for-developers/intro-volume-rendering.html
 // Ref: https://iquilezles.org/articles/fog/
-// AI: Important nuance (IQ non-constant density section):
+// NOTE: Important nuance (IQ non-constant density section):
 // The integrated optical depth (tau) must be exponentiated via transmittance.
 // Use fogAmount = 1 - exp(-tau), not fogAmount = tau.
 const float MORNING_FOG_DISSIPATE_START = 0.38;
@@ -229,12 +229,12 @@ float cloudBaseFbm(vec2 p) {
 
 float cloudDetailFbm(vec2 p) {
     float v=0.0,a=0.5; vec2 s=vec2(100.0);
-    // AI: keep the primary cloud body at 4 octaves, but trim the secondary detail layer to 3 where the visual impact is smaller.
+    // NOTE: keep the primary cloud body at 4 octaves, but trim the secondary detail layer to 3 where the visual impact is smaller.
     for(int i=0;i<3;i++){v+=a*vnoise(p);p=p*2.1+s;a*=0.48;}
     return v;
 }
 
-// AI: Phase A+B cloudDensity:
+// NOTE: Phase A+B cloudDensity:
 //   detailLOD=1.0 for direct sky, 0.0 for water reflection (saves 3 vnoise/pix).
 //   solarDrift: clouds follow sun across day — phase01*0.42 ≈ 1/8 tile per cycle.
 // Ref: Book of Shaders ch.13 fBM, IQ "Outdoors Lighting"
@@ -274,7 +274,7 @@ vec2 microNormalDelta(vec2 p, float t, float depthMask) {
 // Ref: IQ "Terrain" — envelope * fbm pattern; "Painting a Landscape with Maths" https://iquilezles.org/articles/terrainmarching/
 // Ref: GPU Gems 3 ch.1 "Generating Complex Procedural Terrains"
 
-// AI: Phase A — shoreFbm body removed; replaced by u_shoreProfileTex texture lookup.
+// NOTE: Phase A — shoreFbm body removed; replaced by u_shoreProfileTex texture lookup.
 // CPU mirror: src/lib/scene/shoreProfileBaker.ts
 
 // ----------------------------------------------------
@@ -290,7 +290,7 @@ vec2 microNormalDelta(vec2 p, float t, float depthMask) {
 // seed=55.5, 88.2 — независимы от cloud (cloudFbm) и shore (91.7, 71.3, 83.1).
 // [0.518 .. 0.586] UV: гарантирует тёмную полосу над горизонтом.
 float baselineSilhouette(float x) {
-    // AI: Phase A — 2×5-octave shoreFbm (10 vnoise calls) → 1 texture fetch.
+    // NOTE: Phase A — 2×5-octave shoreFbm (10 vnoise calls) → 1 texture fetch.
     // x is [0..1] normalised worldX → direct UV.  R channel: [~0.518..0.586].
     return texture(u_shoreProfileTex, vec2(clamp(x, 0.0, 1.0), 0.5)).r;
 }
@@ -310,7 +310,7 @@ float wave(vec2 p, vec2 dir, float freq, float speed, float t)
 const vec2 DIR_L1=vec2( 0.9806, 0.1961), DIR_L2=vec2(-0.5735, 0.8192);
 const vec2 DIR_M1=vec2( 0.5145, 0.8575), DIR_M2=vec2(-0.9285, 0.3714), DIR_M3=vec2( 0.5300,-0.8480);
 const vec2 DIR_R1=vec2( 0.8000, 0.6000), DIR_R2=vec2(-0.2873, 0.9578), DIR_R3=vec2( 0.1961,-0.9806), DIR_R4=vec2(-0.9479, 0.3159);
-// AI: Phase D tuning anchors (single place for wave LOD controls).
+// NOTE: Phase D tuning anchors (single place for wave LOD controls).
 const float WAVE_LOD_NEAR_DIST = 7.0;
 const float WAVE_LOD_FAR_DIST = 26.0;
 const float RIPPLE_FADE_START = 0.58;
@@ -337,7 +337,7 @@ float waveFieldWithMasks(
                    sin(p.y*0.6+t*0.13)*0.12+sin(p.x*0.4+t*0.09)*0.08);
     vec2 pw=p+warp;
     float baseWaves = largeWaves(pw,t,largeMask)+mediumWaves(pw,t,mediumMask);
-    // AI: Phase D — skip high-frequency ripple trig when rippleMask is effectively zero in far field.
+    // NOTE: Phase D — skip high-frequency ripple trig when rippleMask is effectively zero in far field.
     if (rippleMask <= 0.0001) {
         return baseWaves;
     }
@@ -352,12 +352,12 @@ vec3 waveNormal(
     float rippleMask,
     float viewDistance
 ) {
-    // AI: Phase D — scale finite-difference step with distance to stabilize far-field normals
+    // NOTE: Phase D — scale finite-difference step with distance to stabilize far-field normals
     // and reduce high-frequency normal jitter on the horizon.
     float distanceLod = smoothstep(WAVE_LOD_NEAR_DIST, WAVE_LOD_FAR_DIST, viewDistance);
-    // AI: slightly widen finite-diff step in the far field to reduce tiny derivative noise.
+    // NOTE: slightly widen finite-diff step in the far field to reduce tiny derivative noise.
     float eps = mix(WAVENORMAL_EPS_NEAR, WAVENORMAL_EPS_FAR, distanceLod);
-    // AI: reuse the same depth attenuation across the four finite-difference wave samples; depth is constant for this fragment.
+    // NOTE: reuse the same depth attenuation across the four finite-difference wave samples; depth is constant for this fragment.
     float waveXp = waveFieldWithMasks(p + vec2(eps, 0.0), t, largeMask, mediumMask, rippleMask);
     float waveXn = waveFieldWithMasks(p - vec2(eps, 0.0), t, largeMask, mediumMask, rippleMask);
     float waveYp = waveFieldWithMasks(p + vec2(0.0, eps), t, largeMask, mediumMask, rippleMask);
@@ -409,7 +409,7 @@ float sampleTitlePhraseAlpha(vec2 localMetric) {
     }
     vec3 msdf = texture(u_titlePhraseTex, phraseUv).rgb;
     float signedDistance = median3(msdf) - 0.5;
-    // AI: reflection hit-test must not depend on fwidth(phraseUv):
+    // NOTE: reflection hit-test must not depend on fwidth(phraseUv):
     // grazing-angle derivatives are unstable and create comb-like early-out artifacts.
     const float REFL_MSDF_HIT_SOFT_RADIUS = 2.8;
     float screenDistance = signedDistance * REFL_MSDF_HIT_SOFT_RADIUS;
@@ -430,7 +430,7 @@ void sampleTitlePhraseReflectionCoverage(vec2 localMetric, out float fillAlpha, 
     vec3 msdf = texture(u_titlePhraseTex, phraseUv).rgb;
     float signedDistance = median3(msdf) - 0.5;
 
-    // AI: in reflection contexts fwidth(phraseUv) is unstable:
+    // NOTE: in reflection contexts fwidth(phraseUv) is unstable:
     // at grazing angles phrase UV changes rapidly -> derivatives inflate
     // -> pxRange collapses -> MSDF turns into a hard step() -> comb-like aliasing.
     // Fixed soft radius gives stable smoothing without reflection artifacts.
@@ -438,14 +438,14 @@ void sampleTitlePhraseReflectionCoverage(vec2 localMetric, out float fillAlpha, 
     float screenDistance = signedDistance * REFL_MSDF_SOFT_RADIUS;
     fillAlpha = clamp(screenDistance + 0.5, 0.0, 1.0);
 
-    // AI: wider UV edge fade removes thin phrase-rect frame.
+    // NOTE: wider UV edge fade removes thin phrase-rect frame.
     float edgeUv = min(min(phraseUv.x, phraseUv.y), min(1.0 - phraseUv.x, 1.0 - phraseUv.y));
     float uvEdgeFade = smoothstep(0.025, 0.090, edgeUv);
 
     float contourBand = smoothstep(0.85, 0.06, abs(screenDistance));
     float interiorSuppress = 1.0 - smoothstep(0.20, 0.82, fillAlpha);
 
-    // AI: glyphProximity suppresses halo in background space between letters
+    // NOTE: glyphProximity suppresses halo in background space between letters
     // inside phrase-rect. Without it contourBand ~= 1.0 even where no glyph exists
     // -> rectangular glow field between symbols.
     float glyphProximity = smoothstep(-0.38, 0.0, signedDistance);
@@ -493,7 +493,7 @@ vec2 skyUvFromDirection(vec3 dir) {
     return vec2(dome.x * 0.18 + 0.5, y);
 }
 
-// AI: Phase B — cloudDetail=1.0 for direct sky, 0.0 for reflection (saves 3 vnoise/pix).
+// NOTE: Phase B — cloudDetail=1.0 for direct sky, 0.0 for reflection (saves 3 vnoise/pix).
 vec3 shadeSkyDirection(vec3 dir, float phase01, vec3 sunCol, vec3 sunDir, float cloudDetail) {
     vec2 skyUv = skyUvFromDirection(dir);
     float skyY = skyUv.y;
@@ -511,7 +511,7 @@ vec3 shadeSkyDirection(vec3 dir, float phase01, vec3 sunCol, vec3 sunDir, float 
     vec3 moonCol = moonColor(phase01);
     float moonAmount = max(dot(dir, moonDir), 0.0);
     float moonAA = max(fwidth(moonAmount), 1e-5);
-    // AI: explicit moon disk + halo so night sky reads as intentional, not just darkened sunset.
+    // NOTE: explicit moon disk + halo so night sky reads as intentional, not just darkened sunset.
     float moonDisk = smoothstep(0.99860 - moonAA * 2.2, 0.99860 + moonAA * 2.2, moonAmount);
     float moonHalo = pow(moonAmount, 48.0);
     float moonAura = pow(moonAmount, 8.0);
@@ -632,7 +632,7 @@ float titleAboveWaterAlpha(vec3 hitPos, float alpha) {
 }
 
 vec3 titleHeroColor(vec3 rayDir, vec3 sunCol, vec3 sunDir) {
-    // AI: keep direct title ink locked to target display hue (#c9f08a).
+    // NOTE: keep direct title ink locked to target display hue (#c9f08a).
     return TITLE_DAYGLO_LINEAR;
 }
 
@@ -645,7 +645,7 @@ float titleReveal(float phase01) {
 }
 
 float titleReflectionReveal(float phase01) {
-    // AI: keep reflection emergence a touch later than direct title.
+    // NOTE: keep reflection emergence a touch later than direct title.
     return smoothstep(0.67, 0.93, clamp(phase01, 0.0, 1.0));
 }
 
@@ -683,14 +683,14 @@ float shorelineWaterEdgeZ() {
 float underwaterShelfHeightAt(float worldX, float worldZ) {
     float shelfDistance = max(worldZ - shorelineWaterEdgeZ(), 0.0);
     float shelfT = smoothstep(0.0, 0.78, shelfDistance);
-    // AI: Phase A — B channel; raw [0..~0.94], offset -0.5 applied here as original.
+    // NOTE: Phase A — B channel; raw [0..~0.94], offset -0.5 applied here as original.
     float shelfNoise = (texture(u_shoreProfileTex,
         vec2(clamp(worldX * 0.16 + 0.5, 0.0, 1.0), 0.5)).b - 0.5) * 0.006 * (1.0 - shelfT);
     return min(u_waterLevel - 0.006, u_waterLevel - mix(0.014, 0.072, shelfT) + shelfNoise);
 }
 
 float shorelineTransitionSdf(vec2 p) {
-    // AI: keep shoreline polishing local — use a tiny SDF union for the wet bank lip + shallow shelf instead of turning the whole pond into an SDF scene.
+    // NOTE: keep shoreline polishing local — use a tiny SDF union for the wet bank lip + shallow shelf instead of turning the whole pond into an SDF scene.
     float shallowShelf = sdBox(p - vec2(0.11, -0.022), vec2(0.14, 0.026));
     float wetLip = sdBox(p - vec2(-0.004, 0.012), vec2(0.040, 0.016));
     return smin(shallowShelf, wetLip, 0.045);
@@ -710,7 +710,7 @@ float shorelineBankSurfaceYAt(float worldX, float worldZ) {
 }
 
 vec3 bankMaterialBase(float worldX, float hNorm, float phase) {
-    // AI: Phase A — G channel of shore profile texture (same UV mapping as R).
+    // NOTE: Phase A — G channel of shore profile texture (same UV mapping as R).
     float bankNoise = texture(u_shoreProfileTex,
         vec2(clamp(worldX * 0.16 + 0.5, 0.0, 1.0), 0.5)).g;
     float crestMask = smoothstep(0.58, 0.94, hNorm);
@@ -740,7 +740,7 @@ bool intersectShore(vec3 ro, vec3 rd, out float t, out vec3 pos, out float heigh
     float sampleX = ro.x + rd.x * tProbe;
     height = shorelineHeightAt(sampleX);
 
-    // AI: solve against a shallow embankment profile rather than a vertical wall, so the opposite bank lands in the pond with a narrower, more natural band.
+    // NOTE: solve against a shallow embankment profile rather than a vertical wall, so the opposite bank lands in the pond with a narrower, more natural band.
     for (int i = 0; i < 2; i++) {
         float slope = (zCrest - zToe) / max(height - yBase, 0.012);
         float denom = rd.z - rd.y * slope;
@@ -783,7 +783,7 @@ void main()
     vec2 screenUV = gl_FragCoord.xy / u_resolution.xy;
     vec3 ro = u_cameraPos;
     vec3 rd = makeCameraRay(screenUV);
-    // AI: Phase 1 keeps the fullscreen pass, but moves the landscape into orbital camera/world-ray space so depth no longer depends only on a screen-space horizon split.
+    // NOTE: Phase 1 keeps the fullscreen pass, but moves the landscape into orbital camera/world-ray space so depth no longer depends only on a screen-space horizon split.
     float phase = clamp(u_scroll, 0.0, 1.0);
     float nightMask = nightPhase(phase);
     float moonMask = moonPhase(phase);
@@ -874,7 +874,7 @@ void main()
         vec3 bankShadow = mix(vec3(0.060, 0.050, 0.052), vec3(0.070, 0.048, 0.046), phase);
         vec3 shallowShelfTint = mix(vec3(0.40, 0.31, 0.25), vec3(0.48, 0.28, 0.20), phase);
         vec3 wetEdgeTint = mix(vec3(0.18, 0.13, 0.11), vec3(0.20, 0.11, 0.09), phase);
-        // AI: night-grade shoreline contact palette so waterline doesn't read as bright dry sand.
+        // NOTE: night-grade shoreline contact palette so waterline doesn't read as bright dry sand.
         bankShadow = applyNightGrade(bankShadow, nightMask, vec3(0.04, 0.07, 0.13));
         shallowShelfTint = applyNightGrade(shallowShelfTint, nightMask, vec3(0.03, 0.06, 0.12));
         wetEdgeTint = applyNightGrade(wetEdgeTint, nightMask, vec3(0.04, 0.07, 0.14));
@@ -964,7 +964,7 @@ void main()
     // WATER
     // ----------------------------------------------------
     float t = u_time;
-    // AI: derive water detail from actual camera distance + grazing angle; reusing shore/ripple-rect Z here flattens the whole far field into a fake pastel wall.
+    // NOTE: derive water detail from actual camera distance + grazing angle; reusing shore/ripple-rect Z here flattens the whole far field into a fake pastel wall.
     float viewDistance = tWater;
     float farField = smoothstep(WAVE_LOD_NEAR_DIST, WAVE_LOD_FAR_DIST, viewDistance);
     float horizonGrazing = 1.0 - smoothstep(0.006, 0.05, abs(rd.y));
@@ -977,16 +977,16 @@ void main()
     float shallowWaveDamping = 1.0 - smoothstep(0.006, 0.050, staticWaterDepth);
     float largeWaveMask  = mix(1.0, 0.68, farField) * (1.0 - shallowWaveDamping * 0.42);
     float mediumWaveMask = mix(1.0, 0.44, farField) * (1.0 - shallowWaveDamping * 0.24);
-    // AI: Phase D tuning — use a wider transition to avoid a visible mid-distance ripple lane.
+    // NOTE: Phase D tuning — use a wider transition to avoid a visible mid-distance ripple lane.
     float rippleLod = 1.0 - smoothstep(RIPPLE_FADE_START, RIPPLE_FADE_END, farField);
     float rippleWaveMask = mix(1.0, 0.18, farField) * (1.0 - shallowWaveDamping * 0.08) * rippleLod;
-    // AI: decouple interactive ripple-normal LOD from base wave ripples for independent tuning.
+    // NOTE: decouple interactive ripple-normal LOD from base wave ripples for independent tuning.
     float interactiveRippleMask = rippleLod * (1.0 - shallowWaveDamping * 0.06);
     float microNoiseMask = mix(1.0, 0.22, farField) * (1.0 - shallowWaveDamping * 0.22);
     vec2 p = waterPos.xz * 1.1;
     float waveHeight = waveFieldWithMasks(p, t, largeWaveMask, mediumWaveMask, rippleWaveMask);
 
-    // AI: Phase D debug overlay for LOD tuning.
+    // NOTE: Phase D debug overlay for LOD tuning.
     // R: farField, G: rippleLod, B: interactiveRippleMask
 #ifdef DEBUG_WAVE_LOD
     fragColor = vec4(farField, rippleLod, interactiveRippleMask, 1.0);
@@ -1010,7 +1010,7 @@ void main()
                 vec2 rippleGrad = vec2(rxP - rxN, ryP - ryN);
                 vec2 rippleEdge = min(rUV, 1.0 - rUV);
                 float rippleFade = smoothstep(0.0, 0.065, min(rippleEdge.x, rippleEdge.y));
-                // AI: keep ripple perturbation in ripple-texture space, but soften the world-space coupling so interaction reads as water relief instead of crater-like reflection breaks.
+                // NOTE: keep ripple perturbation in ripple-texture space, but soften the world-space coupling so interaction reads as water relief instead of crater-like reflection breaks.
                 n = normalize(
                     n + vec3(-rippleGrad.x * 2.2, 0.0, -rippleGrad.y * 2.2) * rippleFade * rippleNormalLod
                 );
@@ -1063,7 +1063,7 @@ void main()
     }
 
     {
-        // AI: base blend 0.30 smooths nTitle even on calm water.
+        // NOTE: base blend 0.30 smooths nTitle even on calm water.
         // Without base: flat water -> rippleStrength ~= 0 -> titleNormBlend ~= 0 ->
         // nTitle = n with full wave normals, so reflection ray scans MSDF at angles
         // that produce comb-like artifacts.
@@ -1073,7 +1073,7 @@ void main()
         vec3 reflDirTitle = normalize(reflect(-viewDir, nTitle));
         reflDirTitle.y = max(reflDirTitle.y, 0.001);
 
-        // AI: reflection uses same DayGlo base hue and blends with sky for water coherence.
+        // NOTE: reflection uses same DayGlo base hue and blends with sky for water coherence.
         vec3 titleLime = TITLE_DAYGLO_LINEAR;
 
         if (u_useTitleBillboard > 0.5) {
@@ -1097,7 +1097,7 @@ void main()
                     float distFade = exp(-tTitleRefl * 0.28);
                     vec3 titleReflCol = titleLime * 0.55 + skyRefl * 0.20;
                     skyRefl = compositeTitle(skyRefl, titleReflCol, titleReflAlpha * 0.36 * distFade);
-                    // AI: reflected title glow disabled to avoid contour/halo artifacts in water reflection.
+                    // NOTE: reflected title glow disabled to avoid contour/halo artifacts in water reflection.
                 }
             }
         } else if (u_useTitlePhraseReflection > 0.5) {
@@ -1125,7 +1125,7 @@ void main()
                     vec3 titleReflCol = titleLime * 0.55 + skyRefl * 0.20;
                     skyRefl = compositeTitle(skyRefl, titleReflCol,
                                             titleReflFill * 0.18 * distFade * rippleAtten);
-                    // AI: reflected title glow disabled to avoid contour/halo artifacts in water reflection.
+                    // NOTE: reflected title glow disabled to avoid contour/halo artifacts in water reflection.
                 }
             }
         }
@@ -1143,7 +1143,7 @@ void main()
     vec3 moonDir = moonDirection(phase);
     vec3 moonCol = moonColor(phase);
     float moonMirror = max(dot(reflDir, moonDir), 0.0);
-    // AI: add a wider low-frequency lobe for a longer atmospheric moon path.
+    // NOTE: add a wider low-frequency lobe for a longer atmospheric moon path.
     vec3 moonLight = moonCol * (
         pow(moonMirror, 180.0) * 1.34 +
         pow(moonMirror, 34.0) * 0.38 +
@@ -1156,7 +1156,7 @@ void main()
     vec3 waterCol  = mix(waterDeep, skyRefl + sunLight + moonLight, fresnel);
     vec3 shallowShelfTint = mix(vec3(0.40, 0.31, 0.25), vec3(0.48, 0.28, 0.20), phase);
     vec3 wetEdgeTint = mix(vec3(0.18, 0.13, 0.11), vec3(0.20, 0.11, 0.09), phase);
-    // AI: same night-grade for underwater shelf/edge to keep shoreline-water continuity.
+    // NOTE: same night-grade for underwater shelf/edge to keep shoreline-water continuity.
     shallowShelfTint = applyNightGrade(shallowShelfTint, nightMask, vec3(0.03, 0.06, 0.12));
     wetEdgeTint = applyNightGrade(wetEdgeTint, nightMask, vec3(0.04, 0.07, 0.14));
     vec3 sharedContactCol = mix(

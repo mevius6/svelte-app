@@ -24,7 +24,7 @@ void main()
     float w = texture(u_state, uv - vec2(u_texelSize.x, 0.0          )).r;
 
     // Точный дискретный wave solver (вместо упрощённого (n+s+e+w)*0.5 - prev):
-    //   Laplacian = n + s + e + w - 4·curr   (конечно-разностная аппроксимация ∇²h)
+    //   Laplacian = n + s + e + w - 4·curr (конечно-разностная аппроксимация ∇²h)
     //   next = 2·curr - prev + c²·Laplacian
     // При c²=0.5 (Courant = 1/√2 < 1 → численно стабилен):
     //   next = curr + (curr - prev) + Laplacian * 0.5

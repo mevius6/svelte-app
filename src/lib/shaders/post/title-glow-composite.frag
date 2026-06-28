@@ -14,7 +14,7 @@ void main() {
     vec2 uv = gl_FragCoord.xy / max(u_resolution, vec2(1.0));
     vec2 glowTexel = vec2(1.0) / max(u_glowResolution, vec2(1.0));
 
-    // AI: extra wide taps emulate bloom layering richness without introducing boxy artifacts.
+    // NOTE: extra wide taps emulate bloom layering richness without introducing boxy artifacts.
     vec4 blurA = texture(u_glowTex, uv);
     vec4 blurB =
         texture(u_glowTex, uv + vec2(glowTexel.x * 2.5, 0.0)) +

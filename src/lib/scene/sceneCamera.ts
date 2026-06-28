@@ -10,7 +10,7 @@ export type SceneCameraState = {
   right: Vec3
   up: Vec3
   fovY: number
-  // AI: Phase C — cached to avoid Math.tan() in every render pass.
+  // NOTE: Phase C — cached to avoid Math.tan() in every render pass.
   tanHalfFovY: number
 }
 
@@ -49,31 +49,14 @@ const VEGETATION_ANCHOR_HEIGHT = 0.09
 /** Legacy crest-line anchor; prefer roots on `shorelineVegetationRootOnBank`. */
 export const VEGETATION_WORLD_Z = SHORELINE_WORLD_Z - 0.035
 
-// ══════════════════════════════════════════════════════════════════
-// PATCH: Retune camera and title hero framing for a more compact, city-pond read of the scene.
-//
-// Fix 1 — move title into the middle of the pond (not near the shore).
-// Fix 2 — remove scroll-driven baseLift animation.
-//
-// Geometry context:
-//   Camera z at scroll=0: ≈ +2.69
-//   Shore z (SHORELINE_WORLD_Z): -0.95
-//   Pond midpoint: (2.69 + (-0.95)) / 2 ≈ +0.87
-//   → TITLE_WORLD_Z_NEAR = +0.35 places title in clear water, well in front of shore
-//
-// Width is scaled proportionally to maintain apparent screen size:
-//   old: width=2.44 at depth=3.27 (2.69-(-0.58))
-//   new: width=1.75 at depth=2.34 (2.69-0.35) → same angular size
-// ══════════════════════════════════════════════════════════════════
-
-// AI: title anchor — middle of the pond, between camera and shore.
+// NOTE: title anchor — middle of the pond, between camera and shore.
 // Camera z≈+2.69, shore z=-0.95 → z=+0.35 sits clearly over open water.
 // Widths scaled to preserve apparent screen size at the new depth.
 const TITLE_WORLD_Z_NEAR = 0.35
 const TITLE_WORLD_Z_FAR = -0.20
 const TITLE_WORLD_WIDTH_NEAR = 1.75
 const TITLE_WORLD_WIDTH_FAR = 2.10
-// AI: title reveal window — keep in sync with TITLE_REVEAL_* in landscape/common/constants.glsl.
+// NOTE: title reveal window — keep in sync with TITLE_REVEAL_* in landscape/common/constants.glsl.
 // Default END <= START: full size from scroll 0. Late-sunset: e.g. 0.78 / 0.94.
 export const TITLE_REVEAL_START = 0.0
 export const TITLE_REVEAL_END = 0.0
@@ -86,7 +69,7 @@ export const RIPPLE_WORLD_RECT: RippleWorldRect = {
   depth: 3.15,
 }
 
-// AI: Phase 2 — named anchor for the world-space title billboard.
+// NOTE: Phase 2 — named anchor for the world-space title billboard.
 // Describes where the title billboard sits at scroll=0:
 //   z: between camera and shoreline, over open water near pond center
 //   y: just above water level (actual center y also depends on text aspect)
@@ -290,12 +273,12 @@ export function computeTitleHeroState(
   };
 }
 
-// AI: Phase 1.5 retunes the orbital framing from open-water scale toward a compact city-pond read: nearer opposite bank, lower eye height, less "sea horizon".
+// NOTE: Phase 1.5 retunes the orbital framing from open-water scale toward a compact city-pond read: nearer opposite bank, lower eye height, less "sea horizon".
 export function computeSceneCamera(
   width: number,
   height: number
 ): SceneCameraState {
-  // AI: time-of-day scroll does not affect camera orbit.
+  // NOTE: time-of-day scroll does not affect camera orbit.
   // Camera is fixed at a static angle looking over the pond.
   // Small constants chosen so: horizon sits at ~45% screen height,
   // title is fully over water, shore visible behind it.
@@ -318,7 +301,7 @@ export function computeSceneCamera(
   const up = normalize(cross(safeRight, forward))
 
   const fovY = mix(46, 49, clamp(aspect - 1, 0, 1)) * DEG_TO_RAD
-  // AI: Phase C — tanHalfFovY cached here so passes don't call Math.tan() each frame.
+  // NOTE: Phase C — tanHalfFovY cached here so passes don't call Math.tan() each frame.
   const tanHalfFovY = Math.tan(fovY * 0.5)
 
   return {
