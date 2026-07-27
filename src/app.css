@@ -47,13 +47,13 @@
 }
 
 /* https://djr.com/fern */
-@font-face {
+/* @font-face {
   font-family: "fern";
   src: url("./fonts/FernOrnaments-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
-}
+} */
 
 /* https://djr.com/input */
 @font-face {

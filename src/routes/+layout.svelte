@@ -1,43 +1,43 @@
 <script lang="ts">
-  import { onNavigate } from '$app/navigation';
+  // import { onNavigate } from '$app/navigation';
+
   import '../app.css';
   import favicon from '$lib/assets/favicon.svg';
-  import Navigation from '$lib/components/Navigation.svelte';
-  import { runViewTransition } from '$lib';
+
+  // import Navigation from '$lib/components/Navigation.svelte';
+  // import { runViewTransition } from '$lib';
 
   let { children } = $props();
 
-  // const BRAND_NAME_RU = 'Чистые пруды';
-  // const YYYY = new Date(Date.now()).getFullYear();
-  const HOME_ROUTE_ID = '/';
-  const ARTICLES_ROUTE_PREFIX = '/articles';
+  const HOME_ROUTE = '/'
+  // const PAGES_ROUTE_PREFIX = '/episodes';
 
-  const isArticlesRoute = (routeId: string | null | undefined): routeId is string =>
-    typeof routeId === 'string' && routeId.startsWith(ARTICLES_ROUTE_PREFIX);
+  // const isPagesRoute = (routeId: string | null | undefined): routeId is string =>
+  //   typeof routeId === 'string' && routeId.startsWith(PAGES_ROUTE_PREFIX);
 
-  onNavigate((navigation) => {
-    if (navigation.willUnload) return;
+  // onNavigate((navigation) => {
+  //   if (navigation.willUnload) return;
 
-    const fromRouteId = navigation.from?.route?.id;
-    const toRouteId = navigation.to?.route?.id;
-    const shouldAnimate = fromRouteId === HOME_ROUTE_ID && isArticlesRoute(toRouteId);
+  //   const fromRouteId = navigation.from?.route?.id;
+  //   const toRouteId = navigation.to?.route?.id;
+  //   const shouldAnimate = fromRouteId === HOME_ROUTE_ID && isPagesRoute(toRouteId);
 
-    if (!shouldAnimate) return;
+  //   if (!shouldAnimate) return;
 
-    return new Promise<void>((resolve) => {
-      void runViewTransition(
-        async () => {
-          resolve();
-          await navigation.complete;
-        },
-        {
-          types: ['home-to-article']
-        }
-      ).catch(() => {
-        resolve();
-      });
-    });
-  });
+  //   return new Promise<void>((resolve) => {
+  //     void runViewTransition(
+  //       async () => {
+  //         resolve();
+  //         await navigation.complete;
+  //       },
+  //       {
+  //         types: ['home-to-article']
+  //       }
+  //     ).catch(() => {
+  //       resolve();
+  //     });
+  //   });
+  // });
 </script>
 
 <svelte:head>
@@ -45,9 +45,9 @@
 </svelte:head>
 
 <div class="page" itemscope itemtype="https://schema.org/WebPage">
-  <aside id="sidenav-open">
+  <!-- <aside id="sidenav-open">
     <Navigation />
-  </aside>
+  </aside> -->
 
   <!-- <header id="banner" class="fixpos inset-start zi-40" itemscope itemType="https://schema.org/WPHeader">
     <PageBanner />

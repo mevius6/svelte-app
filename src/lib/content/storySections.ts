@@ -1,5 +1,5 @@
 /**
- * Story sections (from CMS / Strapi)
+ * Story sections (from CMS)
  *
  * Each section owns the title text rendered through the landscape MSDF title pipeline.
  */
@@ -11,10 +11,10 @@ export type StorySection = {
 
 // mock data for now, eventually to be fetched from Strapi API
 // export const STORY_SECTIONS: StorySection[] = [
-//   { id: "pt-1", titleText: "Совет" }, // Вступление / Пролог
-//   { id: "pt-2", titleText: "История места" },
+//   { id: "pt-1", titleText: "О проекте" }, // Вступление / Пролог
+//   { id: "pt-2", titleText: "История места" }, // Развитие
 //   { id: "pt-3", titleText: "Рождение парка" },
-//   { id: "pt-4", titleText: "Возрождение" }, // Реновация
+//   { id: "pt-4", titleText: "Возрождение" },
 //   { id: "pt-5", titleText: "Северный микрорайон" }, // и улицы вокруг парка
 //   { id: "pt-6", titleText: "Дворовое детство" }, // игры и секреты счастья
 //   { id: "pt-7", titleText: "Парк как семья" },

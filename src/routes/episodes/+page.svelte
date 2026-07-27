@@ -1,28 +1,26 @@
-<script>
-  // https://strapi.io/integrations/svelte-cms
+<script lang="ts">
+  import episodes from '$lib/content/data.json'
 
-  /** @type {import('./$types').PageProps} */
-  let { data } = $props();
+  // /** @type {import('./$types').PageProps} */
+  // let { data } = $props();
+
+  const ROUTE_PREFIX = '/episodes'
 </script>
 
-<!-- Post Feed -->
 <section class="relpos">
-  <h2 class="caps">Лента публикаций</h2>
-  <!-- <p>Вид: карусель | сетка | список</p> -->
+  <h2 class="caps">Все серии</h2>
 
-  {#if data.error}
-    <p style="color: #9b4d00;">Ошибка загрузки: {data.error}</p>
-  {:else if data.articles.length === 0}
+  {#if episodes.length === 0}
     <p>Пока нет опубликованных материалов.</p>
   {:else}
     <ul class="grid-rows-masonry grid w-full place-content-start gap-8">
-      {#each data.articles as article (article.documentId || article.title)}
-        {@const articleSlug = article.slug || article.documentId}
+      {#each episodes as episode (episode.id || episode.title)}
+        {@const articleSlug = episode.slug || episode.id}
         <li class="card">
           <figure class="relpos col-span-full overflow-hidden">
-            {#if article.cover}
+            {#if episode.coverUrl}
               <picture>
-                <img src={article.cover} alt={`Обложка: ${article.title}`}>
+                <img src={episode.coverUrl} alt={`Обложка: ${episode.title}`}>
               </picture>
             {/if}
           </figure>
@@ -30,14 +28,14 @@
             <header>
               <!-- Slug is req -->
               {#if articleSlug}
-                <a href={`/articles/${encodeURIComponent(articleSlug)}`}
-                  class="h3">{article.title}</a>
+                <a href={`${ROUTE_PREFIX}/${encodeURIComponent(articleSlug)}`}
+                  class="h3">{episode.title}</a>
               {:else}
-                <span>{article.title}</span>
+                <span>{episode.title}</span>
               {/if}
             </header>
-            <p>{article.excerpt}</p>
-            <!-- Keep SSR markup deterministic: avoid render-time timestamps. -->
+            <p>{episode.excerpt}</p>
+            <p>{episode.duration}</p>
           </article>
         </li>
       {/each}
@@ -72,9 +70,9 @@
   }
 
   /* for compact view */
-  :where(figure, picture, img, svg) {
+  /* :where(figure, picture, img) {
     aspect-ratio: var(--ar,4/3);
-  }
+  } */
 
   .card {
     background-color: var(--surface-2);

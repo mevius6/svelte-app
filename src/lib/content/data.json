@@ -1,0 +1,162 @@
+[
+  {
+    "id": 1,
+    "slug": "intro",
+    "order": 1,
+    "title": "Вступление",
+    "excerpt": "О проекте • общественный совет парка • интенция",
+    "description": "Первая часть аудиоспектакля.",
+    "audioUrl": "https://cdn.example.com/audio/episode-1.mp3",
+    "coverUrl": "/images/episode-1/00.jpg",
+    "duration": "03:12",
+    "carousel": [
+      {
+        "image": "/images/episode-1/01.jpg",
+        "alt": "…",
+        "caption": "…",
+        "width": 1280,
+        "height": 721
+      },
+      {
+        "image": "/images/episode-1/02.jpg",
+        "alt": "…",
+        "caption": "…",
+        "width": 1280,
+        "height": 721
+      },
+      {
+        "image": "/images/episode-1/03.jpg",
+        "alt": "…",
+        "caption": "…",
+        "width": 1680,
+        "height": 945
+      },
+      {
+        "image": "/images/episode-1/04.jpg",
+        "alt": "…",
+        "caption": "…",
+        "width": 1280,
+        "height": 853
+      },
+      {
+        "image": "/images/episode-1/05.jpg",
+        "alt": "…",
+        "caption": "…",
+        "width": 1632,
+        "height": 918
+      },
+      {
+        "image": "/images/episode-1/06.jpg",
+        "alt": "…",
+        "caption": "…",
+        "width": 1621,
+        "height": 1107
+      },
+      {
+        "image": "/images/episode-1/07.jpg",
+        "alt": "…",
+        "caption": "…",
+        "width": 3072,
+        "height": 2304
+      },
+      {
+        "image": "/images/episode-1/08.jpg",
+        "alt": "…",
+        "caption": "…",
+        "width": 3072,
+        "height": 2304
+      },
+      {
+        "image": "/images/episode-1/09.jpg",
+        "alt": "…",
+        "caption": "…",
+        "width": 1280,
+        "height": 750
+      }
+    ]
+  },
+  {
+    "id": 2,
+    "slug": "episode-2",
+    "order": 2,
+    "title": "История места",
+    "excerpt": "",
+    "description": "Вторая часть аудиоспектакля.",
+    "audioUrl": "https://cdn.example.com/audio/episode-2.mp3",
+    "coverUrl": "/images/episode-2/00.jpg",
+    "duration": "06:10",
+    "carousel": []
+  },
+  {
+    "id": 3,
+    "slug": "episode-3",
+    "order": 3,
+    "title": "Рождение парка",
+    "excerpt": "",
+    "description": "Часть аудиоспектакля.",
+    "audioUrl": "https://",
+    "coverUrl": "/images/episode-3/00.jpg",
+    "duration": "00:00",
+    "carousel": []
+  },
+  {
+    "id": 4,
+    "slug": "episode-4",
+    "order": 4,
+    "title": "Возрождение",
+    "excerpt": "",
+    "description": "Часть аудиоспектакля.",
+    "audioUrl": "https://",
+    "coverUrl": "/images/episode-4/00.jpg",
+    "duration": "00:00",
+    "carousel": []
+  },
+  {
+    "id": 5,
+    "slug": "episode-5",
+    "order": 5,
+    "title": "Северный микрорайон",
+    "excerpt": "",
+    "description": "Часть аудиоспектакля.",
+    "audioUrl": "https://",
+    "coverUrl": "/images/episode-5/00.jpg",
+    "duration": "00:00",
+    "carousel": []
+  },
+  {
+    "id": 6,
+    "slug": "episode-6",
+    "order": 6,
+    "title": "Дворовое детство",
+    "excerpt": "",
+    "description": "Часть аудиоспектакля.",
+    "audioUrl": "https://",
+    "coverUrl": "/images/episode-6/00.jpg",
+    "duration": "00:00",
+    "carousel": []
+  },
+  {
+    "id": 7,
+    "slug": "episode-7",
+    "order": 7,
+    "title": "Парк как семья",
+    "excerpt": "",
+    "description": "Часть аудиоспектакля.",
+    "audioUrl": "https://",
+    "coverUrl": "/images/episode-7/00.jpg",
+    "duration": "00:00",
+    "carousel": []
+  },
+  {
+    "id": 8,
+    "slug": "episode-8",
+    "order": 8,
+    "title": "Флора и фауна",
+    "excerpt": "",
+    "description": "Часть аудиоспектакля.",
+    "audioUrl": "https://",
+    "coverUrl": "/images/episode-8/00.jpg",
+    "duration": "00:00",
+    "carousel": []
+  }
+]

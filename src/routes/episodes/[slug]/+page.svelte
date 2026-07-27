@@ -1,87 +1,97 @@
-<script>
+<script lang="ts">
   // import Carousel from '$lib/components/Carousel.svelte';
 
+  // import type { PageProps } from './$types';
   /** @type {import('./$types').PageProps} */
   let { data } = $props();
+
+  const ROUTE_PREFIX = '/episodes'
 </script>
 
 <svelte:head>
-  {#if data.article?.title}
-    <title>{data.article.title} | Истории</title>
+  {#if data.episode?.title}
+    <title>{data.episode.title} | Истории</title>
   {:else}
     <title>Статья | Истории</title>
   {/if}
 </svelte:head>
 
 <!-- <div class="container relpos"> -->
-  {#if data.error}
-    <p style="color: #9b4d00;">Ошибка загрузки: {data.error}</p>
-  {:else if !data.article}
-    <p>Статья не найдена.</p>
-  {:else}
-    <article class="story">
-      <p class="back-link">
-        <!-- <a href="/articles">&larr; К ленте</a> -->
-        <a href="/articles">Назад к ленте</a>
-      </p>
+  <article class="story">
+    <p class="back-link">
+      <a href={ROUTE_PREFIX}>Назад к списку</a>
+    </p>
 
-      <section class="hero">
-        {#if data.article.cover}
-          <figure class="relpos">
-            <picture>
-              <img
-                src={data.article.cover}
-                alt={`Обложка: ${data.article.title}`}>
-            </picture>
-          </figure>
+    <section class="hero">
+      {#if data.episode.coverUrl}
+        <figure class="relpos">
+          <picture>
+            <img
+              src={data.episode.coverUrl}
+              alt={`Обложка: ${data.episode.title}`}
+              fetchpriority="high">
+          </picture>
+        </figure>
+      {/if}
+
+      <hgroup class="flex-row">
+        <h1>{data.episode.title}</h1>
+        {#if data.episode.excerpt}
+          <b class="h5 excerpt">{data.episode.excerpt}</b>
         {/if}
+      </hgroup>
+    </section>
 
-        <hgroup class="flex-row">
-          <h1>{data.article.title}</h1>
-          {#if data.article.excerpt}
-            <b class="h5 excerpt">{data.article.excerpt}</b>
-          {/if}
-        </hgroup>
-      </section>
+    {#if data.episode.carousel?.length}
+      <!-- <Carousel slides={data.episode.carousel} label={`Фотографии: ${data.episode.title}`} /> -->
 
-      {#if data.article.carousel.length > 0}
-        <!-- <Carousel slides={data.article.carousel} label={`Фотографии: ${data.article.title}`} /> -->
-
-        <section id="sectPin">
-          <div class="pin-wrap-sticky">
-            <div class="pin-wrap">
-              <blockquote class="h3">
-                Прогуливайтесь в своём темпе. <u>Слушайте, смотрите, чувствуйте!</u> И пусть эта прогулка станет для вас не просто экскурсией, а встречей с живой историей…
-              </blockquote>
-              {#each data.article.carousel as Slide}
-                <figure class="relpos" style="aspect-ratio: {Slide.width} / {Slide.height};">
-                  <img
-                    src={Slide.image}
-                    alt={Slide.alt || Slide.caption}
-                    width={Slide.width || undefined}
-                    height={Slide.height || undefined}
-                  >
-                  {#if Slide?.caption}
-                    <figcaption>{Slide.caption}</figcaption>
-                  {/if}
-                </figure>
-              {/each}
-            </div>
-          </div>
-        </section>
-      {/if}
-
-      {#if data.article.textBlocks.length > 0}
-        <section>
-          <article class="flow">
-            {#each data.article.textBlocks as paragraph}
-              <p style="font-size: 1.25rem;">{paragraph}</p>
+      <section id="sectPin" style:--total-images={data.episode.carousel.length}>
+        <div class="pin-wrap-sticky">
+          <div class="pin-wrap">
+            <blockquote class="h3">
+              Прогуливайтесь в своём темпе. <u>Слушайте, смотрите, чувствуйте!</u> И пусть эта прогулка станет для вас не просто экскурсией, а встречей с живой историей…
+            </blockquote>
+            {#each data.episode.carousel as slide (slide.image)}
+              <figure
+                class="relpos"
+                style={`aspect-ratio: ${slide.width} / ${slide.height};`}>
+                <img
+                  src={slide.image}
+                  alt={slide.alt || slide.caption || ''}
+                  width={slide.width || undefined}
+                  height={slide.height || undefined}
+                  loading="lazy"
+                  decoding="async"
+                >
+                {#if slide.caption}
+                  <figcaption>{slide.caption}</figcaption>
+                {/if}
+              </figure>
             {/each}
-          </article>
-        </section>
-      {/if}
-    </article>
-  {/if}
+          </div>
+        </div>
+      </section>
+    {/if}
+
+    <!-- {#if data.episode.textBlocks.length > 0}
+      <section>
+        <article class="flow">
+          {#each data.episode.textBlocks as paragraph}
+            <p style="font-size: 1.25rem;">{paragraph}</p>
+          {/each}
+        </article>
+      </section>
+    {/if} -->
+  </article>
+
+  <nav class="nav">
+    {#if data.prev}
+      <a href={`${ROUTE_PREFIX}/${data.prev.slug}`}>← {data.prev.title}</a>
+    {/if}
+    {#if data.next}
+      <a href={`${ROUTE_PREFIX}/${data.next.slug}`}>{data.next.title} →</a>
+    {/if}
+  </nav>
 <!-- </div> -->
 
 <style>
@@ -97,12 +107,13 @@
   section {
     min-block-size: 100dvb;
 
-    &:has(> .flow) { /* :where(:has(> article)) */
+    /* :where(:has(> article)) */
+    /* &:has(> .flow) {
       padding-block: 5vmax;
       padding-inline: 5vmax;
 
       column-count: 2;
-    }
+    } */
   }
 
   .back-link {
@@ -139,6 +150,7 @@
     & hgroup {
       grid-area: 1/1;
 
+      inline-size: 100%;
       display: flex;
       flex-direction: column;
       gap: var(--spacer-2x);
@@ -183,6 +195,8 @@
   }
 
   #sectPin {
+    --total-images: 5;
+
     /* Stretch it out, so that we create room for the horizontal scroll animation */
     height: 500vh;
     overflow: visible; /* To make position sticky work … */
@@ -203,7 +217,7 @@
   }
 
   .pin-wrap {
-    --_total-cols: 5;
+    --_total-cols: var(--total-images);
     --_slide-wide: 90vmax;
     --_gutter: 5vmax;
 
@@ -245,29 +259,5 @@
     & > * {
       min-width: var(--_slide-wide, 60vmax);
     }
-  }
-
-  @keyframes reveal {
-    from {
-      opacity: 0;
-      clip-path: inset(45% 20% 45% 20%);
-    }
-    to {
-      opacity: 1;
-      clip-path: inset(0% 0% 0% 0%);
-    }
-  }
-
-  .revealing-image {
-    /* Create View Timeline */
-    view-timeline-name: --revealing-image;
-    view-timeline-axis: block;
-
-    /* Attach animation, linked to the  View Timeline */
-    animation: linear reveal both;
-    animation-timeline: --revealing-image;
-
-    /* Tweak range when effect should run*/
-    animation-range: entry 25% cover 50%;
   }
 </style>

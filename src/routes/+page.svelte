@@ -1,10 +1,13 @@
 <script lang="ts">
+  import episodes from '$lib/content/data.json'
   import type { PageProps } from './$types';
 
   // import Cover from "$lib/components/Cover.svelte";
   import LandscapeShader from '$lib/components/LandscapeViewport.svelte';
 
   let { data }: PageProps = $props();
+
+  const ROUTE_PREFIX = '/episodes'
 </script>
 
 <!--
@@ -31,7 +34,38 @@ MARK: Scene I. Intro
   <div class="content inset-start zi-20 flex items-center justify-center">
     <!-- WebGL Environment Shader -->
     <LandscapeShader />
-</div>
+
+    <ul class="abspos grid w-full place-content-center">
+      {#each episodes as episode (episode.id || episode.title)}
+        {@const articleSlug = episode.slug || episode.id}
+        <li class="card flex self-center">
+          <!-- <figure class="relpos col-span-full revealing-image overflow-hidden">
+            {#if episode.coverUrl}
+              <picture>
+                <img src={episode.coverUrl} alt={`Обложка: ${episode.title}`}>
+              </picture>
+            {/if}
+          </figure> -->
+          <article class="flex flex-col justify-between"
+            style:--max-line-length=100%
+          >
+            <header class="w-full flow">
+              <!-- Slug is req -->
+              {#if articleSlug}
+                <a href={`${ROUTE_PREFIX}/${encodeURIComponent(articleSlug)}`}
+                  class="h1">{episode.title}</a>
+              {:else}
+                <span>{episode.title}</span>
+              {/if}
+              <p style:color=var(--nightglo-ng200)>{episode.duration}</p>
+            </header>
+            <!-- <p>{episode.excerpt}</p> -->
+            <p class="h4">{episode.description}</p>
+          </article>
+        </li>
+      {/each}
+    </ul>
+  </div>
 
   <!-- CSS Masked Portal -->
   <!-- <div class="spot-container zi-40">
@@ -64,6 +98,118 @@ MARK: Scene I. Intro
     );
   } */
 
+  ul:where(.grid) {
+    position: absolute;
+    /* inset: 0; */
+    inset-block-start: 0;
+    block-size: calc(var(--scroll-drama) * 1svb);
+
+    grid-template-columns: 1;
+    grid-template-rows: repeat(8, minmax(auto, 1fr));
+
+    > li {
+      inline-size: 90cqi;
+      block-size: 90cqb;
+    }
+    > li:nth-child(1) {grid-row: 1;}
+    > li:nth-child(1) {
+      backdrop-filter:
+        /* hue-rotate(180deg) */
+        saturate(2.4)
+        contrast(1.3)
+        grayscale(.8);
+    }
+    > li:nth-child(2) {grid-row: 2;}
+    > li:nth-child(2) {
+      backdrop-filter: sepia(.2) brightness(.9) saturate(.8) contrast(1.2);
+    }
+    > li:nth-child(3) {grid-row: 3;}
+    > li:nth-child(4) {grid-row: 4;}
+    > li:nth-child(5) {grid-row: 5;}
+    > li:nth-child(5) {
+      backdrop-filter: saturate(.1) brightness(.8) contrast(1.4);
+    }
+    > li:nth-child(6) {grid-row: 6;}
+    > li:nth-child(6) {
+      backdrop-filter: sepia(.4) brightness(.7) contrast(1.6);
+    }
+    > li:nth-child(7) {grid-row: 7;}
+    > li:nth-child(8) {grid-row: 8;}
+  }
+  @media (width>=48rem) {
+    ul:where(.grid) {
+      grid-template-columns: repeat(var(--cols, 2), minmax(25ch, 1fr));
+
+      > li {
+        /* margin-inline: 4ric; */
+        /* place-self: center; */
+        grid-column: 1/-1;
+        aspect-ratio: 16/9;
+
+        /* &:nth-child(odd) { grid-column: 1 }
+        &:nth-child(even) { grid-column: 2 } */
+      }
+    }
+  }
+  /* @media (width>=80rem) {} */
+
+  /* for compact view */
+  /* :where(figure, picture, img) {
+    aspect-ratio: var(--ar,4/3);
+  } */
+
+  .card {
+    padding: 4rex 2ch;
+    border: 1px solid var(--nightglo-ng200);
+
+    background-color: color-mix(in oklab, var(--surface-2) 12%, #0000);
+    /* backdrop-filter: blur(8px); */
+    border-radius: 2ch;
+    overflow: hidden;
+
+    & > article > header > a {
+      color:var(--foreground);
+      line-height: 1cap;
+    }
+
+    /* & > figure {
+      isolation: isolate;
+      opacity: 75%;
+      & img {
+        filter: grayscale(1);
+        mix-blend-mode: luminosity;
+      }
+      & picture {
+        background-color: var(--nightglo-ng200);
+      }
+      &:where(:not(:hover)) {
+        filter: brightness(80%) contrast(125%) saturate(75%);
+      }
+    } */
+  }
+
+  /* https://scroll-driven-animations.style/demos/contact-list/css/ */
+  @keyframes animate-in-and-out {
+    entry 0%  {
+      opacity: 0; transform: translateY(100%);
+    }
+    entry 100%  {
+      opacity: 1; transform: translateY(0);
+    }
+
+    exit 0% {
+      opacity: 1; transform: translateY(0);
+    }
+    exit 100% {
+      opacity: 0; transform: translateY(-100%);
+    }
+  }
+
+  li {
+    animation: linear animate-in-and-out;
+    animation-timeline: view();
+  }
+
   /*
   MARK:- Layout and STA logic
   */
@@ -73,7 +219,7 @@ MARK: Scene I. Intro
     /* height: 10000vh; */
 
     /* NOTE: longer scroll runway for smoother/even phase pacing (dawn/day/sunset) */
-    --scroll-drama: 1000;
+    --scroll-drama: 800; /* 100 * [sections num] */
     block-size: calc(var(--scroll-drama, 300) * 1svb);
   }
 
