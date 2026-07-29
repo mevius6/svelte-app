@@ -19,9 +19,7 @@ You are an AI pair-programmer working in a WebGL2 creative-coding project built 
 - GM Shaders Mini: `https://mini.gmshaders.com/` (practical tips, vector spaces, SDF, billboard)
 - The Book of Shaders: `https://thebookofshaders.com/`
 - Inigo Quilez: `https://iquilezles.org/articles/` (noise, fBM, domain warping, SDFs, terrain, smin)
-- Forward Scattering: `https://forwardscattering.org/post/72` (analytic height fog derivation)
 - Scratchapixel: `https://www.scratchapixel.com/lessons/3d-basic-rendering/volume-rendering-for-developers/intro-volume-rendering.html` (Beer-Lambert/transmittance)
-- IQ Fog: `https://iquilezles.org/articles/fog/` (note: non-constant density path must use transmittance `exp(-tau)`)
 - Codrops grass reference: `https://tympanus.net/codrops/2025/02/04/how-to-make-the-fluffiest-grass-with-three-js/` (instanced shore strip ideas, no external libs required)
 - GM Shaders Mini Oklab: `https://mini.gmshaders.com/p/oklab`
 - Björn Ottosson Oklab: `https://bottosson.github.io/posts/oklab/`
@@ -38,7 +36,7 @@ You are an AI pair-programmer working in a WebGL2 creative-coding project built 
 src/lib/
   gl/           Program.ts, FullscreenQuad.ts, FBO.ts, DoubleFBO.ts, Context.ts, texture.ts
   render/       Renderer.ts, RenderPass.ts
-  passes/       RipplePass.ts, LandscapePass.ts, BushesPass.ts, MorningFogPass.ts, HeroTitlePass.ts, TitleGlowPass.ts, FinalColorPass.ts
+  passes/       RipplePass.ts, LandscapePass.ts, BushesPass.ts, HeroTitlePass.ts, FinalColorPass.ts
   scene/        LandscapeScene.ts, sceneCamera.ts, LandscapeResources.ts,
                 LandscapeSceneDebug.ts, storyTimeline.ts, sceneFraming.ts,
                 shoreProfileBaker.ts, sceneConfig.ts
@@ -51,22 +49,21 @@ Simulation:
 RipplePass
 
 Linear composition (offscreen sceneColor FBO):
-LandscapePass → BushesPass → MorningFogPass → HeroTitlePass → TitleGlowPass
+LandscapePass → BushesPass → HeroTitlePass
 
 Display output:
 FinalColorPass (single linear → sRGB transfer)
 ```
 
-**Order is intentional.** Depth test is disabled (painter's algorithm). `MorningFogPass` stays before `HeroTitlePass` so title remains crisp over atmosphere; `TitleGlowPass` runs right after title in linear space, then `FinalColorPass` handles display transfer.
+**Order is intentional.** Depth test is disabled (painter's algorithm). Fog and title-glow post layers were retired on 2026-07-29 for runtime weight; `FinalColorPass` remains the only display transfer.
 
 ## 4. Current scene baseline (May 2026)
 
 ### Scene model
 - `scroll` = time-of-day phase with Phase 6 ordering: `0=start`, `0.2=dawn`, `0.5=day`, `1.0=dusk/late-sunset`. Clouds and sun move together via `solarDrift = vec2(phase01 * 0.42, phase01 * 0.06)` in `cloudDensity`.
 - Night rendering is not part of the active baseline: `night.glsl`, moon gates, and night-grade stubs are not in the active shader graph.
-- Title reveal: direct title, water reflection, and title glow share `titleReveal(phase)` (`title_timing.glsl`). **Default baseline:** `TITLE_REVEAL_START/END = 0/0` in `constants.glsl` → always visible from scroll 0. Optional late-sunset gate: set `0.78/0.94` (sync `sceneCamera.ts` exports).
-- Morning fog POC is dawn-driven and dissipates before title reveal: `FOG_DISSIPATE_START=0.18`, `FOG_DISSIPATE_END=0.36`.
-- Morning fog F1 uses analytic exponential height fog in `landscape.frag` (`tau` + `T=exp(-tau)`), with title fogged at `tTitle` (not shoreline depth).
+- Title reveal: direct title and water reflection share `titleReveal(phase)` (`title_timing.glsl`). **Default baseline:** `TITLE_REVEAL_START/END = 0/0` in `constants.glsl` → always visible from scroll 0. Optional late-sunset gate: set `0.78/0.94` (sync `sceneCamera.ts` exports).
+- Fog and title glow are not part of the active shader graph or scene pass graph. Do not reintroduce analytic/fullscreen fog or title-glow post processing without an explicit product decision.
 - Color pipeline is linear-first: scene layers are composited in offscreen `sceneColor`, and display transfer (`linear -> sRGB`) happens once in `FinalColorPass`.
 - Dev debug state is explicit: `LandscapeViewport` enables `LandscapeSceneDebugController` only in dev; without a debug controller, `LandscapeScene` defaults to the final render path. `LandscapePass` should compile debug shader variants only when `LandscapeScene` is created with `enableDebugViews`.
 - Camera is **static** — not driven by scroll. Parameters: `yaw=-0.08`, `pitch=0.068`, `radius=2.92`.
@@ -87,8 +84,7 @@ FinalColorPass (single linear → sRGB transfer)
 - **Phase A:** `shoreFbm` (~90 vnoise/water-pixel) → `u_shoreProfileTex` (512×1 RGBA32F, 3 texture fetches). New file: `src/lib/scene/shoreProfileBaker.ts`.
 - **Phase B:** `cloudDensity(detailLOD)` — reflection path uses `detailLOD=0.0`, saving 3 vnoise/pixel. Direct sky: `detailLOD=1.0`.
 - **Phase C:** `tanHalfFovY` in `SceneCameraState` (computed once). Camera cached in `LandscapeScene`. Glyph uniforms (256 floats) upload only on atlas change.
-- **Phase H:** `TitleGlowPass` added as separate fullscreen glow layer after `HeroTitlePass`, sampling precomposed phrase MSDF texture (`u_titlePhraseTex`), with debug toggle support.
-  Quality baseline: inside `TitleGlowPass`, use `source -> separable blur (multi-pass) -> layered additive composite` to avoid jagged/comb-like glow artifacts.
+- **Retired effects (2026-07-29):** `MorningFogPass`, analytic height fog, vegetation fog/haze, and `TitleGlowPass` were removed from active runtime for performance. Direct MSDF title rendering and water title reflection remain active.
 - **Phase I (completed):** Dynamic MSDF glyph generation for CMS/story-section titles. Separated `loadHeroTitleAtlas()` and `loadCanvasFallback()` in TitleResources; canvas fallback now used only for landscape reflection. Title selection is scroll-based from `STORY_SECTIONS` through `StoryFrame`, with per-text render data caching.
 
 ### Pending optimizations (do not regress)
@@ -102,17 +98,16 @@ FinalColorPass (single linear → sRGB transfer)
 3. **`SceneCameraState` must include `tanHalfFovY`** — all three default camera literals in `BushesPass.ts`, `HeroTitlePass.ts`, `LandscapePass.ts` must include `tanHalfFovY: Math.tan(Math.PI / 8)`.
 4. **`cloudDensity` signature:** `(uv, t, phase01, out base, detailLOD)` — 5 parameters. Direct sky calls: `detailLOD=1.0`. Reflection calls: `detailLOD=0.0`.
 5. **`shadeSkyDirection` signature:** `(dir, phase01, sunCol, sunDir, cloudDetail)` — 5 parameters.
-6. **Render order:** `landscape → bushes → morningFog → heroTitle → titleGlow`. Do not reorder.
+6. **Render order:** `landscape → bushes → heroTitle → finalColor`. Do not reorder.
 7. **No baseLift in title:** `computeTitleHeroState` Y is fixed: `WATER_LEVEL + height * 0.5 + 0.06`.
 8. **Texture units in LandscapePass:** 0=textTex, 1=rippleTex, 3=shoreProfileTex, 4=titlePhraseTex (unit 2 currently free).
 9. **Landscape title reflection path:** use `u_titlePhraseTex` sampling by local metric; do not reintroduce per-fragment glyph loops in `landscape.frag`.
-10. **Morning fog timing:** if title uses late-sunset reveal (`TITLE_REVEAL_START > FOG_DISSIPATE_END`), keep fog gone before title fade-in; default scroll-start title skips this coupling.
-11. **Height-fog correctness:** for non-constant density, convert optical depth via transmittance (`T=exp(-tau)`), and use fogAmount `1 - T`.
+10. **No active fog/title-glow post:** keep removed fog and title-glow passes/shaders out of the active runtime unless product explicitly restores them.
+11. **No reflected title halo/glow:** do not composite `haloAlpha` into water reflection fill paths.
 12. **Single display transfer point:** no early display gamma in scene passes; `linear -> sRGB` must happen only in `FinalColorPass`.
 13. **Deterministic vegetation placement:** avoid `Math.random()` for instance generation; use seeded RNG so visual layout is stable across hot reloads.
-14. **Vegetation debug readability:** when `Pass=Vegetation`, reduce/disable heavy atmospheric attenuation in `BushesPass` debug mode so vegetation diagnostics remain visible.
+14. **Vegetation debug readability:** when `Pass=Vegetation`, keep vegetation diagnostics visible and isolated from final scene composition.
 15. **Vegetation bank placement:** use `shorelineVegetationRootOnBank` on the baked slope; rebuild `BushesPass` instances when viewport aspect changes; X span from `computeVisibleBankXExtents`. Tune water clearance via `sceneConfig.ts` (`VEGETATION_GRASS_MIN_Y_ABOVE_WATER`, slope min/max).
-16. **Title glow default:** `TITLE_GLOW_ENABLED` in `sceneConfig.ts`; dev debug checkbox overrides at runtime.
 
 ## 6. Shader architecture
 
@@ -147,7 +142,7 @@ vec3 nTitle = normalize(mix(n, vec3(0.0, 1.0, 0.0), titleNormBlend));
 vec3 reflDirTitle = normalize(reflect(-viewDir, nTitle));
 // ... intersectTitleAtlas with reflDirTitle, not reflDir
 // Color target: DayGlo #c9f08a (stored in linear space constant)
-// No haloAlpha compositing; reflected title glow stays disabled
+// No haloAlpha compositing; reflected title halo/glow stays disabled
 ```
 
 ## 7. Performance rules
@@ -175,11 +170,11 @@ vec3 reflDirTitle = normalize(reflect(-viewDir, nTitle));
 
 ## 10. What NOT to do
 
-- Do not add new full-screen passes beyond `MorningFogPass`, `TitleGlowPass`, and `FinalColorPass` without explicit request.
+- Do not reintroduce removed fog/glow passes or add new full-screen post layers without explicit request.
 - Do not reintroduce `shoreFbm` inline in `landscape.frag`.
 - Do not add `Math.tan()` calls per-frame in render passes.
 - Do not set `cloudDetail=1.0` in reflection paths.
-- Do not change render order (landscape → bushes → morningFog → heroTitle → titleGlow).
+- Do not change render order (landscape → bushes → heroTitle → finalColor).
 - Do not add `baseLift` animation back to title.
 - Do not use scroll to drive camera orbit.
 - Do not composite `haloAlpha` directly into reflection fill paths (causes bright contour/white frame artifacts).

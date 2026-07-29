@@ -11,33 +11,6 @@
 
   const HOME_ROUTE = '/'
   // const PAGES_ROUTE_PREFIX = '/episodes';
-
-  // const isPagesRoute = (routeId: string | null | undefined): routeId is string =>
-  //   typeof routeId === 'string' && routeId.startsWith(PAGES_ROUTE_PREFIX);
-
-  // onNavigate((navigation) => {
-  //   if (navigation.willUnload) return;
-
-  //   const fromRouteId = navigation.from?.route?.id;
-  //   const toRouteId = navigation.to?.route?.id;
-  //   const shouldAnimate = fromRouteId === HOME_ROUTE_ID && isPagesRoute(toRouteId);
-
-  //   if (!shouldAnimate) return;
-
-  //   return new Promise<void>((resolve) => {
-  //     void runViewTransition(
-  //       async () => {
-  //         resolve();
-  //         await navigation.complete;
-  //       },
-  //       {
-  //         types: ['home-to-article']
-  //       }
-  //     ).catch(() => {
-  //       resolve();
-  //     });
-  //   });
-  // });
 </script>
 
 <svelte:head>

@@ -7,7 +7,6 @@
     type SceneDebugState,
     type LandscapeSceneDebugController,
   } from "$lib/scene/LandscapeSceneDebug"
-  import { TITLE_GLOW_ENABLED } from "$lib/scene/sceneConfig"
 
   export let projectName = "Чистые пруды"
 
@@ -19,14 +18,12 @@
   let debugController: LandscapeSceneDebugController | null = null
   let passView: PassDebugView = "final"
   let landscapeMode: SceneDebugState["landscapeMode"] = "beauty"
-  let glowEnabled: SceneDebugState["glowEnabled"] = TITLE_GLOW_ENABLED
   let fps = 0
 
   function applyDebugState() {
     debugController?.setState({
       passView,
       landscapeMode,
-      glowEnabled,
     })
   }
 
@@ -39,11 +36,6 @@
   function handleLandscapeModeChange(event: Event) {
     const nextValue = (event.currentTarget as HTMLSelectElement).value as SceneDebugState["landscapeMode"]
     landscapeMode = nextValue
-    applyDebugState()
-  }
-
-  function handleGlowEnabledChange(event: Event) {
-    glowEnabled = (event.currentTarget as HTMLInputElement).checked
     applyDebugState()
   }
 
@@ -111,8 +103,6 @@
         <option value="ripple">Ripple</option>
         <option value="landscape">Landscape</option>
         <option value="vegetation">Vegetation</option>
-        <option value="fog">Fog</option>
-        <option value="glow">Glow</option>
       </select>
     </label>
 
@@ -128,15 +118,6 @@
         <option value="reflection">Reflection</option>
         <option value="waveLod">Wave LOD</option>
       </select>
-    </label>
-
-    <label class="debug-field debug-toggle">
-      <span>Title Glow</span>
-      <input
-        type="checkbox"
-        checked={glowEnabled}
-        on:change={handleGlowEnabledChange}
-      />
     </label>
 
     <div class="debug-field debug-fps">
@@ -202,18 +183,6 @@
 
   .debug-field select:disabled {
     opacity: 0.5;
-  }
-
-  .debug-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .debug-toggle input {
-    inline-size: 1.1rem;
-    block-size: 1.1rem;
-    accent-color: #c9f08a;
   }
 
   .debug-fps {

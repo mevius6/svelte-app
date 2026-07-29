@@ -4,14 +4,10 @@ precision highp float;
 in vec2  v_uvAtlas;
 in float v_height;
 in float v_viewDist;
-in float v_worldY;
 in vec3  v_worldPos;
 in float v_sparkleSeed;
 
-uniform vec2  u_resolution;
-uniform vec2  u_sceneScale;
 uniform vec3  u_cameraPos;
-uniform float u_horizon;
 uniform float u_phase;
 uniform float u_debugView;
 uniform float u_time;
@@ -25,11 +21,6 @@ uniform sampler2D u_foliageTranslucency;
 out vec4 fragColor;
 
 #define PI 3.14159265359
-
-const float VEGETATION_FOG_DISSIPATE_START = 0.18;
-const float VEGETATION_FOG_DISSIPATE_END = 0.36;
-const float VEGETATION_FOG_DENSITY = 0.085;
-const float VEGETATION_FOG_HEIGHT_FALLOFF = 3.2;
 
 vec3 skyColor(float y, float phase01)
 {
@@ -65,8 +56,6 @@ void main() {
     if (alpha < 0.02) discard;
 
     float phase = clamp(u_phase, 0.0, 1.0);
-    vec2 screenUV = gl_FragCoord.xy / u_resolution.xy;
-    vec2 uv = (screenUV - 0.5) * u_sceneScale + 0.5;
 
     vec3 sunCol = sunColor(phase);
     vec3 sunDir = sunDirection(phase);
@@ -95,7 +84,7 @@ void main() {
 
     float specular = specTight * mix(0.08, 0.22, tipMask) * (0.72 + 0.28 * sparkle);
 
-    vec3 ambientSky = skyColor(u_horizon + v_height * 0.16, phase);
+    vec3 ambientSky = skyColor(0.50 + v_height * 0.16, phase);
     vec3 shoreColor = mix(vec3(0.090, 0.074, 0.050), vec3(0.066, 0.056, 0.054), phase);
     vec3 ambient = mix(shoreColor * 1.05, ambientSky * vec3(0.64, 0.78, 0.62), 0.70);
     vec3 direct  = sunCol * (0.12 + diffuse * 0.36);
@@ -107,41 +96,20 @@ void main() {
     vec3 col = albedo * (ambient + direct);
     col += trans + spec;
 
-    vec3 tipHaze = mix(ambientSky, sunCol * 0.30 + ambientSky * 0.70, 0.35);
+    vec3 tipLight = mix(ambientSky, sunCol * 0.30 + ambientSky * 0.70, 0.35);
     col = mix(col, shoreColor * 0.94, rootMask * 0.22);
-    col = mix(col, tipHaze, tipMask * 0.22);
+    col = mix(col, tipLight, tipMask * 0.22);
     col = mix(col, ambientSky * vec3(0.76, 0.78, 0.72), 0.14 + tipMask * 0.08);
 
     float distanceFade = smoothstep(2.2, 5.6, v_viewDist);
-    float horizonBand = exp(-abs(screenUV.y - u_horizon) * 30.0);
-    float atmosphericBlend = clamp(distanceFade * (0.35 + horizonBand * 0.65), 0.0, 1.0);
-    vec3 hazeTarget = ambientSky * vec3(0.84, 0.88, 0.82) + sunCol * 0.06;
-    if (u_debugView <= 0.5) {
-        col = mix(col, hazeTarget, atmosphericBlend * 0.32);
-    }
-
-    float dawnMask = 1.0 - smoothstep(
-        VEGETATION_FOG_DISSIPATE_START,
-        VEGETATION_FOG_DISSIPATE_END,
-        phase
-    );
-    float fogDistance = max(v_viewDist - 0.35, 0.0);
-    float fogHeight = max(v_worldY, -0.02);
-    float fogTau = VEGETATION_FOG_DENSITY * dawnMask * exp(-VEGETATION_FOG_HEIGHT_FALLOFF * fogHeight) * fogDistance;
-    float fogAmount = 1.0 - exp(-fogTau);
-    vec3 dawnFogCol = vec3(0.90, 0.86, 0.84);
-    vec3 vegetationFogCol = mix(dawnFogCol, ambientSky * vec3(0.92, 0.95, 0.90), 0.38);
-    if (u_debugView <= 0.5) {
-        col = mix(col, vegetationFogCol, fogAmount * 0.78);
-    }
 
     float luma = dot(col, vec3(0.299, 0.587, 0.114));
     col = mix(
         col,
         vec3(luma),
-        (0.06 + tipMask * 0.06) + (u_debugView <= 0.5 ? atmosphericBlend * 0.12 : 0.0)
+        0.06 + tipMask * 0.06
     );
-    col *= mix(shade, shade * 0.94, u_debugView <= 0.5 ? atmosphericBlend : 0.0);
+    col *= shade;
 
     float distanceAlpha = mix(1.0, 0.72, distanceFade);
     if (u_debugView > 0.5) {

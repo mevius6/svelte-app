@@ -1,9 +1,6 @@
 /**
- * Runtime scene toggles (non-shader). Dev debug UI can override some flags at runtime.
+ * Runtime scene tuning (non-shader).
  */
-
-/** Default title glow pass in final pipeline (`TitleGlowPass`). Dev: toggle via debug panel. */
-export const TITLE_GLOW_ENABLED = true
 
 /** Shore grass PoC — minimum root Y above `WATER_LEVEL` (world units). */
 export const VEGETATION_GRASS_MIN_Y_ABOVE_WATER = 0.018

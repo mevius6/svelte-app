@@ -2,19 +2,15 @@ import { RipplePass } from "../passes/RipplePass"
 import { LandscapePass } from "../passes/LandscapePass"
 import { BushesPass } from "../passes/BushesPass"
 import { HeroTitlePass } from "../passes/HeroTitlePass"
-import { MorningFogPass } from "../passes/MorningFogPass"
-import { TitleGlowPass } from "../passes/TitleGlowPass"
 import { FinalColorPass } from "../passes/FinalColorPass"
 import { FBO } from "../gl/FBO"
 import {
   LandscapeResources,
   type FoliageAtlasSourceSet,
-  type HeroTitleAtlasResource,
   type HeroTitleAtlasRenderData,
 } from "./LandscapeResources"
 import {
   computeSceneCamera,
-  computeVegetationHorizon,
   computeTitleHeroState,
   intersectRayWithWaterPlane,
   RIPPLE_WORLD_RECT,
@@ -28,7 +24,6 @@ import { computeSceneFrame } from "./sceneFraming"
 import type { Scene } from "./Scene"
 import { STORY_SECTIONS } from "../content/storySections"
 import { LandscapeSceneDebugController, type SceneDebugState } from "./LandscapeSceneDebug"
-import { TITLE_GLOW_ENABLED } from "./sceneConfig"
 import { computeStoryFrame, type StoryFrame } from "./storyTimeline"
 
 const DEFAULT_FOLIAGE_ATLAS_SOURCES: FoliageAtlasSourceSet = {
@@ -53,13 +48,11 @@ interface FrameState {
   storyFrame: StoryFrame
   sceneFrame: ReturnType<typeof computeSceneFrame>
   camera: SceneCameraState
-  vegetationHorizon: number
 
   titleHero: ReturnType<typeof computeTitleHeroState>
 
   activeTitleRenderData: HeroTitleAtlasRenderData | null
   activeLayoutSize: { width: number; height: number } | null // логический layout (phraseLayout)
-  activePhraseTexSize: { width: number; height: number } | null // физический размер текстуры
 }
 
 export class LandscapeScene implements Scene {
@@ -71,9 +64,7 @@ export class LandscapeScene implements Scene {
   private ripple: RipplePass
   private landscape: LandscapePass
   private bushes: BushesPass
-  private morningFog: MorningFogPass
   private heroTitle: HeroTitlePass
-  private titleGlow: TitleGlowPass
   private finalColor: FinalColorPass
   private resources: LandscapeResources
   private sceneColor: FBO | null = null
@@ -135,9 +126,7 @@ export class LandscapeScene implements Scene {
       enableDebugVariants: options.enableDebugViews ?? false,
     })
     this.bushes = new BushesPass(gl)
-    this.morningFog = new MorningFogPass(gl)
     this.heroTitle = new HeroTitlePass(gl, projectName)
-    this.titleGlow = new TitleGlowPass(gl)
     this.finalColor = new FinalColorPass(gl)
     this.resources = new LandscapeResources(gl)
   }
@@ -167,9 +156,7 @@ export class LandscapeScene implements Scene {
     this.ripple.resize(width, height)
     this.landscape.resize(width, height)
     this.bushes.resize(width, height)
-    this.morningFog.resize(width, height)
     this.heroTitle.resize(width, height)
-    this.titleGlow.resize(width, height)
     this.finalColor.resize(width, height)
 
     this.sceneColor?.dispose()
@@ -197,7 +184,6 @@ export class LandscapeScene implements Scene {
     const storyFrame = computeStoryFrame(this.scrollNorm, STORY_SECTIONS.length)
     const sceneFrame = computeSceneFrame(this.width, this.height)
     const camera = this.resolveCamera()
-    const vegetationHorizon = computeVegetationHorizon(camera, this.width, this.height)
     const textTexSize = this.resources.textTextureSize
     const titleLayout = this.resources.heroTitleLayout
 
@@ -223,9 +209,6 @@ export class LandscapeScene implements Scene {
           height: this.resources.heroTitleLayout.height,
         }
 
-    // ФИЗИЧЕСКИЙ размер phrase-текстуры (пространство текстуры)
-    const activePhraseTexSize = activeTitleRenderData?.phraseTextureSize ?? null
-
     // Use active title's aspect ratio, not the canvas fallback's
     // Each CMS title has different text length → different aspect
     // NOTE: aspect = height / width (matching canvas fallback convention)
@@ -246,11 +229,9 @@ export class LandscapeScene implements Scene {
       storyFrame,
       sceneFrame,
       camera,
-      vegetationHorizon,
       titleHero,
       activeTitleRenderData,
       activeLayoutSize,
-      activePhraseTexSize,
     }
   }
 
@@ -268,10 +249,6 @@ export class LandscapeScene implements Scene {
         return this.renderDebugRipple(frame)
       case 'vegetation':
         return this.renderDebugVegetation(frame)
-      case 'fog':
-        return this.renderDebugFog(frame)
-      case 'glow':
-        return this.renderDebugGlow(frame)
       case 'landscape':
         return this.renderDebugLandscape(frame, debugState)
       default:
@@ -287,41 +264,17 @@ export class LandscapeScene implements Scene {
     this.landscape.render(frame.time, frame.rippleTex)
   }
 
-  // NOTE: Phase 1 — debug view for vegetation (bushes) pass; fog/haze disabled for readability.
+  // NOTE: Phase 1 — debug view for vegetation (bushes) pass.
   private renderDebugVegetation(frame: FrameState) {
     this.gl.clearColor(...VEGETATION_DEBUG_CLEAR)
     this.gl.clear(this.gl.COLOR_BUFFER_BIT)
     this.bushes.setFrameState({
       camera: frame.camera,
-      horizon: frame.vegetationHorizon,
       phase: frame.storyFrame.timeOfDayPhase,
       debugView: true,
       atlasTextures: this.resources.foliageAtlas,
-      sceneScale: {
-        x: frame.sceneFrame.scaleX,
-        y: frame.sceneFrame.scaleY,
-      },
     })
     this.bushes.render(frame.time, null)
-  }
-
-  // NOTE: Phase 1 — debug view for morning fog pass; shows density profile in isolation.
-  private renderDebugFog(frame: FrameState) {
-    this.gl.clearColor(0.02, 0.03, 0.05, 1.0)
-    this.gl.clear(this.gl.COLOR_BUFFER_BIT)
-    this.morningFog.setFrameState({
-      phase: frame.storyFrame.timeOfDayPhase,
-      debugDensity: true,
-    })
-    this.morningFog.render(frame.time, null)
-  }
-
-  // NOTE: Phase 1 — debug view for title glow pass; shows glow isolation.
-  private renderDebugGlow(frame: FrameState) {
-    this.gl.clearColor(0.0, 0.0, 0.0, 1.0)
-    this.gl.clear(this.gl.COLOR_BUFFER_BIT)
-    this.setupTitleGlowState(frame)
-    this.titleGlow.render(frame.time, null)
   }
 
   // NOTE: Phase 1 — debug view for landscape pass; allows viewing specific shader domains (ripple, normals, reflection, wave LOD).
@@ -331,7 +284,7 @@ export class LandscapeScene implements Scene {
   }
 
   // MARK:- Final render
-  // NOTE: Phase 1 — full render: landscape → bushes → fog → heroTitle → titleGlow → final color transfer (linear→sRGB).
+  // NOTE: full render: landscape → bushes → heroTitle → final color transfer (linear→sRGB).
   // All passes write to offscreen sceneColor FBO, then FinalColorPass applies single display transfer.
   private renderFinal(frame: FrameState) {
     if (!this.sceneColor) return
@@ -339,9 +292,6 @@ export class LandscapeScene implements Scene {
     // Setup all pass state up front
     this.setupLandscapeState(frame)
     this.setupBushesState(frame)
-    this.setupMorningFogState(frame)
-    this.setupHeroTitleState(frame)
-    this.setupTitleGlowState(frame)
 
     // Offscreen composition: linear scene in sceneColor FBO
     this.setSceneOutputFramebuffer(this.sceneColor.framebuffer)
@@ -354,15 +304,10 @@ export class LandscapeScene implements Scene {
     this.landscape.setDebugMode('beauty')
     this.landscape.render(frame.time, frame.rippleTex)
     this.bushes.render(frame.time, null)
-    this.morningFog.render(frame.time, null)
 
     if (frame.activeTitleRenderData) {
       this.setupHeroTitleState(frame)
       this.heroTitle.render(frame.time, null)
-      if (this.isTitleGlowEnabled()) {
-        this.setupTitleGlowState(frame)
-        this.titleGlow.render(frame.time, null)
-      }
     }
 
     // Single display transfer: linear → sRGB in FinalColorPass
@@ -397,21 +342,9 @@ export class LandscapeScene implements Scene {
   private setupBushesState(frame: FrameState) {
     this.bushes.setFrameState({
       camera: frame.camera,
-      horizon: frame.vegetationHorizon,
       phase: frame.storyFrame.timeOfDayPhase,
       debugView: false,
       atlasTextures: this.resources.foliageAtlas,
-      sceneScale: {
-        x: frame.sceneFrame.scaleX,
-        y: frame.sceneFrame.scaleY,
-      },
-    })
-  }
-
-  private setupMorningFogState(frame: FrameState) {
-    this.morningFog.setFrameState({
-      phase: frame.storyFrame.timeOfDayPhase,
-      debugDensity: false,
     })
   }
 
@@ -430,35 +363,6 @@ export class LandscapeScene implements Scene {
     })
   }
 
-  private setupTitleGlowState(frame: FrameState) {
-    const active = frame.activeTitleRenderData
-    if (!active) return
-
-    this.titleGlow.setFrameState({
-      enabled: this.isTitleGlowEnabled(),
-      debugIsolate: this.isGlowDebugView(),
-      camera: frame.camera,
-      phase: frame.storyFrame.timeOfDayPhase,
-      waterLevel: WATER_LEVEL,
-      titleHero: frame.titleHero,
-      phraseTexture: active.phraseTexture ?? null,
-      phraseTextureSize: frame.activePhraseTexSize ?? { width: 1, height: 1 },
-      titleAtlasPxRange: active.atlas.font.atlas.distanceRange ?? 4,
-      layoutSize: frame.activeLayoutSize
-    })
-  }
-
-  private isTitleGlowEnabled() {
-    if (this.debugController) {
-      return this.debugController.state.glowEnabled
-    }
-    return TITLE_GLOW_ENABLED
-  }
-
-  private isGlowDebugView() {
-    return this.debugController?.state.passView === "glow"
-  }
-
   dispose() {
     if (this.initialized) {
       window.removeEventListener("scroll", this.scrollHandler)
@@ -468,9 +372,7 @@ export class LandscapeScene implements Scene {
 
     this.landscape.dispose()
     this.bushes.dispose()
-    this.morningFog.dispose()
     this.heroTitle.dispose()
-    this.titleGlow.dispose()
     this.finalColor.dispose()
     this.ripple.dispose()
     this.resources.dispose()
@@ -483,9 +385,7 @@ export class LandscapeScene implements Scene {
   private setSceneOutputFramebuffer(framebuffer: WebGLFramebuffer | null) {
     this.landscape.setOutputFramebuffer(framebuffer)
     this.bushes.setOutputFramebuffer(framebuffer)
-    this.morningFog.setOutputFramebuffer(framebuffer)
     this.heroTitle.setOutputFramebuffer(framebuffer)
-    this.titleGlow.setOutputFramebuffer(framebuffer)
   }
 
   private pointerToRippleUV(clientX: number, clientY: number) {

@@ -18,14 +18,9 @@ import {
 
 type BushesFrameState = {
   camera: SceneCameraState
-  horizon: number
   phase: number
   debugView?: boolean
   atlasTextures: FoliageAtlasTextureSet
-  sceneScale: {
-    x: number
-    y: number
-  }
 }
 
 type BushAtlasRegion = {
@@ -85,10 +80,8 @@ export class BushesPass extends RenderPass {
   private instanceBuffers: WebGLBuffer[] = []
   private instanceCount = 0
   private builtAspect = 0
-  private horizon = 0.5
   private phase = 0
   private debugView = false
-  private sceneScale = { x: 1, y: 1 }
   private camera: SceneCameraState = {
     position: { x: 0, y: 0, z: 1 },
     forward: { x: 0, y: 0, z: -1 },
@@ -335,11 +328,9 @@ export class BushesPass extends RenderPass {
 
   setFrameState(state: BushesFrameState) {
     this.camera = state.camera
-    this.horizon = state.horizon
     this.phase = state.phase
     this.debugView = state.debugView ?? false
     this.atlasTextures = state.atlasTextures
-    this.sceneScale = state.sceneScale
   }
 
   render(time: number, input: WebGLTexture | null) {
@@ -385,11 +376,9 @@ export class BushesPass extends RenderPass {
       this.camera.forward.z
     )
     this.program.setFloat("u_cameraTanHalfFovY", this.camera.tanHalfFovY)
-    this.program.setFloat("u_horizon", this.horizon)
     this.program.setFloat("u_phase", this.phase)
     this.program.setFloat("u_debugView", this.debugView ? 1 : 0)
     this.program.setVec2("u_resolution", this.width, this.height)
-    this.program.setVec2("u_sceneScale", this.sceneScale.x, this.sceneScale.y)
     this.program.setFloat("u_time", time)
     this.program.setTexture("u_foliageAlbedo", this.atlasTextures.albedo, 0)
     this.program.setTexture("u_foliageAlpha", this.atlasTextures.alpha, 1)

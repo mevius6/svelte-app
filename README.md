@@ -18,7 +18,7 @@
 - resource layer: `src/lib/scene/LandscapeResources.ts` — владеет загрузкой и жизненным циклом GPU-ресурсов: title-texture, foliage PBR atlas, fallback ripple texture, **shore profile 1D texture**.
 - baker layer: `src/lib/scene/shoreProfileBaker.ts` — **новый файл.** Запекает `shoreFbm` (5 октав, 3 seed-набора) в 512×1 RGBA32F текстуру при старте. R=baselineSilhouette, G=bankNoise, B=shelfNoiseSrc.
 - framing layer: `src/lib/scene/sceneFraming.ts` — общая scene-space framing-модель.
-- pass layer: `RipplePass` → `LandscapePass` → `BushesPass` → `MorningFogPass` → `HeroTitlePass` → `TitleGlowPass` → `FinalColorPass`.
+- pass layer: `RipplePass` → `LandscapePass` → `BushesPass` → `HeroTitlePass` → `FinalColorPass`.
 - GL layer: `src/lib/gl/` — `Program`, `FullscreenQuad`, `FBO`, `DoubleFBO`, `Context`.
 
 ## Активный render pipeline
@@ -28,13 +28,13 @@ Simulation:
 RipplePass
 
 Linear scene composition (offscreen sceneColor FBO):
-LandscapePass → BushesPass → MorningFogPass → HeroTitlePass → TitleGlowPass
+LandscapePass → BushesPass → HeroTitlePass
 
 Display output:
 FinalColorPass (single linear → sRGB transfer)
 ```
 
-**Важно:** depth test отключён (painter's algorithm), поэтому порядок слоёв внутри `sceneColor` фиксирован: `landscape → bushes → morningFog → heroTitle → titleGlow`.
+**Важно:** depth test отключён (painter's algorithm), поэтому порядок слоёв внутри `sceneColor` фиксирован: `landscape → bushes → heroTitle`.
 `FinalColorPass` выполняется последним и только переводит линейный цвет в display-space.
 
 ## Архитектурные принципы
@@ -45,7 +45,7 @@ FinalColorPass (single linear → sRGB transfer)
 - `LandscapeSceneDebugController` — единственная точка dev debug state; production/default path остаётся final-only, а `LandscapePass` компилирует debug shader variants только когда сцена создана с `enableDebugViews`.
 - `StoryFrame` — единый per-frame результат story timeline: `storyProgress`, `sectionIndex`, `sectionProgress`, `shotProgress`, `timeOfDayPhase`.
 - `LandscapeResources` — владение созданием, загрузкой и освобождением GPU-ресурсов.
-- Один pass — одна роль: simulation, landscape shading, vegetation, atmosphere, title, glow.
+- Один pass — одна роль: simulation, landscape shading, vegetation, title, display transfer.
 - Ripple влияет на нормали воды, не на цвет напрямую.
 - **scroll = время суток**, а не движение камеры или тайтла.
 
@@ -56,9 +56,6 @@ FinalColorPass (single linear → sRGB transfer)
 - The Book of Shaders: `https://thebookofshaders.com/`
 - Inigo Quilez: `https://iquilezles.org/articles/`
 - IQ Smooth Min: `https://iquilezles.org/articles/smin/`
-- Forward Scattering (fog derivation): `https://forwardscattering.org/post/72`
-- Scratchapixel (volume rendering): `https://www.scratchapixel.com/lessons/3d-basic-rendering/volume-rendering-for-developers/intro-volume-rendering.html`
-- IQ Fog article: `https://iquilezles.org/articles/fog/`
 - Codrops grass reference (instanced strip idea): `https://tympanus.net/codrops/2025/02/04/how-to-make-the-fluffiest-grass-with-three-js/`
 - GM Shaders Mini (Oklab): `https://mini.gmshaders.com/p/oklab`
 - Björn Ottosson (Oklab): `https://bottosson.github.io/posts/oklab/`

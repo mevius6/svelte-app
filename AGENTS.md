@@ -56,28 +56,28 @@ Simulation:
   RipplePass → ripple texture
 
 Linear offscreen (sceneColor FBO):
-  LandscapePass → BushesPass → MorningFogPass → HeroTitlePass → TitleGlowPass
+  LandscapePass → BushesPass → HeroTitlePass
 
 Display:
   FinalColorPass   (single linear → sRGB transfer)
 ```
 
-Do **not** reorder scene layers without updating invariants and docs. `MorningFogPass` stays before `HeroTitlePass` (title crisp over atmosphere). `TitleGlowPass` runs after title in linear space, before display transfer.
+Do **not** reorder scene layers without updating invariants and docs. Fog and title-glow post layers are intentionally retired from the active runtime.
 
 ## Scene and scroll semantics (Phase 6)
 
 - **`scrollNorm` (0–1) = time of day**, not camera orbit. Ordering: `0=start`, `0.2=dawn`, `0.5=day`, `1.0=late-sunset`.
 - **Camera is static** (`yaw≈-0.08`, `pitch≈0.068`, `radius≈2.92`). Cached in `LandscapeScene`; recompute on **viewport resize only** (not on scroll). Future cinematic motion must extend cache key via `shotProgress` / motion revision — see comment in `resolveCamera()`.
 - **Night / moon** are not in the active shader graph; do not reintroduce `night.glsl` or night-grade paths without an explicit product decision.
-- **Morning fog:** dissipates `0.18→0.36`; analytic height fog in landscape shader; fullscreen wisps in `MorningFogPass`.
-- **Title reveal:** direct title, water reflection, and glow share `titleReveal(phase)` from `title_timing.glsl`. **Default:** `TITLE_REVEAL_END <= TITLE_REVEAL_START` (both `0.0`) → visible from scroll 0 / section 1. Optional late-sunset: set `0.78` / `0.94` in `constants.glsl` + `sceneCamera.ts`.
+- **Fog and title glow:** removed from active render path on 2026-07-29 for runtime weight. Do not reintroduce analytic/fullscreen fog or title-glow post processing without an explicit product decision.
+- **Title reveal:** direct title and water reflection share `titleReveal(phase)` from `title_timing.glsl`. **Default:** `TITLE_REVEAL_END <= TITLE_REVEAL_START` (both `0.0`) → visible from scroll 0 / section 1. Optional late-sunset: set `0.78` / `0.94` in `constants.glsl` + `sceneCamera.ts`.
 - **Title world anchor:** pond center `TITLE_WORLD_Z_NEAR≈0.35`; fixed Y (`WATER_LEVEL + height*0.5 + 0.06`) — no `baseLift`.
 
 ## Story titles (Phase I)
 
 - Sections: `STORY_SECTIONS` in `src/lib/content/storySections.ts` (mock; target: Strapi). No legacy title-content alias types.
 - Per frame: `computeStoryFrame(scrollNorm, sectionCount)` → `sectionIndex`, `sectionProgress`, `shotProgress`, `timeOfDayPhase` (currently identity-mapped to scroll).
-- `LandscapeScene.buildFrameState()` picks active section text → cached `HeroTitleAtlasRenderData` (MSDF + precomposed phrase texture for reflection/glow).
+- `LandscapeScene.buildFrameState()` picks active section text → cached `HeroTitleAtlasRenderData` (MSDF + precomposed phrase texture for reflection).
 - **MSDF is primary** for on-screen title; canvas texture remains for **landscape reflection fallback only**, not title selection.
 - CPU sets `u_titleWorldSize` with `textAspect` already applied — **do not re-derive width from `layoutAspect` in `hero-title.vert`** (use `u_titleWorldSize.x` / `.y` as-is).
 
@@ -92,9 +92,9 @@ Do **not** reorder scene layers without updating invariants and docs. `MorningFo
 
 Active landscape fragment entry: `src/lib/shaders/landscape/_entry.frag` (Vite `#include` plugin resolves chunks in dev/build).
 
-Domains under `src/lib/shaders/landscape/`: `sky`, `shore`, `water_waves`, `water_shade`, `clouds`, `fog`, `title`, `debug_views`, etc. Legacy monolith `landscape.frag` is not the active entry.
+Domains under `src/lib/shaders/landscape/`: `sky`, `shore`, `water_waves`, `water_shade`, `clouds`, `title`, `debug_views`, etc. Legacy monolith `landscape.frag` is not the active entry.
 
-Other shaders: `bushes.*`, `morning-fog.frag`, `hero-title.*`, `title-glow.frag`, `post/title-glow-blur.frag`, `post/title-glow-composite.frag`, `post/final-color.frag`, `ripple.frag`.
+Other active shaders: `bushes.*`, `hero-title.*`, `post/final-color.frag`, `ripple.frag`.
 
 ## Key invariants (do not break)
 
@@ -102,12 +102,12 @@ Other shaders: `bushes.*`, `morning-fog.frag`, `hero-title.*`, `title-glow.frag`
 2. `u_shoreProfileTex`: R=baselineSilhouette, G=bankNoise, B=shelfNoiseSrc; no inline `shoreFbm` in fragment path.
 3. `SceneCameraState.tanHalfFovY` — use cached value in passes; no per-frame `Math.tan(fovY/2)`.
 4. `cloudDensity(..., detailLOD)`: direct sky `1.0`, reflection `0.0`.
-5. Pass order: `landscape → bushes → morningFog → heroTitle → titleGlow → finalColor`.
+5. Pass order: `landscape → bushes → heroTitle → finalColor`.
 6. Title reflection in landscape: sample `u_titlePhraseTex` by local metric — **no per-fragment glyph loops**.
-7. Fog: non-constant density → transmittance `T=exp(-tau)`, mix `1-T`. If using late-sunset title reveal, keep `FOG_DISSIPATE_END(0.36) < TITLE_REVEAL_START`.
+7. No active fog or title-glow post layer. Keep `MorningFogPass`, `TitleGlowPass`, `morning-fog.frag`, and title-glow blur/composite shaders out of the active runtime unless product explicitly restores them.
 8. **Single display gamma:** only `FinalColorPass` (`linear → sRGB`); scene passes stay linear.
 9. Vegetation placement: **seeded RNG**, not `Math.random()`.
-10. Reflected title glow in water: **disabled** (artifact baseline). No `haloAlpha` compositing into reflection fill.
+10. Reflected title halo/glow in water: **disabled** (artifact baseline). No `haloAlpha` compositing into reflection fill.
 11. Title ink: DayGlo `#c9f08a` (linear constants in hero-title + landscape).
 
 Full list and code patterns: `codex-system-prompt.md` §5–7.
@@ -124,8 +124,8 @@ Full list and code patterns: `codex-system-prompt.md` §5–7.
 
 ## Scene runtime toggles
 
-- `src/lib/scene/sceneConfig.ts` — non-shader flags: `TITLE_GLOW_ENABLED`, `VEGETATION_GRASS_MIN_Y_ABOVE_WATER`, `VEGETATION_SLOPE_T_MIN/MAX`.
-- In dev, debug panel `Title Glow` checkbox overrides `TITLE_GLOW_ENABLED` for the session.
+- `src/lib/scene/sceneConfig.ts` — vegetation tuning flags: `VEGETATION_GRASS_MIN_Y_ABOVE_WATER`, `VEGETATION_SLOPE_T_MIN/MAX`.
+- Dev debug pass choices are `Final`, `Ripple`, `Landscape`, and `Vegetation`.
 
 ## Vegetation placement (PoC)
 
@@ -140,10 +140,9 @@ Prioritized stabilization before new features:
 
 1. **Phase D** — wave normal LOD (finish QA per `render-status.md` § Phase D Visual QA)
 2. **Phase E** — phrase reflection visual parity
-3. **Phase F / H** — fog and title glow art tuning
-4. **Vegetation PoC** — density/atlas variety
-5. **Refactor phases 1–5** — chunk/resource split (in progress)
-6. Later: Strapi story sections, cinematic camera via `shotProgress`, Phase 3 volumetrics
+3. **Vegetation PoC** — density/atlas variety
+4. **Refactor phases 1–5** — chunk/resource split (in progress)
+5. Later: Strapi story sections, cinematic camera via `shotProgress`, Phase 3 volumetrics
 
 ## Files to update when render baseline changes
 
@@ -167,7 +166,7 @@ Optional deep guides: `docs/landscape-refactor-guide.md`, `docs/title-reflection
 
 ## What NOT to do
 
-- Migrate to a 3D engine or add passes beyond `MorningFogPass`, `TitleGlowPass`, `FinalColorPass` without explicit request.
+- Migrate to a 3D engine or reintroduce removed fog/glow passes without explicit request.
 - Reintroduce `shoreFbm`, night/moon paths, `baseLift`, scroll-driven camera orbit, or glyph loops in `landscape.frag`.
 - Reorder scene passes or apply display gamma before `FinalColorPass`.
 - Use `Math.random()` for vegetation instances.

@@ -140,9 +140,6 @@
     }
 
     & :where(figure, picture, img) {
-      /* aspect-ratio: 16 / 9;
-      overflow: hidden; */
-
       height: 90dvb;
       width: auto;
     }

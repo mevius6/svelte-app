@@ -128,10 +128,8 @@ void main()
         float shoreWatercoat = max(shoreFilmMask, (1.0 - shoreBottomCoverage) * (0.88 * shorelineSeatMask + 0.12 * shoreContactMask));
         shoreCol = mix(shoreCol, shoreFilmCol, shoreWatercoat * 0.96);
         shoreCol = mix(skyCol, shoreCol, shoreTopCoverage);
-        shoreCol = applyMorningHeightFog(shoreCol, ro, rd, tShore, phase, horizonSky, sunCol, sunDir);
         if (hasTitle && tTitle < tShore) {
             vec3 titleCol = titleHeroColor(rd, sunCol, sunDir);
-            titleCol = applyMorningHeightFog(titleCol, ro, rd, tTitle, phase, horizonSky, sunCol, sunDir);
             shoreCol = compositeTitle(shoreCol, titleCol, titleAlpha);
         }
 
@@ -153,16 +151,8 @@ void main()
         return;
 #endif
 
-        float skyFogDistance = mix(
-            MORNING_FOG_SKY_DISTANCE,
-            MORNING_FOG_SKY_DISTANCE * 0.32,
-            smoothstep(0.0, 0.85, max(rd.y, 0.0))
-        );
-        skyCol = applyMorningHeightFog(skyCol, ro, rd, skyFogDistance, phase, horizonSky, sunCol, sunDir);
-
         if (hasTitle && (!hasShore || tTitle < tShore) && (!hasWater || tTitle < tWater)) {
             vec3 titleCol = titleHeroColor(rd, sunCol, sunDir);
-            titleCol = applyMorningHeightFog(titleCol, ro, rd, tTitle, phase, horizonSky, sunCol, sunDir);
             skyCol = compositeTitle(skyCol, titleCol, titleAlpha);
         }
 
@@ -394,10 +384,8 @@ void main()
     vec3 horizonLift = mix(horizonSky, skyRefl, 0.68);
     vec3 col = mix(waterCol, horizonLift, horizonMist * 0.10 * (1.0 - shorelineCore * 0.82));
     col = mix(col, sharedContactCol, waterSharedBand * 0.02);
-    col = applyMorningHeightFog(col, ro, rd, tWater, phase, horizonSky, sunCol, sunDir);
     if (hasTitle && tTitle < tWater && (!hasShore || tTitle < tShore)) {
         vec3 titleCol = titleHeroColor(rd, sunCol, sunDir);
-        titleCol = applyMorningHeightFog(titleCol, ro, rd, tTitle, phase, horizonSky, sunCol, sunDir);
         col = compositeTitle(col, titleCol, titleAlpha);
     }
     fragColor = vec4(tonemap(col), 1.0);

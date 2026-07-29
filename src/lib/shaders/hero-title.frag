@@ -3,8 +3,6 @@ precision highp float;
 
 in vec2  v_uvAtlas;
 in float v_worldY;
-// NOTE: Phase 2 atmospheric perspective — camera depth from vert shader.
-in float v_viewDist;
 
 uniform sampler2D u_titleAtlas;
 uniform vec2  u_titleAtlasSize;
@@ -36,13 +34,6 @@ void main() {
 
     // Direct rendering path — world-space billboard above water.
     float emergence = smoothstep(u_waterLevel - 0.010, u_waterLevel + 0.030, v_worldY);
-
-    // NOTE: Phase 2 atmospheric perspective.
-    // Gentle depth fog: title at viewDist≈3.36 fades to ~86% opacity.
-    // Starts fading past 1.2 world units depth (near-camera text stays crisp).
-    // Ref: IQ "Outdoors Lighting" — atmospheric scattering per distance
-    // https://iquilezles.org/articles/outdoorslighting/
-    // float atmFade = exp(-max(v_viewDist - 1.2, 0.0) * 0.09);
 
     fragColor = vec4(directCol, opacity * emergence * revealDirect);
 }

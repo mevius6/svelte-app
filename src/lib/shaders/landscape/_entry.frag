@@ -64,7 +64,6 @@ out vec4 fragColor;
 // cloudDensity must be declared before shadeSkyDirection calls it.
 #include "./domains/clouds.glsl"
 #include "./domains/sky.glsl"
-#include "./domains/fog.glsl"
 #include "./domains/shore.glsl"
 #include "./domains/water_waves.glsl"
 #include "./domains/title.glsl"

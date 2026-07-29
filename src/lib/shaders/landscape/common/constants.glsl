@@ -6,7 +6,6 @@
 
 // Title colors (pre-converted to linear space for composition)
 const vec3 TITLE_DAYGLO_LINEAR = vec3(0.584078418, 0.871367119, 0.254152094);
-const vec3 TITLE_GLOW_AMBER_LINEAR = vec3(0.86, 0.50, 0.20);
 
 // Direct title + water reflection reveal (scroll phase 0..1).
 // Default: END <= START → fully visible from first scroll pixel (section 1).
@@ -22,16 +21,6 @@ const float TITLE_REFLECTION_LIME_WEIGHT = 0.72;
 const float TITLE_REFLECTION_SKY_BLEND = 0.12;
 const float TITLE_REFLECTION_DIST_ATTEN = 0.20;
 const float TITLE_REFLECTION_RIPPLE_SUPPRESS = 0.20;
-
-// Morning fog (analytic height fog)
-// Phase 6: fog appears at dawn (phase 0.18) and dissipates by 0.36 (full daylight)
-// Ref: https://forwardscattering.org/post/72
-// Ref: https://iquilezles.org/articles/fog/
-const float MORNING_FOG_DISSIPATE_START = 0.18;
-const float MORNING_FOG_DISSIPATE_END = 0.36;
-const float MORNING_FOG_DENSITY = 0.10;
-const float MORNING_FOG_HEIGHT_FALLOFF = 3.6;
-const float MORNING_FOG_SKY_DISTANCE = 12.0;
 
 // Wave domain directions (grid sampling for large/medium waves)
 const vec2 DIR_L1=vec2( 0.9806, 0.1961), DIR_L2=vec2(-0.5735, 0.8192);

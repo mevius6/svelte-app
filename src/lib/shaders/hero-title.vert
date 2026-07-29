@@ -17,9 +17,6 @@ uniform vec2  u_titleLayoutSize;
 
 out vec2  v_uvAtlas;
 out float v_worldY;
-// NOTE: Phase 2 atmospheric perspective — camera-space depth for fragment distance fog.
-// viewZ = dot(worldPos - cameraPos, cameraForward): positive forward, increases with depth.
-out float v_viewDist;
 
 vec3 titleBillboardRight() {
     vec3 right = vec3(u_cameraRight.x, 0.0, u_cameraRight.z);
@@ -83,5 +80,4 @@ void main() {
 
     v_uvAtlas  = a_atlasRect.xy + a_position * a_atlasRect.zw;
     v_worldY   = worldPos.y;
-    v_viewDist = viewZ;
 }

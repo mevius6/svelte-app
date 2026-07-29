@@ -38,7 +38,14 @@ MARK: Scene I. Intro
     <ul class="abspos grid w-full place-content-center">
       {#each episodes as episode (episode.id || episode.title)}
         {@const articleSlug = episode.slug || episode.id}
-        <li class="card flex self-center">
+        <li
+          class="card flex self-center after-overlay--tile"
+          style:--after='var(--noise-subtle)'
+          style:--after-alpha=.40
+          style:--after-tile=250
+          style:--after-blend='screen'
+          style:--after-filter='brightness(1) sepia(50%)'
+        >
           <!-- <figure class="relpos col-span-full revealing-image overflow-hidden">
             {#if episode.coverUrl}
               <picture>
@@ -111,30 +118,14 @@ MARK: Scene I. Intro
       inline-size: 90cqi;
       block-size: 90cqb;
     }
-    > li:nth-child(1) {grid-row: 1;}
-    > li:nth-child(1) {
-      backdrop-filter:
-        /* hue-rotate(180deg) */
-        saturate(2.4)
-        contrast(1.3)
-        grayscale(.8);
-    }
-    > li:nth-child(2) {grid-row: 2;}
-    > li:nth-child(2) {
-      backdrop-filter: sepia(.2) brightness(.9) saturate(.8) contrast(1.2);
-    }
-    > li:nth-child(3) {grid-row: 3;}
-    > li:nth-child(4) {grid-row: 4;}
-    > li:nth-child(5) {grid-row: 5;}
-    > li:nth-child(5) {
-      backdrop-filter: saturate(.1) brightness(.8) contrast(1.4);
-    }
-    > li:nth-child(6) {grid-row: 6;}
-    > li:nth-child(6) {
-      backdrop-filter: sepia(.4) brightness(.7) contrast(1.6);
-    }
-    > li:nth-child(7) {grid-row: 7;}
-    > li:nth-child(8) {grid-row: 8;}
+    > li:nth-child(1) { grid-row: 1 }
+    > li:nth-child(2) { grid-row: 2 }
+    > li:nth-child(3) { grid-row: 3 }
+    > li:nth-child(4) { grid-row: 4 }
+    > li:nth-child(5) { grid-row: 5 }
+    > li:nth-child(6) { grid-row: 6 }
+    > li:nth-child(7) { grid-row: 7 }
+    > li:nth-child(8) { grid-row: 8 }
   }
   @media (width>=48rem) {
     ul:where(.grid) {
@@ -142,7 +133,6 @@ MARK: Scene I. Intro
 
       > li {
         /* margin-inline: 4ric; */
-        /* place-self: center; */
         grid-column: 1/-1;
         aspect-ratio: 16/9;
 
@@ -190,18 +180,26 @@ MARK: Scene I. Intro
 
   /* https://scroll-driven-animations.style/demos/contact-list/css/ */
   @keyframes animate-in-and-out {
-    entry 0%  {
+    entry 0% {
       opacity: 0; transform: translateY(100%);
+      scale: .6;
+      filter: blur(2px);
     }
-    entry 100%  {
+    entry 100% {
       opacity: 1; transform: translateY(0);
+      scale: 1;
+      filter: blur(0px);
     }
 
     exit 0% {
       opacity: 1; transform: translateY(0);
+      scale: 1;
+      filter: blur(0px);
     }
     exit 100% {
       opacity: 0; transform: translateY(-100%);
+      scale: .6;
+      filter: blur(2px);
     }
   }
 
